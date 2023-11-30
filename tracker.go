@@ -84,7 +84,7 @@ func main() {
 			}
 			txs = append(txs, txToDB)
 		}
-		db.Create(&txs)
+		db.Table("shabi").Create(&txs)
 		if i%100 == 0 {
 			logger.Info("track stats report", zap.Int("count", i))
 		}

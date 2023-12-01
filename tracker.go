@@ -4,8 +4,7 @@ import (
 	"encoding/hex"
 
 	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
+	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
 	"tron-tracker/types"
@@ -16,18 +15,8 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
 
-	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_stats?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic(err)
-	}
-
-	err = db.Table("shabi").AutoMigrate(&models.Transaction{})
-	if err != nil {
-		panic(err)
-	}
-
-	for i := 0; i < 86400/3*7; i++ {
+	db := database.New()
+	for i := 0; i < 86400/3; i++ {
 		block, _ := net.GetBlockByHeight(56084338 + i)
 		txInfoList, _ := net.GetTransactionInfoList(56084338 + i)
 
@@ -36,6 +25,7 @@ func main() {
 			var txToDB = models.Transaction{
 				Hash:      tx.TxID,
 				Owner:     utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
+				Height:    block.BlockHeader.RawData.Number,
 				Timestamp: block.BlockHeader.RawData.Timestamp / 1000,
 				Type:      types.ConvertType(tx.RawData.Contract[0].Type),
 				Fee:       txInfoList[idx].Fee,
@@ -75,16 +65,36 @@ func main() {
 				txToDB.To = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 				txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
 			} else if txToDB.Type == 59 {
-				for _, amount := range txInfoList[idx].CancelUnfreezeV2Amount {
-					txToDB.Amount += int64(amount)
+				for _, entry := range txInfoList[idx].CancelUnfreezeV2Amount {
+					txToDB.Amount += int64(entry.Value)
 				}
 			}
 			if resource, ok := tx.RawData.Contract[0].Parameter.Value["resource"]; ok && resource.(string) == "BANDWIDTH" {
 				txToDB.Amount = -txToDB.Amount
 			}
 			txs = append(txs, txToDB)
+
+			transfers := make([]models.TRC20Transfer, 0)
+			for _, log := range txInfoList[idx].Log {
+				if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
+					var transferToDB = models.TRC20Transfer{
+						Hash:      tx.TxID,
+						Token:     utils.EncodeToBase58(log.Address),
+						From:      utils.EncodeToBase58(log.Topics[1][24:]),
+						To:        utils.EncodeToBase58(log.Topics[2][24:]),
+						Timestamp: block.BlockHeader.RawData.Timestamp / 1000,
+						Amount:    models.NewBigInt(utils.ConvertHexToBigInt(log.Data)),
+					}
+
+					transfers = append(transfers, transferToDB)
+				}
+			}
+			db.SaveTransfers(&transfers)
+			db.UpdateStats(&txToDB)
 		}
-		db.Table("shabi").Create(&txs)
+		db.SetLastTrackedBlockNum(block.BlockHeader.RawData.Number)
+		db.SaveTransactions(&txs)
+
 		if i%100 == 0 {
 			logger.Info("track stats report", zap.Int("count", i))
 		}

@@ -7,7 +7,7 @@ type BlockHeader struct {
 		WitnessAddress string `json:"witness_address"`
 		ParentHash     string `json:"parentHash"`
 		Version        uint   `json:"version"`
-		Timestamp      uint   `json:"timestamp"`
+		Timestamp      int64  `json:"timestamp"`
 	} `json:"raw_data"`
 	WitnessSignature string `json:"witness_signature"`
 }

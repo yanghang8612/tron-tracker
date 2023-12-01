@@ -8,8 +8,8 @@ import (
 
 type Stats struct {
 	gorm.Model
-	Date              *time.Time
-	Owner             string `gorm:"index"`
+	Date              *time.Time `gorm:"index"`
+	Owner             string     `gorm:"index"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint

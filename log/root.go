@@ -10,10 +10,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-const (
-	logTmFmt = "2006-01-02 15:04:05"
-)
-
 func init() {
 	Encoder := getEncoder()
 	WriteSyncer := getWriteSyncer()
@@ -74,7 +70,7 @@ func cEncodeLevel(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
 
 // cEncodeTime 自定义时间格式显示
 func cEncodeTime(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString("[" + t.Format(logTmFmt) + "]")
+	enc.AppendString("[" + t.Format("2006-01-02 15:04:05.000") + "]")
 }
 
 // cEncodeCaller 自定义行号显示

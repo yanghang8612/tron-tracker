@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	BaseUrl                    = "http://localhost:8088/"
+	BaseUrl                    = "https://api.trongrid.io/"
 	GetBlockPath               = "wallet/getblockbynum?num="
+	GetNowBlockPath            = "wallet/getnowblock"
 	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="
 )
 
@@ -35,13 +36,19 @@ func HighGet(url string, res interface{}) error {
 	return nil
 }
 
-func GetBlockByHeight(height int) (*types.Block, error) {
+func GetNowBlocks() (*types.Block, error) {
+	url := BaseUrl + GetNowBlockPath
+	var block types.Block
+	return &block, HighGet(url, &block)
+}
+
+func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := BaseUrl + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
 	return &block, HighGet(url, &block)
 }
 
-func GetTransactionInfoList(height int) ([]*types.TransactionInfo, error) {
+func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := BaseUrl + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var transactionInfoList = make([]*types.TransactionInfo, 0)
 	return transactionInfoList, HighGet(url, &transactionInfoList)

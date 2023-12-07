@@ -132,6 +132,13 @@ func (db *RawDB) Run() {
 		select {
 		case date := <-db.statsCh:
 			zap.S().Infof("Start saving stats for date [%s], total user [%d]", date, len(db.statsCache[date]))
+
+			dbName := "stats_" + date
+			err := db.db.Table(dbName).AutoMigrate(&models.TRC20Transfer{})
+			if err != nil {
+				panic(err)
+			}
+
 			count := 0
 			startTime := time.Now()
 			for _, stats := range db.statsCache[date] {
@@ -143,7 +150,7 @@ func (db *RawDB) Run() {
 				// } else {
 				// 	db.db.Model(&ownerStats).Updates(ownerStats)
 				// }
-				db.db.Create(stats)
+				db.db.Table(dbName).Create(stats)
 				count += 1
 				if count%10000 == 0 {
 					zap.S().Infof("Saved stats for date [%s], speed [%.2frecords/sec]", date, float64(count)/time.Since(startTime).Seconds())

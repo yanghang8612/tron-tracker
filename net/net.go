@@ -1,11 +1,9 @@
 package net
 
 import (
-	"encoding/json"
-	"io"
-	"net/http"
 	"strconv"
 
+	"github.com/go-resty/resty/v2"
 	"tron-tracker/types"
 )
 
@@ -16,40 +14,25 @@ const (
 	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="
 )
 
-func Get(url string) []byte {
-	resp, err := http.DefaultClient.Get(url)
-	if err == nil && resp.StatusCode == 200 {
-		defer resp.Body.Close()
-		if body, err := io.ReadAll(resp.Body); err == nil {
-			return body
-		}
-	}
-	return nil
-}
-
-func HighGet(url string, res interface{}) error {
-	rspData := Get(url)
-	err := json.Unmarshal(rspData, res)
-	if err != nil {
-		return err
-	}
-	return nil
-}
+var client = resty.New()
 
 func GetNowBlocks() (*types.Block, error) {
 	url := BaseUrl + GetNowBlockPath
 	var block types.Block
-	return &block, HighGet(url, &block)
+	_, err := client.R().SetResult(&block).Get(url)
+	return &block, err
 }
 
 func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := BaseUrl + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
-	return &block, HighGet(url, &block)
+	_, err := client.R().SetResult(&block).Get(url)
+	return &block, err
 }
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := BaseUrl + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
-	var transactionInfoList = make([]*types.TransactionInfo, 0)
-	return transactionInfoList, HighGet(url, &transactionInfoList)
+	var txInfoList = make([]*types.TransactionInfo, 0)
+	_, err := client.R().SetResult(&txInfoList).Get(url)
+	return txInfoList, err
 }

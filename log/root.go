@@ -1,7 +1,6 @@
 package log
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -21,8 +20,6 @@ func init() {
 	)
 	logger := zap.New(newCore, zap.AddCaller())
 	zap.ReplaceGlobals(logger)
-	logger.Info("log init completed")
-	fmt.Println("log init completed")
 }
 
 func getEncoder() zapcore.Encoder {
@@ -60,7 +57,7 @@ func getWriteSyncer() zapcore.WriteSyncer {
 
 // GetLevelEnabler 自定义的LevelEnabler
 func getLevelEnabler() zapcore.Level {
-	return zapcore.DebugLevel
+	return zapcore.InfoLevel
 }
 
 // cEncodeLevel 自定义日志级别显示

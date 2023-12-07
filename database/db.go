@@ -1,7 +1,6 @@
 package database
 
 import (
-	"errors"
 	"strconv"
 	"time"
 
@@ -134,20 +133,27 @@ func (db *RawDB) Run() {
 		case date := <-db.statsCh:
 			zap.S().Infof("Start saving stats for date [%s], total user [%d]", date, len(db.statsCache[date]))
 			count := 0
-			for owner, stats := range db.statsCache[date] {
-				var ownerStats models.Stats
-				result := db.db.Where(&models.Stats{Date: stats.Date, Owner: owner}).Limit(1).Find(&ownerStats)
-				ownerStats.Merge(stats)
-				if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-					db.db.Create(&ownerStats)
-				} else {
-					db.db.Model(&ownerStats).Updates(ownerStats)
-				}
+			startTime := time.Now()
+			for _, stats := range db.statsCache[date] {
+				// var ownerStats models.Stats
+				// result := db.db.Where(&models.Stats{Date: stats.Date, Owner: owner}).Limit(1).Find(&ownerStats)
+				// ownerStats.Merge(stats)
+				// if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+				// 	db.db.Create(&ownerStats)
+				// } else {
+				// 	db.db.Model(&ownerStats).Updates(ownerStats)
+				// }
+				db.db.Create(stats)
 				count += 1
-				if count%1000 == 0 {
-					zap.S().Infof("Saved stats for date [%s], count [%d]", date, count)
+				if count%10000 == 0 {
+					zap.S().Infof("Saved stats for date [%s], speed [%.2frecords/sec]", date, float64(count)/time.Since(startTime).Seconds())
 				}
 			}
+			// release memory
+			delete(db.statsCache, date)
+			db.statsCache[date] = nil
+
+			zap.S().Infof("Complete saving stats for date [%s], cost [%.0fs]", date, time.Since(startTime).Seconds())
 		}
 	}
 }

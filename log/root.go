@@ -25,10 +25,10 @@ func init() {
 func getEncoder() zapcore.Encoder {
 	return zapcore.NewConsoleEncoder(
 		zapcore.EncoderConfig{
-			TimeKey:        "ts",
-			LevelKey:       "level",
-			NameKey:        "logger",
-			CallerKey:      "caller_line",
+			TimeKey:  "ts",
+			LevelKey: "level",
+			NameKey:  "logger",
+			// CallerKey:      "caller_line",
 			FunctionKey:    zapcore.OmitKey,
 			MessageKey:     "msg",
 			StacktraceKey:  "stacktrace",
@@ -36,7 +36,7 @@ func getEncoder() zapcore.Encoder {
 			EncodeLevel:    cEncodeLevel,
 			EncodeTime:     cEncodeTime,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
-			EncodeCaller:   cEncodeCaller,
+			// EncodeCaller:   cEncodeCaller,
 		})
 }
 

@@ -1,7 +1,7 @@
 package models
 
 type Transaction struct {
-	ID                uint64 `gorm:"primaryKey"`
+	ID                uint `gorm:"primaryKey"`
 	Hash              string
 	Owner             string `gorm:"index:idx_key"`
 	To                string `gorm:"index:idx_key"`
@@ -21,7 +21,7 @@ type Transaction struct {
 }
 
 type TRC20Transfer struct {
-	ID        uint64 `gorm:"primaryKey"`
+	ID        uint `gorm:"primaryKey"`
 	Hash      string
 	Token     string `gorm:"index:idx_key"`
 	From      string `gorm:"index:idx_key"`

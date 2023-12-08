@@ -2,6 +2,7 @@ package database
 
 import (
 	"strconv"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -18,23 +19,23 @@ type RawDB struct {
 	isTableMigrated     map[string]bool
 
 	preDate    string
-	statsCh    chan string
-	statsCache map[string]map[string]*models.Stats
+	curDate    string
+	statsLock  sync.Mutex
+	statsCh    chan map[string]*models.Stats
+	statsCache map[string]*models.Stats
+
+	loopWG sync.WaitGroup
+	quitCh chan struct{}
 }
 
 func New() *RawDB {
-	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "root@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		panic(err)
 	}
 
 	err = db.AutoMigrate(&models.Meta{})
-	if err != nil {
-		panic(err)
-	}
-
-	err = db.AutoMigrate(&models.Stats{})
 	if err != nil {
 		panic(err)
 	}
@@ -49,9 +50,24 @@ func New() *RawDB {
 		isTableMigrated:     make(map[string]bool),
 
 		preDate:    "",
-		statsCh:    make(chan string),
-		statsCache: make(map[string]map[string]*models.Stats),
+		statsCh:    make(chan map[string]*models.Stats),
+		statsCache: make(map[string]*models.Stats),
+
+		quitCh: make(chan struct{}),
 	}
+}
+
+func (db *RawDB) Start() {
+	db.loopWG.Add(1)
+	go db.Run()
+}
+
+func (db *RawDB) Close() {
+	db.quitCh <- struct{}{}
+	db.loopWG.Wait()
+
+	underDB, _ := db.db.DB()
+	_ = underDB.Close()
 }
 
 func (db *RawDB) GetLastTrackedBlockNum() uint {
@@ -60,10 +76,13 @@ func (db *RawDB) GetLastTrackedBlockNum() uint {
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
-	if db.preDate != "" && db.preDate != nextDate {
-		db.statsCh <- db.preDate
+	if db.curDate == "" {
+		db.curDate = nextDate
+	} else if db.curDate != nextDate {
+		db.curDate = nextDate
+		db.statsCh <- db.statsCache
+		db.statsCache = make(map[string]*models.Stats)
 	}
-	db.preDate = nextDate
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Update("val", strconv.Itoa(int(db.lastTrackedBlockNum)))
@@ -76,8 +95,7 @@ func (db *RawDB) SaveTransactions(transactions *[]models.Transaction) {
 		return
 	}
 
-	dbName := "transaction_" + generateDate((*transactions)[0].Timestamp)
-
+	dbName := "transaction_" + db.curDate
 	if ok, _ := db.isTableMigrated[dbName]; !ok {
 		err := db.db.Table(dbName).AutoMigrate(&models.Transaction{})
 		if err != nil {
@@ -95,7 +113,7 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 		return
 	}
 
-	dbName := "transfer_" + generateDate((*transfers)[0].Timestamp)
+	dbName := "transfer_" + db.curDate
 	if ok, _ := db.isTableMigrated[dbName]; !ok {
 		err := db.db.Table(dbName).AutoMigrate(&models.TRC20Transfer{})
 		if err != nil {
@@ -114,55 +132,75 @@ func (db *RawDB) UpdateStats(tx *models.Transaction) {
 }
 
 func (db *RawDB) updateStats(owner string, tx *models.Transaction) {
-	date := generateDate(tx.Timestamp)
-
-	if _, ok := db.statsCache[date]; !ok {
-		db.statsCache[date] = make(map[string]*models.Stats)
-	}
-
-	if ownerStats, ok := db.statsCache[date][owner]; ok {
+	if ownerStats, ok := db.statsCache[owner]; ok {
 		ownerStats.Add(tx)
 	} else {
-		db.statsCache[date][owner] = models.NewStats(owner, tx)
+		db.statsCache[owner] = models.NewStats(owner, tx)
+	}
+
+	if len(db.statsCache) == 1000 {
+		db.statsCh <- db.statsCache
+		db.statsCache = make(map[string]*models.Stats)
 	}
 }
 
 func (db *RawDB) Run() {
 	for {
 		select {
-		case date := <-db.statsCh:
-			zap.S().Infof("Start saving stats for date [%s], total user [%d]", date, len(db.statsCache[date]))
-
-			dbName := "stats_" + date
-			err := db.db.Table(dbName).AutoMigrate(&models.TRC20Transfer{})
-			if err != nil {
-				panic(err)
-			}
-
-			count := 0
+		case <-db.quitCh:
+			zap.L().Info("DB quit, start saving the stats cache")
+			db.saveStats(db.statsCache)
+			zap.L().Info("DB quit, complete saving the stats cache")
+			db.loopWG.Done()
+			return
+		case statsToBeProcessed := <-db.statsCh:
 			startTime := time.Now()
-			for _, stats := range db.statsCache[date] {
-				// var ownerStats models.Stats
-				// result := db.db.Where(&models.Stats{Date: stats.Date, Owner: owner}).Limit(1).Find(&ownerStats)
-				// ownerStats.Merge(stats)
-				// if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-				// 	db.db.Create(&ownerStats)
-				// } else {
-				// 	db.db.Model(&ownerStats).Updates(ownerStats)
-				// }
-				db.db.Table(dbName).Create(stats)
-				count += 1
-				if count%10000 == 0 {
-					zap.S().Infof("Saved stats for date [%s], speed [%.2frecords/sec]", date, float64(count)/time.Since(startTime).Seconds())
-				}
-			}
-			// release memory
-			delete(db.statsCache, date)
-			db.statsCache[date] = nil
-
-			zap.S().Infof("Complete saving stats for date [%s], cost [%.0fs]", date, time.Since(startTime).Seconds())
+			db.saveStats(statsToBeProcessed)
+			elapsedTime := time.Since(startTime).Seconds()
+			zap.S().Infof("Complete saving stats, cost [%.2fs], avg speed [%.2frecords/sec]", elapsedTime, float64(len(statsToBeProcessed))/elapsedTime)
 		}
 	}
+}
+
+func (db *RawDB) saveStats(statsToBeSaved map[string]*models.Stats) {
+	if len(statsToBeSaved) == 0 {
+		return
+	}
+
+	var date string
+	for _, stats := range statsToBeSaved {
+		date = generateDate(stats.Date)
+		break
+	}
+	// zap.S().Infof("Start saving stats for date [%s]", date)
+
+	dbName := "stats_" + date
+	err := db.db.Table(dbName).AutoMigrate(&models.Stats{})
+	if err != nil {
+		panic(err)
+	}
+
+	// reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%ds], speed [%.2frecords/sec]")
+	for owner, stats := range statsToBeSaved {
+		var ownerStats models.Stats
+		db.db.Table(dbName).Where(&models.Stats{Date: stats.Date, Owner: owner}).Limit(1).Find(&ownerStats)
+		ownerStats.Date = stats.Date
+		ownerStats.Owner = stats.Owner
+		ownerStats.Merge(stats)
+		db.db.Table(dbName).Save(&ownerStats)
+		// if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+		// 	db.db.Table(dbName).Create(stats)
+		// } else {
+		// 	db.db.Table(dbName).Model(stats).Updates(stats)
+		// }
+		// db.db.Table(dbName).Create(stats)
+		// if shouldReport, reportContent := reporter.Add(1); shouldReport {
+		// 	zap.L().Info(reportContent)
+		// }
+	}
+
+	// zap.S().Info(reporter.Finish("Complete saving stats for date " + date + ", total count [%d], cost [%ds], avg speed [%.2frecords/sec]"))
+
 }
 
 func generateDate(ts int64) string {

@@ -2,14 +2,12 @@ package models
 
 import (
 	"time"
-
-	"gorm.io/gorm"
 )
 
 type Stats struct {
-	gorm.Model
-	Date              *time.Time `gorm:"index:idx_key"`
-	Owner             string     `gorm:"index:idx_key"`
+	ID                uint   `gorm:"primaryKey"`
+	Date              int64  `gorm:"index:idx_key"`
+	Owner             string `gorm:"index:idx_key"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint
@@ -23,9 +21,8 @@ type Stats struct {
 }
 
 func NewStats(owner string, tx *Transaction) *Stats {
-	date := time.Unix(tx.Timestamp, 0).Add(-8 * time.Hour).Truncate(24 * time.Hour)
 	var stats = &Stats{
-		Date:              &date,
+		Date:              time.Unix(tx.Timestamp, 0).Truncate(24 * time.Hour).Unix(),
 		Owner:             owner,
 		EnergyTotal:       tx.EnergyTotal,
 		EnergyFee:         tx.EnergyFee,

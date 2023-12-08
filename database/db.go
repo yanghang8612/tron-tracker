@@ -1,6 +1,7 @@
 package database
 
 import (
+	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -138,7 +139,7 @@ func (db *RawDB) updateStats(owner string, tx *models.Transaction) {
 		db.statsCache[owner] = models.NewStats(owner, tx)
 	}
 
-	if len(db.statsCache) == 1000 {
+	if len(db.statsCache) == 3000 {
 		db.statsCh <- db.statsCache
 		db.statsCache = make(map[string]*models.Stats)
 	}
@@ -182,15 +183,15 @@ func (db *RawDB) saveStats(statsToBeSaved map[string]*models.Stats) {
 
 	// reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%ds], speed [%.2frecords/sec]")
 	for _, stats := range statsToBeSaved {
-		// var ownerStats models.Stats
-		// result := db.db.Table(dbName).Where(&models.Stats{Date: stats.Date, Owner: owner}).Limit(1).Find(&ownerStats)
-		// if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-		// 	db.db.Table(dbName).Create(stats)
-		// } else {
-		// 	ownerStats.Merge(stats)
-		// 	db.db.Table(dbName).Model(&ownerStats).Updates(&ownerStats)
-		// }
-		db.db.Table(dbName).Create(stats)
+		var ownerStats models.Stats
+		result := db.db.Table(dbName).Where(&models.Stats{Date: stats.Date, Owner: stats.Owner}).Limit(1).Find(&ownerStats)
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+			db.db.Table(dbName).Create(stats)
+		} else {
+			ownerStats.Merge(stats)
+			db.db.Table(dbName).Model(&ownerStats).Updates(&ownerStats)
+		}
+		// db.db.Table(dbName).Create(stats)
 		// if shouldReport, reportContent := reporter.Add(1); shouldReport {
 		// 	zap.L().Info(reportContent)
 		// }

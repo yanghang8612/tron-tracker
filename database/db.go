@@ -24,11 +24,11 @@ type RawDB struct {
 	lastTrackedBlockNum uint
 	isTableMigrated     map[string]bool
 
-	preDate    string
 	curDate    string
 	statsLock  sync.Mutex
 	statsCh    chan *statsSet
 	statsCache *statsSet
+	statsAll   map[string]map[string]*models.Stats
 
 	loopWG sync.WaitGroup
 	quitCh chan struct{}
@@ -55,11 +55,11 @@ func New() *RawDB {
 		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		isTableMigrated:     make(map[string]bool),
 
-		preDate: "",
 		statsCh: make(chan *statsSet),
 		statsCache: &statsSet{
 			val: make(map[string]*models.Stats),
 		},
+		statsAll: make(map[string]map[string]*models.Stats),
 
 		quitCh: make(chan struct{}),
 	}
@@ -169,24 +169,44 @@ func (db *RawDB) saveStats(ss *statsSet) {
 
 	dbName := "stats_" + ss.date
 	db.createTableIfNotExist(dbName, models.Stats{})
+	if _, ok := db.statsAll[ss.date]; !ok {
+		db.statsAll[ss.date] = make(map[string]*models.Stats)
+	}
+	statsAll := db.statsAll[ss.date]
 
 	// reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%ds], speed [%.2frecords/sec]")
 	statsToCreate := make([]*models.Stats, 0)
 	for _, stats := range ss.val {
-		var ownerStats models.Stats
-		result := db.db.Table(dbName).Where(&models.Stats{Owner: stats.Owner}).Limit(1).Find(&ownerStats)
-		if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-			statsToCreate = append(statsToCreate, stats)
+
+		if preStats, ok := statsAll[stats.Owner]; ok {
+			preStats.Merge(stats)
+			db.db.Table(dbName).Model(&preStats).Updates(&preStats)
 		} else {
-			ownerStats.Merge(stats)
-			db.db.Table(dbName).Model(&ownerStats).Updates(&ownerStats)
+			var ownerStats models.Stats
+			result := db.db.Table(dbName).Where(&models.Stats{Owner: stats.Owner}).Limit(1).Find(&ownerStats)
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+				statsToCreate = append(statsToCreate, stats)
+			} else {
+				ownerStats.Merge(stats)
+				db.db.Table(dbName).Model(&ownerStats).Updates(&ownerStats)
+				statsAll[stats.Owner] = &ownerStats
+			}
 		}
+
 		// db.db.Table(dbName).Create(stats)
 		// if shouldReport, reportContent := reporter.Add(1); shouldReport {
 		// 	zap.L().Info(reportContent)
 		// }
 	}
 	db.db.Table(dbName).Create(&statsToCreate)
+	for _, stats := range statsToCreate {
+		statsAll[stats.Owner] = stats
+	}
+
+	// release pre day all stats
+	if ss.date != db.curDate {
+		delete(db.statsAll, ss.date)
+	}
 
 	// zap.S().Info(reporter.Finish("Complete saving stats for date " + date + ", total count [%d], cost [%ds], avg speed [%.2frecords/sec]"))
 
@@ -204,5 +224,5 @@ func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
 }
 
 func generateDate(ts int64) string {
-	return time.Unix(ts, 0).Add(-8 * time.Hour).Format("060102")
+	return time.Unix(ts, 0).In(time.FixedZone("UTC", 0)).Format("060102")
 }

@@ -41,5 +41,5 @@ func (r *Reporter) Add(count int) (bool, string) {
 }
 
 func (r *Reporter) Finish(format string) string {
-	return fmt.Sprintf(format, r.count, int64(time.Since(r.startTime).Seconds()), float64(r.count)/time.Since(r.startTime).Seconds())
+	return fmt.Sprintf(format, r.count, time.Since(r.startTime).Seconds(), float64(r.count)/time.Since(r.startTime).Seconds())
 }

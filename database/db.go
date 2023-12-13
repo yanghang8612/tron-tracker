@@ -1,7 +1,6 @@
 package database
 
 import (
-	"errors"
 	"strconv"
 	"sync"
 	"time"
@@ -11,11 +10,13 @@ import (
 	"gorm.io/gorm"
 	"tron-tracker/database/models"
 	"tron-tracker/types"
+	"tron-tracker/utils"
 )
 
 type statsSet struct {
-	date string
-	val  map[string]*models.Stats
+	isComplete bool
+	date       string
+	val        map[string]*models.Stats
 }
 
 type RawDB struct {
@@ -47,7 +48,7 @@ func New() *RawDB {
 	}
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "57264000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 	return &RawDB{
@@ -134,12 +135,12 @@ func (db *RawDB) updateStats(owner string, tx *models.Transaction) {
 		db.statsCache.val[owner] = models.NewStats(owner, tx)
 	}
 
-	if len(db.statsCache.val) == 3000 {
-		db.statsCh <- db.statsCache
-		db.statsCache = &statsSet{
-			val: make(map[string]*models.Stats),
-		}
-	}
+	// if len(db.statsCache.val) == 3000 {
+	// 	db.statsCh <- db.statsCache
+	// 	db.statsCache = &statsSet{
+	// 		val: make(map[string]*models.Stats),
+	// 	}
+	// }
 }
 
 func (db *RawDB) Run() {
@@ -147,7 +148,7 @@ func (db *RawDB) Run() {
 		select {
 		case <-db.quitCh:
 			zap.L().Info("DB quit, start saving the stats cache")
-			db.saveStats(db.statsCache)
+			// db.saveStats(db.statsCache)
 			zap.L().Info("DB quit, complete saving the stats cache")
 			db.loopWG.Done()
 			return
@@ -165,50 +166,48 @@ func (db *RawDB) saveStats(ss *statsSet) {
 		return
 	}
 
-	// zap.S().Infof("Start saving stats for date [%s]", date)
+	zap.S().Infof("Start saving stats for date [%s]", ss.date)
 
 	dbName := "stats_" + ss.date
 	db.createTableIfNotExist(dbName, models.Stats{})
-	if _, ok := db.statsAll[ss.date]; !ok {
-		db.statsAll[ss.date] = make(map[string]*models.Stats)
-	}
-	statsAll := db.statsAll[ss.date]
+	// if _, ok := db.statsAll[ss.date]; !ok {
+	// 	db.statsAll[ss.date] = make(map[string]*models.Stats)
+	// }
+	// statsAll := db.statsAll[ss.date]
 
-	// reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%ds], speed [%.2frecords/sec]")
+	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%.2fs], speed [%.2frecords/sec]")
 	statsToCreate := make([]*models.Stats, 0)
 	for _, stats := range ss.val {
 
-		if preStats, ok := statsAll[stats.Owner]; ok {
-			preStats.Merge(stats)
-			db.db.Table(dbName).Model(&preStats).Updates(&preStats)
-		} else {
-			var ownerStats models.Stats
-			result := db.db.Table(dbName).Where(&models.Stats{Owner: stats.Owner}).Limit(1).Find(&ownerStats)
-			if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
-				statsToCreate = append(statsToCreate, stats)
-			} else {
-				ownerStats.Merge(stats)
-				db.db.Table(dbName).Model(&ownerStats).Updates(&ownerStats)
-				statsAll[stats.Owner] = &ownerStats
-			}
-		}
-
-		// db.db.Table(dbName).Create(stats)
-		// if shouldReport, reportContent := reporter.Add(1); shouldReport {
-		// 	zap.L().Info(reportContent)
+		// if preStats, ok := statsAll[stats.Owner]; ok {
+		// 	preStats.Merge(stats)
+		// 	db.db.Table(dbName).Model(&preStats).Updates(&preStats)
+		// } else {
+		// 	var ownerStats models.Stats
+		// 	result := db.db.Table(dbName).Where(&models.Stats{Owner: stats.Owner}).Limit(1).Find(&ownerStats)
+		// 	if errors.Is(result.Error, gorm.ErrRecordNotFound) || result.RowsAffected == 0 {
+		// 		statsToCreate = append(statsToCreate, stats)
+		// 	} else {
+		// 		ownerStats.Merge(stats)
+		// 		statsAll[stats.Owner] = &ownerStats
+		// 	}
 		// }
+
+		statsToCreate = append(statsToCreate, stats)
+		if len(statsToCreate) == 1000 {
+			db.db.Table(dbName).Create(&statsToCreate)
+			statsToCreate = make([]*models.Stats, 0)
+		}
+		if shouldReport, reportContent := reporter.Add(1); shouldReport {
+			zap.L().Info(reportContent)
+		}
 	}
 	db.db.Table(dbName).Create(&statsToCreate)
-	for _, stats := range statsToCreate {
-		statsAll[stats.Owner] = stats
-	}
+	// for _, stats := range statsToCreate {
+	// 	statsAll[stats.Owner] = stats
+	// }
 
-	// release pre day all stats
-	if ss.date != db.curDate {
-		delete(db.statsAll, ss.date)
-	}
-
-	// zap.S().Info(reporter.Finish("Complete saving stats for date " + date + ", total count [%d], cost [%ds], avg speed [%.2frecords/sec]"))
+	zap.S().Info(reporter.Finish("Complete saving stats for date " + ss.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 }
 

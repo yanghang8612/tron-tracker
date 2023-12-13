@@ -48,7 +48,7 @@ func New() *RawDB {
 	}
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "57264000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 	return &RawDB{

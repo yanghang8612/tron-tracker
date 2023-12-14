@@ -16,6 +16,7 @@ import (
 
 type Tracker struct {
 	db *database.RawDB
+	el *types.ExchangeList
 
 	reporter *utils.Reporter
 	loopWG   sync.WaitGroup
@@ -25,6 +26,7 @@ type Tracker struct {
 func New(db *database.RawDB) *Tracker {
 	return &Tracker{
 		db: db,
+		el: net.GetExchanges(),
 
 		reporter: utils.NewReporter(1000, 60*time.Second, "Tracker report, tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]"),
 		quitCh:   make(chan struct{}),
@@ -129,6 +131,9 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount = -txToDB.Amount
 		}
 		transactions = append(transactions, txToDB)
+		if t.el.Contains(txToDB.To) {
+			t.db.SaveCharge(txToDB.Owner, t.el.Get(txToDB.To))
+		}
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
@@ -141,6 +146,9 @@ func (t *Tracker) doTrackBlock() {
 					Amount:    models.NewBigInt(utils.ConvertHexToBigInt(log.Data)),
 				}
 				transfers = append(transfers, transferToDB)
+				if t.el.Contains(transferToDB.To) {
+					t.db.SaveCharge(transferToDB.From, t.el.Get(transferToDB.To))
+				}
 			}
 		}
 		t.db.UpdateStats(&txToDB)

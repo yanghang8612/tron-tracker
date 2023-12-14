@@ -1,8 +1,8 @@
 package models
 
-type Stats struct {
+type Statistic struct {
 	ID                uint   `gorm:"primaryKey"`
-	Owner             string `gorm:"index"`
+	Owner             string `gorm:"char(21),uniqueIndex"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint
@@ -15,8 +15,8 @@ type Stats struct {
 	SCTotal           uint
 }
 
-func NewStats(owner string, tx *Transaction) *Stats {
-	var stats = &Stats{
+func NewStats(owner string, tx *Transaction) *Statistic {
+	var stats = &Statistic{
 		Owner:             owner,
 		EnergyTotal:       tx.EnergyTotal,
 		EnergyFee:         tx.EnergyFee,
@@ -37,7 +37,7 @@ func NewStats(owner string, tx *Transaction) *Stats {
 	return stats
 }
 
-func (o *Stats) Merge(other *Stats) {
+func (o *Statistic) Merge(other *Statistic) {
 	o.EnergyTotal += other.EnergyTotal
 	o.EnergyFee += other.EnergyFee
 	o.EnergyUsage += other.EnergyUsage
@@ -50,7 +50,7 @@ func (o *Stats) Merge(other *Stats) {
 	o.SCTotal += other.SCTotal
 }
 
-func (o *Stats) Add(tx *Transaction) {
+func (o *Statistic) Add(tx *Transaction) {
 	o.EnergyTotal += tx.EnergyTotal
 	o.EnergyFee += tx.EnergyFee
 	o.EnergyUsage += tx.EnergyUsage

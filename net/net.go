@@ -36,3 +36,9 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	_, err := client.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err
 }
+
+func GetExchanges() *types.ExchangeList {
+	var exchangeList types.ExchangeList
+	client.R().SetResult(&exchangeList).Get("https://apilist.tronscanapi.com/api/hot/exchanges")
+	return &exchangeList
+}

@@ -5,6 +5,7 @@ import (
 )
 
 const (
+	LastTrackedDateKey     = "last_tracked_date"
 	LastTrackedBlockNumKey = "last_tracked_block_num"
 )
 

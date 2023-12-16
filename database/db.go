@@ -22,7 +22,7 @@ type dbCache struct {
 	date      string
 	userStats map[string]*models.UserStatistic
 	chargers  map[string]*models.Charger
-	toStats   map[string]struct {
+	toStats   map[string]*struct {
 		energyFee   uint
 		energyUsage uint
 	}
@@ -32,6 +32,10 @@ func newCache() *dbCache {
 	return &dbCache{
 		userStats: make(map[string]*models.UserStatistic),
 		chargers:  make(map[string]*models.Charger),
+		toStats: make(map[string]*struct {
+			energyFee   uint
+			energyUsage uint
+		}),
 	}
 }
 
@@ -188,15 +192,14 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 
 func (db *RawDB) SaveChargeEnergyConsumption(to string, energyFee, energyUsage uint) {
 	if _, ok := db.cache.toStats[to]; !ok {
-		db.cache.toStats[to] = struct {
+		db.cache.toStats[to] = &struct {
 			energyFee   uint
 			energyUsage uint
 		}{energyFee: energyFee, energyUsage: energyUsage}
 	} else {
-		db.cache.toStats[to] = struct {
-			energyFee   uint
-			energyUsage uint
-		}{energyFee: db.cache.toStats[to].energyFee + energyFee, energyUsage: db.cache.toStats[to].energyUsage + energyUsage}
+		db.cache.toStats[to].energyFee += energyFee
+		db.cache.toStats[to].energyUsage += energyUsage
+
 	}
 }
 

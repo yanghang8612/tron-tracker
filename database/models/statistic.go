@@ -1,8 +1,8 @@
 package models
 
-type Statistic struct {
+type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey"`
-	Owner             string `gorm:"char(21),uniqueIndex"`
+	Address           string `gorm:"char(21),uniqueIndex"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint
@@ -15,9 +15,9 @@ type Statistic struct {
 	SCTotal           uint
 }
 
-func NewStats(owner string, tx *Transaction) *Statistic {
-	var stats = &Statistic{
-		Owner:             owner,
+func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
+	var stats = &UserStatistic{
+		Address:           address,
 		EnergyTotal:       tx.EnergyTotal,
 		EnergyFee:         tx.EnergyFee,
 		EnergyUsage:       tx.EnergyUsage,
@@ -37,7 +37,7 @@ func NewStats(owner string, tx *Transaction) *Statistic {
 	return stats
 }
 
-func (o *Statistic) Merge(other *Statistic) {
+func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.EnergyTotal += other.EnergyTotal
 	o.EnergyFee += other.EnergyFee
 	o.EnergyUsage += other.EnergyUsage
@@ -50,7 +50,7 @@ func (o *Statistic) Merge(other *Statistic) {
 	o.SCTotal += other.SCTotal
 }
 
-func (o *Statistic) Add(tx *Transaction) {
+func (o *UserStatistic) Add(tx *Transaction) {
 	o.EnergyTotal += tx.EnergyTotal
 	o.EnergyFee += tx.EnergyFee
 	o.EnergyUsage += tx.EnergyUsage
@@ -66,4 +66,26 @@ func (o *Statistic) Add(tx *Transaction) {
 	case 30, 31:
 		o.SCTotal++
 	}
+}
+
+type ExchangeStatistic struct {
+	ID                  uint `gorm:"primaryKey"`
+	Date                string
+	Name                string
+	Address             string
+	ChargeEnergyFee     uint
+	ChargeEnergyUsage   uint
+	CollectEnergyFee    uint
+	CollectEnergyUsage  uint
+	WithdrawEnergyFee   uint
+	WithdrawEnergyUsage uint
+}
+
+func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
+	o.ChargeEnergyFee += other.ChargeEnergyFee
+	o.ChargeEnergyUsage += other.ChargeEnergyUsage
+	o.CollectEnergyFee += other.CollectEnergyFee
+	o.CollectEnergyUsage += other.CollectEnergyUsage
+	o.WithdrawEnergyFee += other.WithdrawEnergyFee
+	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
 }

@@ -132,9 +132,10 @@ func (t *Tracker) doTrackBlock() {
 		}
 		transactions = append(transactions, txToDB)
 		if t.el.Contains(txToDB.To) {
-			t.db.SaveCharge(txToDB.Owner, t.el.Get(txToDB.To))
+			t.db.SaveCharger(txToDB.Owner, t.el.Get(txToDB.To))
 		}
 
+		recorded := make(map[string]bool)
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 				var transferToDB = models.TRC20Transfer{
@@ -147,11 +148,15 @@ func (t *Tracker) doTrackBlock() {
 				}
 				transfers = append(transfers, transferToDB)
 				if t.el.Contains(transferToDB.To) {
-					t.db.SaveCharge(transferToDB.From, t.el.Get(transferToDB.To))
+					t.db.SaveCharger(transferToDB.From, t.el.Get(transferToDB.To))
+				}
+				if _, ok := recorded[transferToDB.To]; !ok {
+					recorded[transferToDB.To] = true
+					t.db.SaveChargeEnergyConsumption(transferToDB.To, txToDB.EnergyFee, txToDB.EnergyUsage+txToDB.EnergyOriginUsage)
 				}
 			}
 		}
-		t.db.UpdateStats(&txToDB)
+		t.db.UpdateStatistic(&txToDB)
 	}
 	t.db.SaveTransactions(&transactions)
 	t.db.SaveTransfers(&transfers)

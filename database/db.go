@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"errors"
 	"log"
 	"os"
 	"strconv"
@@ -18,15 +19,19 @@ import (
 )
 
 type dbCache struct {
-	date   string
-	stats  map[string]*models.Statistic
-	charge map[string]*models.Charge
+	date      string
+	userStats map[string]*models.UserStatistic
+	chargers  map[string]*models.Charger
+	toStats   map[string]struct {
+		energyFee   uint
+		energyUsage uint
+	}
 }
 
 func newCache() *dbCache {
 	return &dbCache{
-		stats:  make(map[string]*models.Statistic),
-		charge: make(map[string]*models.Charge),
+		userStats: make(map[string]*models.UserStatistic),
+		chargers:  make(map[string]*models.Charger),
 	}
 }
 
@@ -52,8 +57,13 @@ func New() *RawDB {
 		panic(dbErr)
 	}
 
-	if !db.Migrator().HasTable(&models.Charge{}) {
-		dbErr = db.AutoMigrate(&models.Charge{})
+	dbErr = db.AutoMigrate(&models.ExchangeStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	if !db.Migrator().HasTable(&models.Charger{}) {
+		dbErr = db.AutoMigrate(&models.Charger{})
 		if dbErr != nil {
 			panic(dbErr)
 		}
@@ -68,21 +78,21 @@ func New() *RawDB {
 
 		zap.L().Info("Start loading charge")
 		count := 0
-		var chargeToSave []*models.Charge
+		var chargeToSave []*models.Charger
 		for scanner.Scan() {
 			line := scanner.Text()
 			cols := strings.Split(line, ",")
-			chargeToSave = append(chargeToSave, &models.Charge{
+			chargeToSave = append(chargeToSave, &models.Charger{
 				Address:         cols[0],
 				ExchangeName:    cols[1],
 				ExchangeAddress: cols[2],
 			})
 			if len(chargeToSave) == 1000 {
 				db.Create(&chargeToSave)
-				chargeToSave = make([]*models.Charge, 0)
+				chargeToSave = make([]*models.Charger, 0)
 			}
 			count++
-			if count%100000 == 0 {
+			if count%1000000 == 0 {
 				zap.S().Infof("Loaded [%d] charge", count)
 			}
 		}
@@ -163,7 +173,6 @@ func (db *RawDB) SaveTransactions(transactions *[]models.Transaction) {
 
 	dbName := "transactions_" + db.curDate
 	db.createTableIfNotExist(dbName, models.Transaction{})
-
 	db.db.Table(dbName).Create(transactions)
 }
 
@@ -177,23 +186,37 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 	db.db.Table(dbName).Create(transfers)
 }
 
-func (db *RawDB) UpdateStats(tx *models.Transaction) {
-	db.updateStats(tx.Owner, tx)
-	db.updateStats("total", tx)
-}
-
-func (db *RawDB) updateStats(owner string, tx *models.Transaction) {
-	db.cache.date = generateDate(tx.Timestamp)
-	if ownerStats, ok := db.cache.stats[owner]; ok {
-		ownerStats.Add(tx)
+func (db *RawDB) SaveChargeEnergyConsumption(to string, energyFee, energyUsage uint) {
+	if _, ok := db.cache.toStats[to]; !ok {
+		db.cache.toStats[to] = struct {
+			energyFee   uint
+			energyUsage uint
+		}{energyFee: energyFee, energyUsage: energyUsage}
 	} else {
-		db.cache.stats[owner] = models.NewStats(owner, tx)
+		db.cache.toStats[to] = struct {
+			energyFee   uint
+			energyUsage uint
+		}{energyFee: db.cache.toStats[to].energyFee + energyFee, energyUsage: db.cache.toStats[to].energyUsage + energyUsage}
 	}
 }
 
-func (db *RawDB) SaveCharge(address string, exchange types.Exchange) {
-	if _, ok := db.cache.charge[address]; !ok {
-		db.cache.charge[address] = &models.Charge{
+func (db *RawDB) UpdateStatistic(tx *models.Transaction) {
+	db.updateStatistic(tx.Owner, tx)
+	db.updateStatistic("total", tx)
+}
+
+func (db *RawDB) updateStatistic(owner string, tx *models.Transaction) {
+	db.cache.date = generateDate(tx.Timestamp)
+	if ownerStats, ok := db.cache.userStats[owner]; ok {
+		ownerStats.Add(tx)
+	} else {
+		db.cache.userStats[owner] = models.NewUserStatistic(owner, tx)
+	}
+}
+
+func (db *RawDB) SaveCharger(address string, exchange types.Exchange) {
+	if _, ok := db.cache.chargers[address]; !ok {
+		db.cache.chargers[address] = &models.Charger{
 			Address:         address,
 			ExchangeName:    exchange.Name,
 			ExchangeAddress: exchange.Address,
@@ -215,23 +238,23 @@ func (db *RawDB) Run() {
 }
 
 func (db *RawDB) persist(cache *dbCache) {
-	if len(cache.stats) == 0 && len(cache.charge) == 0 {
+	if len(cache.userStats) == 0 && len(cache.chargers) == 0 {
 		return
 	}
 
 	zap.S().Infof("Start persisting cache for date [%s]", cache.date)
 
 	dbName := "stats_" + cache.date
-	db.createTableIfNotExist(dbName, models.Statistic{})
+	db.createTableIfNotExist(dbName, models.UserStatistic{})
 
-	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] stats in [%.2fs], speed [%.2frecords/sec]")
+	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] user statistic in [%.2fs], speed [%.2frecords/sec]")
 
-	statsToPersist := make([]*models.Statistic, 0)
-	for _, stats := range cache.stats {
+	statsToPersist := make([]*models.UserStatistic, 0)
+	for _, stats := range cache.userStats {
 		statsToPersist = append(statsToPersist, stats)
 		if len(statsToPersist) == 1000 {
 			db.db.Table(dbName).Create(&statsToPersist)
-			statsToPersist = make([]*models.Statistic, 0)
+			statsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			zap.L().Info(reportContent)
@@ -243,8 +266,8 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
-	for _, charge := range cache.charge {
-		db.db.Where(models.Charge{Address: charge.Address}).FirstOrCreate(&charge)
+	for _, charger := range cache.chargers {
+		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			zap.L().Info(reportContent)
 		}
@@ -252,6 +275,53 @@ func (db *RawDB) persist(cache *dbCache) {
 	db.db.Table(dbName).Create(&statsToPersist)
 
 	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+
+	zap.S().Info("Start updating exchange statistic")
+
+	exchangeStats := make(map[string]*models.ExchangeStatistic)
+	for address, charger := range cache.chargers {
+		if _, ok := exchangeStats[charger.ExchangeAddress]; !ok {
+			exchangeStats[charger.ExchangeAddress] = &models.ExchangeStatistic{
+				Date:    cache.date,
+				Name:    charger.ExchangeName,
+				Address: charger.ExchangeAddress,
+			}
+		}
+
+		// 充币统计
+		if chargeStatistic, ok := cache.toStats[address]; ok {
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.energyFee
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.energyUsage
+		}
+
+		// 归集统计
+		if collectStats, ok := cache.userStats[address]; ok {
+			exchangeStats[charger.ExchangeAddress].CollectEnergyFee += collectStats.EnergyFee
+			exchangeStats[charger.ExchangeAddress].CollectEnergyUsage += collectStats.EnergyUsage + collectStats.EnergyOriginUsage
+		}
+	}
+	for address := range exchangeStats {
+		// 提币统计
+		if withdrawStats, ok := cache.userStats[address]; ok {
+			exchangeStats[address].WithdrawEnergyFee += withdrawStats.EnergyFee
+			exchangeStats[address].WithdrawEnergyUsage += withdrawStats.EnergyUsage + withdrawStats.EnergyOriginUsage
+		}
+
+		db.db.Create(exchangeStats[address])
+	}
+
+	zap.S().Info("Complete updating exchange statistic")
+}
+
+func (db *RawDB) isCharger(address string) bool {
+	if _, ok := db.cache.chargers[address]; ok {
+		return true
+	}
+	result := db.db.Where("address = ?", address).First(&models.Charger{})
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return false
+	}
+	return true
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {

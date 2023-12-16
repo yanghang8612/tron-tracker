@@ -1,6 +1,6 @@
 package models
 
-type Charge struct {
+type Charger struct {
 	ID              uint   `gorm:"primaryKey"`
 	Address         string `gorm:"char(21),uniqueIndex"`
 	ExchangeName    string

@@ -152,6 +152,10 @@ func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
 }
 
+func (db *RawDB) GetChargers() map[string]*models.Charger {
+	return db.cache.chargers
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {

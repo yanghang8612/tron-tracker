@@ -30,6 +30,7 @@ func main() {
 	router.GET("/lastTrackedBlockNumber", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"block_number": db.GetLastTrackedBlockNum(),
+			"exchanges":    tracker.el,
 		})
 	})
 

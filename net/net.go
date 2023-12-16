@@ -1,6 +1,7 @@
 package net
 
 import (
+	"encoding/json"
 	"strconv"
 
 	"github.com/go-resty/resty/v2"
@@ -39,10 +40,15 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 }
 
 func GetExchanges() *types.ExchangeList {
-	var exchangeList types.ExchangeList
-	_, err := client.R().SetResult(&exchangeList).Get("https://apilist.tronscanapi.com/api/hot/exchanges")
+	var exchanges = types.ExchangeList{}
+	resp, err := client.R().Get("https://apilist.tronscanapi.com/api/hot/exchanges")
 	if err != nil {
 		zap.S().Panic(err)
+	} else {
+		err = json.Unmarshal(resp.Body(), &exchanges)
+		if err != nil {
+			zap.S().Panic(err)
+		}
 	}
-	return &exchangeList
+	return &exchanges
 }

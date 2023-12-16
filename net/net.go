@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 	"tron-tracker/types"
 )
 
@@ -39,6 +40,9 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 
 func GetExchanges() *types.ExchangeList {
 	var exchangeList types.ExchangeList
-	client.R().SetResult(&exchangeList).Get("https://apilist.tronscanapi.com/api/hot/exchanges")
+	_, err := client.R().SetResult(&exchangeList).Get("https://apilist.tronscanapi.com/api/hot/exchanges")
+	if err != nil {
+		zap.S().Panic(err)
+	}
 	return &exchangeList
 }

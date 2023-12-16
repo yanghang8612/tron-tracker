@@ -265,7 +265,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 	db.db.Table(dbName).Create(&statsToPersist)
 
-	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	zap.S().Info(reporter.Finish("Complete saving user statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 

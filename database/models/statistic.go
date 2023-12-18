@@ -2,7 +2,7 @@ package models
 
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey"`
-	Address           string `gorm:"char(21),uniqueIndex"`
+	Address           string `gorm:"size:21;uniqueIndex"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint
@@ -69,8 +69,8 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type ExchangeStatistic struct {
-	ID                  uint `gorm:"primaryKey"`
-	Date                string
+	ID                  uint   `gorm:"primaryKey"`
+	Date                string `gorm:"index"`
 	Name                string
 	Address             string
 	ChargeEnergyFee     uint

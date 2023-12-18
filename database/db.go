@@ -156,6 +156,12 @@ func (db *RawDB) GetChargers() map[string]*models.Charger {
 	return db.cache.chargers
 }
 
+func (db *RawDB) GetUserStatistic(date, user string) *models.UserStatistic {
+	var userStatistic models.UserStatistic
+	db.db.Table("stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
+	return &userStatistic
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {

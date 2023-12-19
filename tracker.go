@@ -152,7 +152,7 @@ func (t *Tracker) doTrackBlock() {
 				}
 				if _, ok := recorded[transferToDB.To]; !ok {
 					recorded[transferToDB.To] = true
-					t.db.SaveChargeEnergyConsumption(transferToDB.To, txToDB.EnergyFee, txToDB.EnergyUsage+txToDB.EnergyOriginUsage)
+					t.db.SaveChargeEnergyConsumption(transferToDB.To, &txToDB)
 				}
 			}
 		}

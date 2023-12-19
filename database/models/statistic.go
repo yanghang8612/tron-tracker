@@ -2,7 +2,7 @@ package models
 
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey"`
-	Address           string `gorm:"size:21;uniqueIndex"`
+	Address           string `gorm:"size:34;uniqueIndex"`
 	EnergyTotal       uint
 	EnergyFee         uint
 	EnergyUsage       uint
@@ -73,19 +73,37 @@ type ExchangeStatistic struct {
 	Date                string `gorm:"index"`
 	Name                string
 	Address             string
+	ChargeTxCount       uint
+	ChargeNetFee        uint
+	ChargeNetUsage      uint
 	ChargeEnergyFee     uint
 	ChargeEnergyUsage   uint
+	CollectTxCount      uint
+	CollectNetFee       uint
+	CollectNetUsage     uint
 	CollectEnergyFee    uint
 	CollectEnergyUsage  uint
+	WithdrawTxCount     uint
+	WithdrawNetFee      uint
+	WithdrawNetUsage    uint
 	WithdrawEnergyFee   uint
 	WithdrawEnergyUsage uint
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
+	o.ChargeTxCount += other.ChargeTxCount
+	o.ChargeNetFee += other.ChargeNetFee
+	o.ChargeNetUsage += other.ChargeNetUsage
 	o.ChargeEnergyFee += other.ChargeEnergyFee
 	o.ChargeEnergyUsage += other.ChargeEnergyUsage
+	o.CollectTxCount += other.CollectTxCount
+	o.CollectNetFee += other.CollectNetFee
+	o.CollectNetUsage += other.CollectNetUsage
 	o.CollectEnergyFee += other.CollectEnergyFee
 	o.CollectEnergyUsage += other.CollectEnergyUsage
+	o.WithdrawTxCount += other.WithdrawTxCount
+	o.WithdrawNetFee += other.WithdrawNetFee
+	o.WithdrawNetUsage += other.WithdrawNetUsage
 	o.WithdrawEnergyFee += other.WithdrawEnergyFee
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
 }

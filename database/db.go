@@ -18,24 +18,26 @@ import (
 	"tron-tracker/utils"
 )
 
+type chargerStatistic struct {
+	txCount     uint
+	netFee      uint
+	netUsage    uint
+	energyFee   uint
+	energyUsage uint
+}
+
 type dbCache struct {
 	date      string
 	userStats map[string]*models.UserStatistic
 	chargers  map[string]*models.Charger
-	toStats   map[string]*struct {
-		energyFee   uint
-		energyUsage uint
-	}
+	toStats   map[string]*chargerStatistic
 }
 
 func newCache() *dbCache {
 	return &dbCache{
 		userStats: make(map[string]*models.UserStatistic),
 		chargers:  make(map[string]*models.Charger),
-		toStats: make(map[string]*struct {
-			energyFee   uint
-			energyUsage uint
-		}),
+		toStats:   make(map[string]*chargerStatistic),
 	}
 }
 
@@ -114,12 +116,12 @@ func New() *RawDB {
 	}
 
 	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231210"}).FirstOrCreate(&LastTrackedDateMeta)
+	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231102"}).FirstOrCreate(&LastTrackedDateMeta)
 	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
 	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "57195000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
 	return &RawDB{
@@ -200,16 +202,21 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 	db.db.Table(dbName).Create(transfers)
 }
 
-func (db *RawDB) SaveChargeEnergyConsumption(to string, energyFee, energyUsage uint) {
+func (db *RawDB) SaveChargeEnergyConsumption(to string, tx *models.Transaction) {
 	if _, ok := db.cache.toStats[to]; !ok {
-		db.cache.toStats[to] = &struct {
-			energyFee   uint
-			energyUsage uint
-		}{energyFee: energyFee, energyUsage: energyUsage}
+		db.cache.toStats[to] = &chargerStatistic{
+			txCount:     1,
+			netFee:      tx.NetFee,
+			netUsage:    tx.NetUsage,
+			energyFee:   tx.EnergyFee,
+			energyUsage: tx.EnergyUsage + tx.EnergyOriginUsage,
+		}
 	} else {
-		db.cache.toStats[to].energyFee += energyFee
-		db.cache.toStats[to].energyUsage += energyUsage
-
+		db.cache.toStats[to].txCount += 1
+		db.cache.toStats[to].netFee += tx.NetFee
+		db.cache.toStats[to].netUsage += tx.NetUsage
+		db.cache.toStats[to].energyFee += tx.EnergyFee
+		db.cache.toStats[to].energyUsage += tx.EnergyUsage + tx.EnergyOriginUsage
 	}
 }
 
@@ -302,12 +309,18 @@ func (db *RawDB) persist(cache *dbCache) {
 
 		// 充币统计
 		if chargeStatistic, ok := cache.toStats[address]; ok {
+			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.txCount
+			exchangeStats[charger.ExchangeAddress].ChargeNetFee += chargeStatistic.netFee
+			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += chargeStatistic.netUsage
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.energyFee
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.energyUsage
 		}
 
 		// 归集统计
 		if collectStats, ok := cache.userStats[address]; ok {
+			exchangeStats[charger.ExchangeAddress].CollectTxCount += collectStats.TransactionTotal
+			exchangeStats[charger.ExchangeAddress].CollectNetFee += collectStats.NetFee
+			exchangeStats[charger.ExchangeAddress].CollectNetUsage += collectStats.NetUsage
 			exchangeStats[charger.ExchangeAddress].CollectEnergyFee += collectStats.EnergyFee
 			exchangeStats[charger.ExchangeAddress].CollectEnergyUsage += collectStats.EnergyUsage + collectStats.EnergyOriginUsage
 		}
@@ -315,6 +328,9 @@ func (db *RawDB) persist(cache *dbCache) {
 	for address := range exchangeStats {
 		// 提币统计
 		if withdrawStats, ok := cache.userStats[address]; ok {
+			exchangeStats[address].CollectTxCount += withdrawStats.TransactionTotal
+			exchangeStats[address].CollectNetFee += withdrawStats.NetFee
+			exchangeStats[address].CollectNetUsage += withdrawStats.NetUsage
 			exchangeStats[address].WithdrawEnergyFee += withdrawStats.EnergyFee
 			exchangeStats[address].WithdrawEnergyUsage += withdrawStats.EnergyUsage + withdrawStats.EnergyOriginUsage
 		}

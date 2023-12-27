@@ -164,6 +164,12 @@ func (db *RawDB) GetUserStatistic(date, user string) *models.UserStatistic {
 	return &userStatistic
 }
 
+func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
+	var exchangeStatistic []models.ExchangeStatistic
+	db.db.Where("date = ?", date).Find(&exchangeStatistic)
+	return exchangeStatistic
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {

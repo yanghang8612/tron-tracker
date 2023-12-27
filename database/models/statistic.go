@@ -9,6 +9,7 @@ type UserStatistic struct {
 	EnergyOriginUsage uint
 	NetUsage          uint
 	NetFee            uint
+	OtherFee          uint
 	TransactionTotal  uint
 	TRXTotal          uint
 	TRC10Total        uint
@@ -24,6 +25,7 @@ func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
 		EnergyOriginUsage: tx.EnergyOriginUsage,
 		NetUsage:          tx.NetUsage,
 		NetFee:            tx.NetFee,
+		OtherFee:          tx.Fee - tx.EnergyFee - tx.NetFee,
 		TransactionTotal:  1,
 	}
 	switch tx.Type {
@@ -44,6 +46,7 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.EnergyOriginUsage += other.EnergyOriginUsage
 	o.NetUsage += other.NetUsage
 	o.NetFee += other.NetFee
+	o.OtherFee += other.OtherFee
 	o.TransactionTotal += other.TransactionTotal
 	o.TRXTotal += other.TRXTotal
 	o.TRC10Total += other.TRC10Total
@@ -57,6 +60,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	o.EnergyOriginUsage += tx.EnergyOriginUsage
 	o.NetUsage += tx.NetUsage
 	o.NetFee += tx.NetFee
+	o.OtherFee += tx.Fee - tx.EnergyFee - tx.NetFee
 	o.TransactionTotal++
 	switch tx.Type {
 	case 1:

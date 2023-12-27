@@ -71,6 +71,10 @@ func (t *Tracker) doTrackBlock() {
 		return
 	}
 
+	if block.BlockHeader.RawData.Number%100 == 0 {
+		t.el = net.GetExchanges()
+	}
+
 	if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
 		zap.L().Info(reportContent)
 	}

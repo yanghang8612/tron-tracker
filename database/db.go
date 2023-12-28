@@ -24,6 +24,7 @@ type chargerStatistic struct {
 	netUsage    uint
 	energyFee   uint
 	energyUsage uint
+	otherFee    uint
 }
 
 type dbCache struct {
@@ -116,12 +117,12 @@ func New() *RawDB {
 	}
 
 	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231102"}).FirstOrCreate(&LastTrackedDateMeta)
+	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231210"}).FirstOrCreate(&LastTrackedDateMeta)
 	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
 	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "57200000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
 	return &RawDB{
@@ -216,6 +217,7 @@ func (db *RawDB) SaveChargeEnergyConsumption(to string, tx *models.Transaction) 
 			netUsage:    tx.NetUsage,
 			energyFee:   tx.EnergyFee,
 			energyUsage: tx.EnergyUsage + tx.EnergyOriginUsage,
+			otherFee:    tx.Fee - tx.EnergyFee - tx.NetFee,
 		}
 	} else {
 		db.cache.toStats[to].txCount += 1
@@ -223,6 +225,7 @@ func (db *RawDB) SaveChargeEnergyConsumption(to string, tx *models.Transaction) 
 		db.cache.toStats[to].netUsage += tx.NetUsage
 		db.cache.toStats[to].energyFee += tx.EnergyFee
 		db.cache.toStats[to].energyUsage += tx.EnergyUsage + tx.EnergyOriginUsage
+		db.cache.toStats[to].otherFee += tx.Fee - tx.EnergyFee - tx.NetFee
 	}
 }
 
@@ -320,6 +323,7 @@ func (db *RawDB) persist(cache *dbCache) {
 			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += chargeStatistic.netUsage
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.energyFee
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.energyUsage
+			exchangeStats[charger.ExchangeAddress].ChargeOtherFee += chargeStatistic.otherFee
 		}
 
 		// 归集统计
@@ -329,16 +333,18 @@ func (db *RawDB) persist(cache *dbCache) {
 			exchangeStats[charger.ExchangeAddress].CollectNetUsage += collectStats.NetUsage
 			exchangeStats[charger.ExchangeAddress].CollectEnergyFee += collectStats.EnergyFee
 			exchangeStats[charger.ExchangeAddress].CollectEnergyUsage += collectStats.EnergyUsage + collectStats.EnergyOriginUsage
+			exchangeStats[charger.ExchangeAddress].CollectOtherFee += collectStats.OtherFee
 		}
 	}
 	for address := range exchangeStats {
 		// 提币统计
 		if withdrawStats, ok := cache.userStats[address]; ok {
-			exchangeStats[address].CollectTxCount += withdrawStats.TransactionTotal
-			exchangeStats[address].CollectNetFee += withdrawStats.NetFee
-			exchangeStats[address].CollectNetUsage += withdrawStats.NetUsage
+			exchangeStats[address].WithdrawTxCount += withdrawStats.TransactionTotal
+			exchangeStats[address].WithdrawNetFee += withdrawStats.NetFee
+			exchangeStats[address].WithdrawNetUsage += withdrawStats.NetUsage
 			exchangeStats[address].WithdrawEnergyFee += withdrawStats.EnergyFee
 			exchangeStats[address].WithdrawEnergyUsage += withdrawStats.EnergyUsage + withdrawStats.EnergyOriginUsage
+			exchangeStats[address].WithdrawOtherFee += withdrawStats.OtherFee
 		}
 
 		db.db.Create(exchangeStats[address])

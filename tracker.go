@@ -135,7 +135,8 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount = -txToDB.Amount
 		}
 		transactions = append(transactions, txToDB)
-		if t.el.Contains(txToDB.To) {
+		if t.el.Contains(txToDB.To) && txToDB.Amount > 1000000 {
+			// Filter small value TRX charger
 			t.db.SaveCharger(txToDB.Owner, t.el.Get(txToDB.To))
 		}
 
@@ -152,7 +153,10 @@ func (t *Tracker) doTrackBlock() {
 				}
 				transfers = append(transfers, transferToDB)
 				if t.el.Contains(transferToDB.To) {
-					t.db.SaveCharger(transferToDB.From, t.el.Get(transferToDB.To))
+					// Filter small value USDT charger
+					if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+						t.db.SaveCharger(transferToDB.From, t.el.Get(transferToDB.To))
+					}
 				}
 				if _, ok := recorded[transferToDB.To]; !ok {
 					recorded[transferToDB.To] = true

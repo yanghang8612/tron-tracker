@@ -86,7 +86,7 @@ func (t *Tracker) doTrackBlock() {
 	for idx, tx := range block.Transactions {
 		var txToDB = models.Transaction{
 			Hash:      tx.TxID,
-			Owner:     utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
+			FromAddr:  utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Height:    block.BlockHeader.RawData.Number,
 			Timestamp: block.BlockHeader.RawData.Timestamp,
 			Type:      types.ConvertType(tx.RawData.Contract[0].Type),
@@ -96,9 +96,10 @@ func (t *Tracker) doTrackBlock() {
 		txToDB.NetUsage = txInfoList[idx].Receipt.NetUsage
 		txToDB.NetFee = txInfoList[idx].Receipt.NetFee
 		txToDB.Result = txInfoList[idx].Receipt.Result
+		txToDB.SigCount = uint(len(tx.Signature))
 		if txToDB.Type == 1 {
 			txToDB.Name = "_"
-			txToDB.To = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
@@ -121,10 +122,10 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 56 {
 			txToDB.Amount = int64(txInfoList[idx].WithdrawExpireAmount)
 		} else if txToDB.Type == 57 {
-			txToDB.To = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
 		} else if txToDB.Type == 58 {
-			txToDB.To = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
 		} else if txToDB.Type == 59 {
 			for _, entry := range txInfoList[idx].CancelUnfreezeV2Amount {
@@ -135,9 +136,9 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount = -txToDB.Amount
 		}
 		transactions = append(transactions, txToDB)
-		if t.el.Contains(txToDB.To) && txToDB.Amount > 1000000 {
+		if t.el.Contains(txToDB.ToAddr) && txToDB.Amount > 1000000 {
 			// Filter small value TRX charger
-			t.db.SaveCharger(txToDB.Owner, t.el.Get(txToDB.To))
+			t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
 		}
 
 		recorded := make(map[string]bool)
@@ -146,25 +147,25 @@ func (t *Tracker) doTrackBlock() {
 				var transferToDB = models.TRC20Transfer{
 					Hash:      tx.TxID,
 					Token:     utils.EncodeToBase58(log.Address),
-					From:      utils.EncodeToBase58(log.Topics[1][24:]),
-					To:        utils.EncodeToBase58(log.Topics[2][24:]),
+					FromAddr:  utils.EncodeToBase58(log.Topics[1][24:]),
+					ToAddr:    utils.EncodeToBase58(log.Topics[2][24:]),
 					Timestamp: block.BlockHeader.RawData.Timestamp,
 					Amount:    models.NewBigInt(utils.ConvertHexToBigInt(log.Data)),
 				}
 				transfers = append(transfers, transferToDB)
-				if t.el.Contains(transferToDB.To) {
+				if t.el.Contains(transferToDB.ToAddr) {
 					// Filter small value USDT charger
 					if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-						t.db.SaveCharger(transferToDB.From, t.el.Get(transferToDB.To))
+						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
 					}
 				}
-				if _, ok := recorded[transferToDB.To]; !ok {
-					recorded[transferToDB.To] = true
-					t.db.SaveChargeEnergyConsumption(transferToDB.To, &txToDB)
+				if _, ok := recorded[transferToDB.ToAddr]; !ok {
+					recorded[transferToDB.ToAddr] = true
+					t.db.UpdateToStatistic(transferToDB.ToAddr, &txToDB)
 				}
 			}
 		}
-		t.db.UpdateStatistic(&txToDB)
+		t.db.UpdateFromStatistic(&txToDB)
 	}
 	t.db.SaveTransactions(&transactions)
 	t.db.SaveTransfers(&transfers)

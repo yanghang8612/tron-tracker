@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	BaseUrl                    = "http://localhost:8088/"
+	BaseUrl                    = "https://api.trongrid.io/"
 	GetBlockPath               = "wallet/getblockbynum?num="
 	GetNowBlockPath            = "wallet/getnowblock"
 	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="

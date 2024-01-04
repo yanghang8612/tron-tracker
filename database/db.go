@@ -18,27 +18,18 @@ import (
 	"tron-tracker/utils"
 )
 
-type chargerStatistic struct {
-	txCount     uint
-	netFee      uint
-	netUsage    uint
-	energyFee   uint
-	energyUsage uint
-	otherFee    uint
-}
-
 type dbCache struct {
 	date      string
-	userStats map[string]*models.UserStatistic
+	fromStats map[string]*models.UserStatistic
+	toStats   map[string]*models.UserStatistic
 	chargers  map[string]*models.Charger
-	toStats   map[string]*chargerStatistic
 }
 
 func newCache() *dbCache {
 	return &dbCache{
-		userStats: make(map[string]*models.UserStatistic),
+		fromStats: make(map[string]*models.UserStatistic),
+		toStats:   make(map[string]*models.UserStatistic),
 		chargers:  make(map[string]*models.Charger),
-		toStats:   make(map[string]*chargerStatistic),
 	}
 }
 
@@ -58,7 +49,7 @@ type RawDB struct {
 }
 
 func New() *RawDB {
-	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "root@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -171,6 +162,12 @@ func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
 	return exchangeStatistic
 }
 
+func (db *RawDB) GetSpecialStatistic(addr string) models.ExchangeStatistic {
+	var exchangeStatistic models.ExchangeStatistic
+	db.db.Where("date = ?", addr).Find(&exchangeStatistic)
+	return exchangeStatistic
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {
@@ -209,37 +206,30 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 	db.db.Table(dbName).Create(transfers)
 }
 
-func (db *RawDB) SaveChargeEnergyConsumption(to string, tx *models.Transaction) {
-	if _, ok := db.cache.toStats[to]; !ok {
-		db.cache.toStats[to] = &chargerStatistic{
-			txCount:     1,
-			netFee:      tx.NetFee,
-			netUsage:    tx.NetUsage,
-			energyFee:   tx.EnergyFee,
-			energyUsage: tx.EnergyUsage + tx.EnergyOriginUsage,
-			otherFee:    tx.Fee - tx.EnergyFee - tx.NetFee,
-		}
+func (db *RawDB) UpdateToStatistic(to string, tx *models.Transaction) {
+	db.cache.date = generateDate(tx.Timestamp)
+	if stats, ok := db.cache.toStats[to]; ok {
+		stats.Add(tx)
 	} else {
-		db.cache.toStats[to].txCount += 1
-		db.cache.toStats[to].netFee += tx.NetFee
-		db.cache.toStats[to].netUsage += tx.NetUsage
-		db.cache.toStats[to].energyFee += tx.EnergyFee
-		db.cache.toStats[to].energyUsage += tx.EnergyUsage + tx.EnergyOriginUsage
-		db.cache.toStats[to].otherFee += tx.Fee - tx.EnergyFee - tx.NetFee
+		db.cache.toStats[to] = models.NewUserStatistic(to, tx)
 	}
 }
 
-func (db *RawDB) UpdateStatistic(tx *models.Transaction) {
-	db.updateStatistic(tx.Owner, tx)
-	db.updateStatistic("total", tx)
+func (db *RawDB) UpdateFromStatistic(tx *models.Transaction) {
+	db.updateFromStatistic(tx.FromAddr, tx)
+	db.updateFromStatistic("total", tx)
+
+	if len(tx.Name) > 0 && tx.Name != "_" {
+		db.updateFromStatistic(tx.Name, tx)
+	}
 }
 
-func (db *RawDB) updateStatistic(owner string, tx *models.Transaction) {
+func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
 	db.cache.date = generateDate(tx.Timestamp)
-	if ownerStats, ok := db.cache.userStats[owner]; ok {
-		ownerStats.Add(tx)
+	if stats, ok := db.cache.fromStats[user]; ok {
+		stats.Add(tx)
 	} else {
-		db.cache.userStats[owner] = models.NewUserStatistic(owner, tx)
+		db.cache.fromStats[user] = models.NewUserStatistic(user, tx)
 	}
 }
 
@@ -267,31 +257,51 @@ func (db *RawDB) Run() {
 }
 
 func (db *RawDB) persist(cache *dbCache) {
-	if len(cache.userStats) == 0 && len(cache.chargers) == 0 {
+	if len(cache.fromStats) == 0 && len(cache.toStats) == 0 && len(cache.chargers) == 0 {
 		return
 	}
 
 	zap.S().Infof("Start persisting cache for date [%s]", cache.date)
 
-	dbName := "stats_" + cache.date
-	db.createTableIfNotExist(dbName, models.UserStatistic{})
+	fromDBName := "from_stats_" + cache.date
+	db.createTableIfNotExist(fromDBName, models.UserStatistic{})
 
-	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] user statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] from statistic in [%.2fs], speed [%.2frecords/sec]")
 
 	statsToPersist := make([]*models.UserStatistic, 0)
-	for _, stats := range cache.userStats {
+	for _, stats := range cache.fromStats {
 		statsToPersist = append(statsToPersist, stats)
 		if len(statsToPersist) == 1000 {
-			db.db.Table(dbName).Create(&statsToPersist)
+			db.db.Table(fromDBName).Create(&statsToPersist)
 			statsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			zap.L().Info(reportContent)
 		}
 	}
-	db.db.Table(dbName).Create(&statsToPersist)
+	db.db.Table(fromDBName).Create(&statsToPersist)
 
-	zap.S().Info(reporter.Finish("Complete saving user statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	zap.S().Info(reporter.Finish("Complete saving from statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+
+	toDBName := "to_stats_" + cache.date
+	db.createTableIfNotExist(toDBName, models.UserStatistic{})
+
+	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
+
+	statsToPersist = make([]*models.UserStatistic, 0)
+	for _, stats := range cache.fromStats {
+		statsToPersist = append(statsToPersist, stats)
+		if len(statsToPersist) == 1000 {
+			db.db.Table(toDBName).Create(&statsToPersist)
+			statsToPersist = make([]*models.UserStatistic, 0)
+		}
+		if shouldReport, reportContent := reporter.Add(1); shouldReport {
+			zap.L().Info(reportContent)
+		}
+	}
+	db.db.Table(toDBName).Create(&statsToPersist)
+
+	zap.S().Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
@@ -318,33 +328,33 @@ func (db *RawDB) persist(cache *dbCache) {
 
 		// 充币统计
 		if chargeStatistic, ok := cache.toStats[address]; ok {
-			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.txCount
-			exchangeStats[charger.ExchangeAddress].ChargeNetFee += chargeStatistic.netFee
-			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += chargeStatistic.netUsage
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.energyFee
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.energyUsage
-			exchangeStats[charger.ExchangeAddress].ChargeOtherFee += chargeStatistic.otherFee
+			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.TXTotal
+			exchangeStats[charger.ExchangeAddress].ChargeFee += chargeStatistic.Fee
+			exchangeStats[charger.ExchangeAddress].ChargeNetFee += chargeStatistic.NetFee
+			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += chargeStatistic.NetUsage
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.EnergyFee
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.EnergyUsage + chargeStatistic.EnergyOriginUsage
 		}
 
 		// 归集统计
-		if collectStats, ok := cache.userStats[address]; ok {
-			exchangeStats[charger.ExchangeAddress].CollectTxCount += collectStats.TransactionTotal
+		if collectStats, ok := cache.fromStats[address]; ok {
+			exchangeStats[charger.ExchangeAddress].CollectTxCount += collectStats.TXTotal
+			exchangeStats[charger.ExchangeAddress].CollectFee += collectStats.Fee
 			exchangeStats[charger.ExchangeAddress].CollectNetFee += collectStats.NetFee
 			exchangeStats[charger.ExchangeAddress].CollectNetUsage += collectStats.NetUsage
 			exchangeStats[charger.ExchangeAddress].CollectEnergyFee += collectStats.EnergyFee
 			exchangeStats[charger.ExchangeAddress].CollectEnergyUsage += collectStats.EnergyUsage + collectStats.EnergyOriginUsage
-			exchangeStats[charger.ExchangeAddress].CollectOtherFee += collectStats.OtherFee
 		}
 	}
 	for address := range exchangeStats {
 		// 提币统计
-		if withdrawStats, ok := cache.userStats[address]; ok {
-			exchangeStats[address].WithdrawTxCount += withdrawStats.TransactionTotal
+		if withdrawStats, ok := cache.toStats[address]; ok {
+			exchangeStats[address].WithdrawTxCount += withdrawStats.TXTotal
+			exchangeStats[address].WithdrawFee += withdrawStats.Fee
 			exchangeStats[address].WithdrawNetFee += withdrawStats.NetFee
 			exchangeStats[address].WithdrawNetUsage += withdrawStats.NetUsage
 			exchangeStats[address].WithdrawEnergyFee += withdrawStats.EnergyFee
 			exchangeStats[address].WithdrawEnergyUsage += withdrawStats.EnergyUsage + withdrawStats.EnergyOriginUsage
-			exchangeStats[address].WithdrawOtherFee += withdrawStats.OtherFee
 		}
 
 		db.db.Create(exchangeStats[address])

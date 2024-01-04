@@ -115,14 +115,14 @@ type ExchangeStatistic struct {
 	ChargeNetUsage      uint
 	ChargeEnergyFee     uint
 	ChargeEnergyUsage   uint
-	CollectFee          uint
 	CollectTxCount      uint
+	CollectFee          uint
 	CollectNetFee       uint
 	CollectNetUsage     uint
 	CollectEnergyFee    uint
 	CollectEnergyUsage  uint
-	WithdrawFee         uint
 	WithdrawTxCount     uint
+	WithdrawFee         uint
 	WithdrawNetFee      uint
 	WithdrawNetUsage    uint
 	WithdrawEnergyFee   uint
@@ -142,8 +142,8 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.CollectNetUsage += other.CollectNetUsage
 	o.CollectEnergyFee += other.CollectEnergyFee
 	o.CollectEnergyUsage += other.CollectEnergyUsage
-	o.WithdrawFee += other.WithdrawFee
 	o.WithdrawTxCount += other.WithdrawTxCount
+	o.WithdrawFee += other.WithdrawFee
 	o.WithdrawNetFee += other.WithdrawNetFee
 	o.WithdrawNetUsage += other.WithdrawNetUsage
 	o.WithdrawEnergyFee += other.WithdrawEnergyFee

@@ -266,7 +266,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	fromDBName := "from_stats_" + cache.date
 	db.createTableIfNotExist(fromDBName, models.UserStatistic{})
 
-	reporter := utils.NewReporter(0, 3*time.Second, "Saved [%d] from statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter := utils.NewReporter(0, 60*time.Second, "Saved [%d] from statistic in [%.2fs], speed [%.2frecords/sec]")
 
 	statsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
@@ -286,7 +286,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	toDBName := "to_stats_" + cache.date
 	db.createTableIfNotExist(toDBName, models.UserStatistic{})
 
-	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
 
 	statsToPersist = make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
@@ -303,7 +303,7 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	zap.S().Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	reporter = utils.NewReporter(0, 3*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
 	for _, charger := range cache.chargers {
 		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
@@ -348,7 +348,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 	for address := range exchangeStats {
 		// 提币统计
-		if withdrawStats, ok := cache.toStats[address]; ok {
+		if withdrawStats, ok := cache.fromStats[address]; ok {
 			exchangeStats[address].WithdrawTxCount += withdrawStats.TXTotal
 			exchangeStats[address].WithdrawFee += withdrawStats.Fee
 			exchangeStats[address].WithdrawNetFee += withdrawStats.NetFee

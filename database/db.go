@@ -281,7 +281,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	statsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
 		statsToPersist = append(statsToPersist, stats)
-		if len(statsToPersist) == 1000 {
+		if len(statsToPersist) == 200 {
 			db.db.Table(fromDBName).Create(&statsToPersist)
 			statsToPersist = make([]*models.UserStatistic, 0)
 		}
@@ -301,7 +301,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	statsToPersist = make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
 		statsToPersist = append(statsToPersist, stats)
-		if len(statsToPersist) == 1000 {
+		if len(statsToPersist) == 200 {
 			db.db.Table(toDBName).Create(&statsToPersist)
 			statsToPersist = make([]*models.UserStatistic, 0)
 		}

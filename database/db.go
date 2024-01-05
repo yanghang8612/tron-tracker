@@ -336,6 +336,10 @@ func (db *RawDB) persist(cache *dbCache) {
 			}
 		}
 
+		if strings.Contains(charger.ExchangeName, "sbit") {
+			zap.S().Infof("Found sbit charger [%s]", charger.Address)
+		}
+
 		// 充币统计
 		if chargeStatistic, ok := cache.toStats[address]; ok {
 			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.TXTotal

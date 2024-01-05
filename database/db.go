@@ -336,12 +336,12 @@ func (db *RawDB) persist(cache *dbCache) {
 			}
 		}
 
-		if strings.Contains(charger.ExchangeName, "sbit") {
-			zap.S().Infof("Found sbit charger [%s]", charger.Address)
-		}
-
 		// 充币统计
 		if chargeStatistic, ok := cache.toStats[address]; ok {
+			if strings.Contains(charger.ExchangeName, "sbit") {
+				zap.S().Infof("sbit charger [%s]: charge tx count [%d]", charger.Address, chargeStatistic.TXTotal)
+			}
+
 			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.TXTotal
 			exchangeStats[charger.ExchangeAddress].ChargeFee += chargeStatistic.Fee
 			exchangeStats[charger.ExchangeAddress].ChargeNetFee += chargeStatistic.NetFee
@@ -352,6 +352,10 @@ func (db *RawDB) persist(cache *dbCache) {
 
 		// 归集统计
 		if collectStats, ok := cache.fromStats[address]; ok {
+			if strings.Contains(charger.ExchangeName, "sbit") {
+				zap.S().Infof("sbit charger [%s]: collect tx count [%d]", charger.Address, collectStats.TXTotal)
+			}
+
 			exchangeStats[charger.ExchangeAddress].CollectTxCount += collectStats.TXTotal
 			exchangeStats[charger.ExchangeAddress].CollectFee += collectStats.Fee
 			exchangeStats[charger.ExchangeAddress].CollectNetFee += collectStats.NetFee

@@ -168,6 +168,16 @@ func (db *RawDB) GetSpecialStatistic(addr string) models.ExchangeStatistic {
 	return exchangeStatistic
 }
 
+func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
+	charges := make([]string, 0)
+	for _, charger := range db.cache.chargers {
+		if charger.ExchangeAddress == addr {
+			charges = append(charges, charger.Address)
+		}
+	}
+	return charges
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {

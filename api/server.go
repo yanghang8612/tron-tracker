@@ -40,6 +40,8 @@ func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/total-fee-of-tronlink-users", s.totalFeeOfTronLinkUsers)
 	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
+	s.router.GET("/special_statistic", s.specialStatistic)
+	s.router.GET("/cached_charges", s.getCachedCharges)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -108,6 +110,20 @@ func (s *Server) specialStatistic(c *gin.Context) {
 	if ok {
 		c.JSON(200, gin.H{
 			"exchanges_statistic": s.db.GetSpecialStatistic(addr),
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": "addr must be present",
+		})
+	}
+}
+
+func (s *Server) getCachedCharges(c *gin.Context) {
+	addr, ok := c.GetQuery("addr")
+	if ok {
+		c.JSON(200, gin.H{
+			"cached_charges": s.db.GetCachedChargesByAddr(addr),
 		})
 	} else {
 		c.JSON(200, gin.H{

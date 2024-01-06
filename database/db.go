@@ -244,7 +244,7 @@ func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
 }
 
 func (db *RawDB) SaveCharger(address string, exchange types.Exchange, tx models.Transaction) {
-	if address == "TU4vEruvZwLLkSfV9bNw12EJTPvNr7Pvaa" && strings.Contains(exchange.Name, "sbit") {
+	if address == "TU4vEruvZwLLkSfV9bNw12EJTPvNr7Pvaa" {
 		zap.S().Infof("sbit charger [%s]: tx [%s]", address, tx.Hash)
 	}
 	if _, ok := db.cache.chargers[address]; !ok {
@@ -318,12 +318,12 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
-	for _, charger := range cache.chargers {
-		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
-		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			zap.L().Info(reportContent)
-		}
-	}
+	// for _, charger := range cache.chargers {
+	// 	db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
+	// 	if shouldReport, reportContent := reporter.Add(1); shouldReport {
+	// 		zap.L().Info(reportContent)
+	// 	}
+	// }
 
 	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 

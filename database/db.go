@@ -60,7 +60,7 @@ func New() *RawDB {
 		panic(dbErr)
 	}
 
-	if !db.Migrator().HasTable(&models.Charger{}) {
+	if db.Migrator().HasTable(&models.Charger{}) {
 		dbErr = db.AutoMigrate(&models.Charger{})
 		if dbErr != nil {
 			panic(dbErr)

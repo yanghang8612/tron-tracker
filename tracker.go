@@ -104,7 +104,7 @@ func (t *Tracker) doTrackBlock() {
 
 			// Filter small value TRX charger
 			if t.el.Contains(txToDB.ToAddr) && txToDB.Amount > 1000000 {
-				t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
+				t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr), txToDB)
 			}
 
 			t.db.UpdateToStatistic(txToDB.ToAddr, &txToDB)
@@ -159,7 +159,7 @@ func (t *Tracker) doTrackBlock() {
 				if t.el.Contains(transferToDB.ToAddr) {
 					// Filter small value USDT charger
 					if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
+						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr), txToDB)
 					}
 				}
 

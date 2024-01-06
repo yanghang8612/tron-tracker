@@ -243,7 +243,10 @@ func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
 	}
 }
 
-func (db *RawDB) SaveCharger(address string, exchange types.Exchange) {
+func (db *RawDB) SaveCharger(address string, exchange types.Exchange, tx models.Transaction) {
+	if address == "TU4vEruvZwLLkSfV9bNw12EJTPvNr7Pvaa" && strings.Contains(exchange.Name, "sbit") {
+		zap.S().Infof("sbit charger [%s]: tx [%s]", address, tx.Hash)
+	}
 	if _, ok := db.cache.chargers[address]; !ok {
 		db.cache.chargers[address] = &models.Charger{
 			Address:         address,

@@ -7,12 +7,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"tron-tracker/database"
+	"tron-tracker/database/models"
 )
 
 type Server struct {
@@ -41,7 +43,8 @@ func (s *Server) Start() {
 	s.router.GET("/total-fee-of-tronlink-users", s.totalFeeOfTronLinkUsers)
 	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
-	s.router.GET("/cached_charges", s.getCachedCharges)
+	s.router.GET("/cached_charges", s.cachedCharges)
+	s.router.GET("/total_statistics", s.totalStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -79,7 +82,7 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 		user := scanner.Text()
 		for i := 0; i < 7; i++ {
 			date := lastMonday.Add(time.Duration(i) * 24 * time.Hour).Format("060102")
-			totalFee += uint64(s.db.GetUserStatistic(date, user).EnergyFee)
+			totalFee += uint64(s.db.GetUserFromStatistic(date, user).EnergyFee)
 		}
 		count += 1
 		if count%10000 == 0 {
@@ -119,7 +122,7 @@ func (s *Server) specialStatistic(c *gin.Context) {
 	}
 }
 
-func (s *Server) getCachedCharges(c *gin.Context) {
+func (s *Server) cachedCharges(c *gin.Context) {
 	addr, ok := c.GetQuery("addr")
 	if ok {
 		c.JSON(200, gin.H{
@@ -131,4 +134,61 @@ func (s *Server) getCachedCharges(c *gin.Context) {
 			"error": "addr must be present",
 		})
 	}
+}
+
+func (s *Server) totalStatistics(c *gin.Context) {
+	startDateStr, ok := s.getStringParams(c, "start_date")
+	days, ok := s.getIntParams(c, "days")
+	if !ok {
+		return
+	}
+
+	startDate, err := time.Parse("230102", startDateStr)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": "start_date cannot be parsed",
+		})
+	}
+
+	var totalStatistics *models.UserStatistic
+	for i := 0; i < days; i++ {
+		totalStatistics.Merge(s.db.GetUserFromStatistic(startDate.AddDate(0, 0, i).Format("230102"), "total"))
+	}
+
+	c.JSON(200, gin.H{
+		"total_statistics": totalStatistics,
+	})
+}
+
+func (s *Server) getStringParams(c *gin.Context, name string) (string, bool) {
+	param, ok := c.GetQuery(name)
+	if !ok {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": name + " must be present",
+		})
+	}
+
+	return param, ok
+}
+
+func (s *Server) getIntParams(c *gin.Context, name string) (int, bool) {
+	paramStr, ok := c.GetQuery(name)
+	if !ok {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": name + " must be present",
+		})
+	}
+
+	param, err := strconv.Atoi(paramStr)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": name + " cannot cast into int",
+		})
+	}
+
+	return param, ok && err == nil
 }

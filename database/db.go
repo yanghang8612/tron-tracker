@@ -150,9 +150,9 @@ func (db *RawDB) GetChargers() map[string]*models.Charger {
 	return db.cache.chargers
 }
 
-func (db *RawDB) GetUserStatistic(date, user string) *models.UserStatistic {
+func (db *RawDB) GetUserFromStatistic(date, user string) *models.UserStatistic {
 	var userStatistic models.UserStatistic
-	db.db.Table("stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
+	db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
 	return &userStatistic
 }
 
@@ -176,6 +176,13 @@ func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
 		}
 	}
 	return charges
+}
+
+func (db *RawDB) GetTotalStatisticsByDate(date string) *models.UserStatistic {
+	var totalStatistic models.UserStatistic
+	db.db.Table("from_stats_" + date).Where("address = total").Limit(1).Find(&totalStatistic)
+	return &totalStatistic
+
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
@@ -313,7 +320,7 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	zap.S().Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
+	// reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
 	// for _, charger := range cache.chargers {
 	// 	db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
@@ -322,7 +329,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	// 	}
 	// }
 
-	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	// zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	zap.S().Info("Start updating exchange statistic")
 

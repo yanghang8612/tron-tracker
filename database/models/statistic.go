@@ -138,6 +138,10 @@ type ExchangeStatistic struct {
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
+	if other == nil {
+		return
+	}
+
 	o.ChargeTxCount += other.ChargeTxCount
 	o.ChargeFee += other.ChargeFee
 	o.ChargeNetFee += other.ChargeNetFee

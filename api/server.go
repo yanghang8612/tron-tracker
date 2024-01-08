@@ -94,7 +94,7 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 	})
 }
 
-func (s *Server) exchangesStatistic(c *gin.Context) {
+func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 	date, ok := c.GetQuery("date")
 	if ok {
 		c.JSON(200, gin.H{
@@ -106,6 +106,35 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 			"error": "date must be present",
 		})
 	}
+}
+
+func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
+	startDateStr, ok := c.GetQuery("start_date")
+	if !ok {
+		return
+	}
+
+	startDate, err := time.Parse("060102", startDateStr)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": "start_date cannot be parsed",
+		})
+	}
+
+	resultMap := make(map[string]*models.ExchangeStatistic)
+	for i := 0; i < 7; i++ {
+		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
+			if _, ok := resultMap[es.Address]; !ok {
+				resultMap[es.Address] = &models.ExchangeStatistic{}
+			}
+			resultMap[es.Address].Merge(&es)
+		}
+	}
+
+	c.JSON(200, gin.H{
+		"exchanges_total_statistic": resultMap,
+	})
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {

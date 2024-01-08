@@ -171,8 +171,12 @@ func (s *Server) specialStatistic(c *gin.Context) {
 	}
 
 	if ok {
+		chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatistic(date, addr)
 		c.JSON(200, gin.H{
-			"exchanges_statistic": s.db.GetSpecialStatistic(date, addr),
+			"charge_fee":     chargeFee,
+			"withdraw_fee":   withdrawFee,
+			"charge_count":   chargeCount,
+			"withdraw_count": withdrawCount,
 		})
 	} else {
 		c.JSON(200, gin.H{

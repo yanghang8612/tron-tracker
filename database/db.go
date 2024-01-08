@@ -162,16 +162,33 @@ func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
 	return exchangeStatistic
 }
 
-func (db *RawDB) GetSpecialStatistic(date, addr string) uint {
-	var sum uint
+func (db *RawDB) GetSpecialStatistic(date, addr string) (uint, uint, uint, uint) {
+	USDT := "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+	var chargeFee uint
 	db.db.Table("transactions_"+date).
 		Select("SUM(fee)").
 		Where("hash IN (?)",
 			db.db.Table("transfers_"+date).
 				Distinct("hash").
-				Where("to_addr = ? and token = ?", addr, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).
-		Find(&sum)
-	return sum
+				Where("to_addr = ? and token = ?", addr, USDT)).
+		Find(&chargeFee)
+
+	var withdrawFee uint
+	db.db.Table("transactions_"+date).
+		Select("SUM(fee)").
+		Where("hash IN (?)",
+			db.db.Table("transfers_"+date).
+				Distinct("hash").
+				Where("from_addr = ? and token = ?", addr, USDT)).
+		Find(&withdrawFee)
+
+	var chargeCnt int64
+	db.db.Table("transfers_"+date).Where("to_addr = ? and token = ?", addr, USDT).Count(&chargeCnt)
+
+	var withdrawCnt int64
+	db.db.Table("transfers_"+date).Where("from_addr = ? and token = ?", addr, USDT).Count(&withdrawCnt)
+
+	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
 
 func (db *RawDB) GetCachedChargesByAddr(addr string) []string {

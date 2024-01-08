@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -130,8 +131,11 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Name, ``)
+			fmt.Println(exchangeName)
+			fmt.Printf("%v", es)
 			if _, ok := resultMap[exchangeName]; !ok {
-				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 7).Format("060102")
+				es.ID = 0
+				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
 				es.Name = exchangeName
 				es.Address = ""
 				resultMap[exchangeName] = &es

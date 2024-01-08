@@ -132,7 +132,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Name, ``)
 			zap.L().Info("---")
 			zap.L().Info(exchangeName)
-			zap.S().Info("%v\n", es)
+			zap.S().Infof("%v", es)
 			if _, ok := resultMap[exchangeName]; !ok {
 				es.ID = 0
 				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
@@ -142,8 +142,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 			} else {
 				resultMap[exchangeName].Merge(&es)
 			}
-			zap.S().Info("%v\n", resultMap[exchangeName])
-			zap.L().Info("---")
+			zap.S().Infof("%v", resultMap[exchangeName])
 		}
 	}
 

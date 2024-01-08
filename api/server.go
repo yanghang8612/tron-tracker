@@ -143,7 +143,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse("230102", startDateStr)
+	startDate, err := time.Parse("060102", startDateStr)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":  400,

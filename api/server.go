@@ -134,14 +134,11 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 			zap.L().Info(exchangeName)
 			zap.S().Infof("%v", es)
 			if _, ok := resultMap[exchangeName]; !ok {
-				es.ID = 0
-				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
-				es.Name = exchangeName
-				es.Address = ""
-				resultMap[exchangeName] = &es
-			} else {
-				resultMap[exchangeName].Merge(&es)
+				resultMap[exchangeName] = &models.ExchangeStatistic{}
+				resultMap[exchangeName].Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
+				resultMap[exchangeName].Name = exchangeName
 			}
+			resultMap[exchangeName].Merge(&es)
 			zap.S().Infof("%v", resultMap[exchangeName])
 		}
 	}

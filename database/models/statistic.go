@@ -57,6 +57,10 @@ func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
 }
 
 func (o *UserStatistic) Merge(other *UserStatistic) {
+	if other == nil {
+		return
+	}
+
 	o.Fee += other.Fee
 	o.EnergyTotal += other.EnergyTotal
 	o.EnergyFee += other.EnergyFee
@@ -76,6 +80,10 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 }
 
 func (o *UserStatistic) Add(tx *Transaction) {
+	if tx == nil {
+		return
+	}
+
 	o.Fee += tx.Fee
 	o.EnergyTotal += tx.EnergyTotal
 	o.EnergyFee += tx.EnergyFee

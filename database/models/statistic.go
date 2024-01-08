@@ -113,28 +113,28 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type ExchangeStatistic struct {
-	ID                  uint   `gorm:"primaryKey"`
-	Date                string `gorm:"index"`
-	Name                string
-	Address             string
-	ChargeTxCount       uint
-	ChargeFee           uint
-	ChargeNetFee        uint
-	ChargeNetUsage      uint
-	ChargeEnergyFee     uint
-	ChargeEnergyUsage   uint
-	CollectTxCount      uint
-	CollectFee          uint
-	CollectNetFee       uint
-	CollectNetUsage     uint
-	CollectEnergyFee    uint
-	CollectEnergyUsage  uint
-	WithdrawTxCount     uint
-	WithdrawFee         uint
-	WithdrawNetFee      uint
-	WithdrawNetUsage    uint
-	WithdrawEnergyFee   uint
-	WithdrawEnergyUsage uint
+	ID                  uint   `gorm:"primaryKey" json:"id,omitempty"`
+	Date                string `gorm:"index" json:"date,omitempty"`
+	Name                string `json:"name,omitempty"`
+	Address             string `json:"address,omitempty"`
+	ChargeTxCount       uint   `json:"charge_tx_count,omitempty"`
+	ChargeFee           uint   `json:"charge_fee,omitempty"`
+	ChargeNetFee        uint   `json:"charge_net_fee,omitempty"`
+	ChargeNetUsage      uint   `json:"charge_net_usage,omitempty"`
+	ChargeEnergyFee     uint   `json:"charge_energy_fee,omitempty"`
+	ChargeEnergyUsage   uint   `json:"charge_energy_usage,omitempty"`
+	CollectTxCount      uint   `json:"collect_tx_count,omitempty"`
+	CollectFee          uint   `json:"collect_fee,omitempty"`
+	CollectNetFee       uint   `json:"collect_net_fee,omitempty"`
+	CollectNetUsage     uint   `json:"collect_net_usage,omitempty"`
+	CollectEnergyFee    uint   `json:"collect_energy_fee,omitempty"`
+	CollectEnergyUsage  uint   `json:"collect_energy_usage,omitempty"`
+	WithdrawTxCount     uint   `json:"withdraw_tx_count,omitempty"`
+	WithdrawFee         uint   `json:"withdraw_fee,omitempty"`
+	WithdrawNetFee      uint   `json:"withdraw_net_fee,omitempty"`
+	WithdrawNetUsage    uint   `json:"withdraw_net_usage,omitempty"`
+	WithdrawEnergyFee   uint   `json:"withdraw_energy_fee,omitempty"`
+	WithdrawEnergyUsage uint   `json:"withdraw_energy_usage,omitempty"`
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {

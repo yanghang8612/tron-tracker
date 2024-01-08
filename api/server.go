@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -126,8 +127,12 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	resultMap := make(map[string]*models.ExchangeStatistic)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
-			if _, ok := resultMap[es.Address]; !ok {
-				resultMap[es.Address] = &es
+			exchangeName := regexp.MustCompile(`-hot|\s\d+$`).ReplaceAllString(es.Address, ``)
+			if _, ok := resultMap[exchangeName]; !ok {
+				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 7).Format("060102")
+				es.Name = exchangeName
+				es.Address = ""
+				resultMap[exchangeName] = &es
 			} else {
 				resultMap[es.Address].Merge(&es)
 			}

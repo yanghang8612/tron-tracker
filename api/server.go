@@ -127,9 +127,10 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
 			if _, ok := resultMap[es.Address]; !ok {
-				resultMap[es.Address] = &models.ExchangeStatistic{}
+				resultMap[es.Address] = &es
+			} else {
+				resultMap[es.Address].Merge(&es)
 			}
-			resultMap[es.Address].Merge(&es)
 		}
 	}
 

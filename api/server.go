@@ -129,7 +129,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
-			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Address, ``)
+			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Name, ``)
 			if _, ok := resultMap[exchangeName]; !ok {
 				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 7).Format("060102")
 				es.Name = exchangeName

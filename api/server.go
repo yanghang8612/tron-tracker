@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"time"
 
@@ -143,9 +144,19 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 		}
 	}
 
+	resultArray := make([]*models.ExchangeStatistic, 0)
+	for _, es := range resultMap {
+		es.ID = es.ChargeFee + es.CollectFee + es.WithdrawFee
+		resultArray = append(resultArray, es)
+	}
+
+	sort.Slice(resultArray, func(i, j int) bool {
+		return resultArray[i].ID > resultArray[j].ID
+	})
+
 	c.JSON(200, gin.H{
 		"total_fee":                 totalFee,
-		"exchanges_total_statistic": resultMap,
+		"exchanges_total_statistic": resultArray,
 	})
 }
 

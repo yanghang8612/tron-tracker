@@ -125,8 +125,10 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	}
 
 	resultMap := make(map[string]*models.ExchangeStatistic)
+	totalFee := uint(0)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
+			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Address, ``)
 			if _, ok := resultMap[exchangeName]; !ok {
 				es.Date = startDateStr + "~" + startDate.AddDate(0, 0, 7).Format("060102")
@@ -140,6 +142,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
+		"total_fee":                 totalFee,
 		"exchanges_total_statistic": resultMap,
 	})
 }

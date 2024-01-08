@@ -151,7 +151,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		})
 	}
 
-	var totalStatistics *models.UserStatistic
+	totalStatistics := &models.UserStatistic{}
 	for i := 0; i < days; i++ {
 		totalStatistics.Merge(s.db.GetUserFromStatistic(startDate.AddDate(0, 0, i).Format("060102"), "total"))
 	}

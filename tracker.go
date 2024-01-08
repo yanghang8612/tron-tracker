@@ -129,10 +129,10 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 56 {
 			txToDB.Amount = int64(txInfoList[idx].WithdrawExpireAmount)
 		} else if txToDB.Type == 57 {
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
 		} else if txToDB.Type == 58 {
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
 		} else if txToDB.Type == 59 {
 			for _, entry := range txInfoList[idx].CancelUnfreezeV2Amount {

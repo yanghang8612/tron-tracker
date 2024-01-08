@@ -160,10 +160,19 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {
-	addr, ok := c.GetQuery("addr")
+	date, ok := s.getStringParams(c, "date")
+	if !ok {
+		return
+	}
+
+	addr, ok := s.getStringParams(c, "addr")
+	if !ok {
+		return
+	}
+
 	if ok {
 		c.JSON(200, gin.H{
-			"exchanges_statistic": s.db.GetSpecialStatistic(addr),
+			"exchanges_statistic": s.db.GetSpecialStatistic(date, addr),
 		})
 	} else {
 		c.JSON(200, gin.H{

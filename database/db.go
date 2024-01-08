@@ -162,10 +162,18 @@ func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
 	return exchangeStatistic
 }
 
-func (db *RawDB) GetSpecialStatistic(addr string) models.ExchangeStatistic {
-	var exchangeStatistic models.ExchangeStatistic
-	db.db.Where("date = ?", addr).Find(&exchangeStatistic)
-	return exchangeStatistic
+func (db *RawDB) GetSpecialStatistic(date, addr string) uint {
+	res := struct {
+		Sum uint
+	}{}
+	db.db.Table("transactions_"+date).
+		Select("SUM(fee)").
+		Where("hash IN <?>",
+			db.db.Table("transfers_"+date).
+				Distinct("hash").
+				Where("to_addr = ? and token = ?", addr, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).
+		Find(&res)
+	return res.Sum
 }
 
 func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
@@ -306,7 +314,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
 
 	statsToPersist = make([]*models.UserStatistic, 0)
-	for _, stats := range cache.fromStats {
+	for _, stats := range cache.toStats {
 		statsToPersist = append(statsToPersist, stats)
 		if len(statsToPersist) == 200 {
 			db.db.Table(toDBName).Create(&statsToPersist)

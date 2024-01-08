@@ -41,7 +41,8 @@ func New(db *database.RawDB) *Server {
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/total-fee-of-tronlink-users", s.totalFeeOfTronLinkUsers)
-	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
+	s.router.GET("/exchanges_daily_statistic", s.exchangesDailyStatistic)
+	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)

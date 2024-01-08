@@ -168,7 +168,7 @@ func (db *RawDB) GetSpecialStatistic(date, addr string) uint {
 	}{}
 	db.db.Table("transactions_"+date).
 		Select("SUM(fee)").
-		Where("hash IN <?>",
+		Where("hash IN (?)",
 			db.db.Table("transfers_"+date).
 				Distinct("hash").
 				Where("to_addr = ? and token = ?", addr, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).

@@ -163,17 +163,15 @@ func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
 }
 
 func (db *RawDB) GetSpecialStatistic(date, addr string) uint {
-	res := struct {
-		Sum uint
-	}{}
+	var sum uint
 	db.db.Table("transactions_"+date).
 		Select("SUM(fee)").
 		Where("hash IN (?)",
 			db.db.Table("transfers_"+date).
 				Distinct("hash").
 				Where("to_addr = ? and token = ?", addr, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")).
-		Find(&res)
-	return res.Sum
+		Find(&sum)
+	return sum
 }
 
 func (db *RawDB) GetCachedChargesByAddr(addr string) []string {

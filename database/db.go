@@ -154,7 +154,7 @@ func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) *models.UserSt
 
 func (db *RawDB) GetExchangeStatisticsByDate(date string) []*models.ExchangeStatistic {
 	var exchangeStatistic []*models.ExchangeStatistic
-	db.db.Where("date = ?", date).Find(exchangeStatistic)
+	db.db.Where("date = ?", date).Find(&exchangeStatistic)
 	return exchangeStatistic
 }
 

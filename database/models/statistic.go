@@ -113,7 +113,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type ExchangeStatistic struct {
-	ID                  uint   `gorm:"primaryKey" json:"id,omitempty"`
+	ID                  uint   `gorm:"primaryKey" json:"total_fee,omitempty"`
 	Date                string `gorm:"index" json:"date,omitempty"`
 	Name                string `json:"name,omitempty"`
 	Address             string `json:"address,omitempty"`

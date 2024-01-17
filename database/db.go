@@ -1,12 +1,8 @@
 package database
 
 import (
-	"bufio"
 	"errors"
-	"log"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -60,47 +56,47 @@ func New() *RawDB {
 		panic(dbErr)
 	}
 
-	if db.Migrator().HasTable(&models.Charger{}) {
-		dbErr = db.AutoMigrate(&models.Charger{})
-		if dbErr != nil {
-			panic(dbErr)
-		}
-
-		f, err := os.Open("all")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-
-		zap.L().Info("Start loading charge")
-		count := 0
-		var chargeToSave []*models.Charger
-		for scanner.Scan() {
-			line := scanner.Text()
-			cols := strings.Split(line, ",")
-			chargeToSave = append(chargeToSave, &models.Charger{
-				Address:         cols[0],
-				ExchangeName:    cols[1],
-				ExchangeAddress: cols[2],
-			})
-			if len(chargeToSave) == 1000 {
-				db.Create(&chargeToSave)
-				chargeToSave = make([]*models.Charger, 0)
-			}
-			count++
-			if count%1000000 == 0 {
-				zap.S().Infof("Loaded [%d] charge", count)
-			}
-		}
-		db.Create(&chargeToSave)
-		zap.L().Info("Complete loading charge")
-
-		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
-		}
-	}
+	// if db.Migrator().HasTable(&models.Charger{}) {
+	// 	dbErr = db.AutoMigrate(&models.Charger{})
+	// 	if dbErr != nil {
+	// 		panic(dbErr)
+	// 	}
+	//
+	// 	f, err := os.Open("all")
+	// 	if err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// 	defer f.Close()
+	//
+	// 	scanner := bufio.NewScanner(f)
+	//
+	// 	zap.L().Info("Start loading charge")
+	// 	count := 0
+	// 	var chargeToSave []*models.Charger
+	// 	for scanner.Scan() {
+	// 		line := scanner.Text()
+	// 		cols := strings.Split(line, ",")
+	// 		chargeToSave = append(chargeToSave, &models.Charger{
+	// 			Address:         cols[0],
+	// 			ExchangeName:    cols[1],
+	// 			ExchangeAddress: cols[2],
+	// 		})
+	// 		if len(chargeToSave) == 1000 {
+	// 			db.Create(&chargeToSave)
+	// 			chargeToSave = make([]*models.Charger, 0)
+	// 		}
+	// 		count++
+	// 		if count%1000000 == 0 {
+	// 			zap.S().Infof("Loaded [%d] charge", count)
+	// 		}
+	// 	}
+	// 	db.Create(&chargeToSave)
+	// 	zap.L().Info("Complete loading charge")
+	//
+	// 	if err := scanner.Err(); err != nil {
+	// 		log.Fatal(err)
+	// 	}
+	// }
 
 	dbErr = db.AutoMigrate(&models.Meta{})
 	if dbErr != nil {
@@ -150,19 +146,19 @@ func (db *RawDB) GetChargers() map[string]*models.Charger {
 	return db.cache.chargers
 }
 
-func (db *RawDB) GetUserFromStatistic(date, user string) *models.UserStatistic {
+func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) *models.UserStatistic {
 	var userStatistic models.UserStatistic
 	db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
 	return &userStatistic
 }
 
-func (db *RawDB) GetExchangeStatistic(date string) []models.ExchangeStatistic {
-	var exchangeStatistic []models.ExchangeStatistic
+func (db *RawDB) GetExchangeStatisticsByDate(date string) []*models.ExchangeStatistic {
+	var exchangeStatistic []*models.ExchangeStatistic
 	db.db.Where("date = ?", date).Find(&exchangeStatistic)
 	return exchangeStatistic
 }
 
-func (db *RawDB) GetSpecialStatistic(date, addr string) (uint, uint, uint, uint) {
+func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint, uint, uint) {
 	USDT := "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 	var chargeFee uint
 	db.db.Table("transactions_"+date).
@@ -273,12 +269,30 @@ func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
 	}
 }
 
-func (db *RawDB) SaveCharger(address string, exchange types.Exchange, tx models.Transaction) {
+func (db *RawDB) SaveCharger(address string, exchange types.Exchange) {
 	if _, ok := db.cache.chargers[address]; !ok {
 		db.cache.chargers[address] = &models.Charger{
 			Address:         address,
 			ExchangeName:    exchange.Name,
 			ExchangeAddress: exchange.Address,
+		}
+	}
+}
+
+func (db *RawDB) GetCharger(address string) (bool, *models.Charger) {
+	if charger, ok := db.cache.chargers[address]; ok {
+		return true, charger
+	}
+	return false, nil
+}
+
+func (db *RawDB) CheckCharger(address string, exchange types.Exchange) {
+	if charger, ok := db.cache.chargers[address]; ok {
+		// If charger interact with other address which is not its exchange address
+		// Check if the other address is the same exchange
+		// Otherwise, this charger is not a real charger
+		if utils.IsSameExchange(charger.ExchangeName, exchange.Name) {
+			charger.IsFake = true
 		}
 	}
 }
@@ -358,6 +372,10 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	exchangeStats := make(map[string]*models.ExchangeStatistic)
 	for address, charger := range cache.chargers {
+		if charger.IsFake {
+			continue
+		}
+
 		if _, ok := exchangeStats[charger.ExchangeAddress]; !ok {
 			exchangeStats[charger.ExchangeAddress] = &models.ExchangeStatistic{
 				Date:    cache.date,

@@ -102,10 +102,13 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 
-			// Filter small value TRX charger
-			if t.el.Contains(txToDB.ToAddr) && txToDB.Amount > 1000000 {
-				t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr), txToDB)
+			// Filter exchange charger and small value TRX charger
+			if t.el.Contains(txToDB.ToAddr) && !t.el.Contains(txToDB.FromAddr) && txToDB.Amount > 1000000 {
+				t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
 			}
+
+			// Charger should only interact with its own exchange
+			t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
 
 			t.db.UpdateToStatistic(txToDB.ToAddr, &txToDB)
 		} else if txToDB.Type == 2 {
@@ -156,12 +159,17 @@ func (t *Tracker) doTrackBlock() {
 					Amount:    models.NewBigInt(utils.ConvertHexToBigInt(log.Data)),
 				}
 				transfers = append(transfers, transferToDB)
-				if t.el.Contains(transferToDB.ToAddr) {
+
+				// Filter exchange charger
+				if t.el.Contains(transferToDB.ToAddr) && !t.el.Contains(txToDB.FromAddr) {
 					// Filter small value USDT charger
 					if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr), txToDB)
+						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
 					}
 				}
+
+				// Charger should only interact with its own exchange
+				t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
 
 				if _, ok := recorded[transferToDB.ToAddr]; !ok {
 					recorded[transferToDB.ToAddr] = true

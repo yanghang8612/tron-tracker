@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 	"sort"
 	"strconv"
 	"time"
@@ -17,6 +16,7 @@ import (
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
+	"tron-tracker/utils"
 )
 
 type Server struct {
@@ -85,7 +85,7 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 		user := scanner.Text()
 		for i := 0; i < 7; i++ {
 			date := lastMonday.Add(time.Duration(i) * 24 * time.Hour).Format("060102")
-			totalFee += uint64(s.db.GetUserFromStatistic(date, user).EnergyFee)
+			totalFee += uint64(s.db.GetFromStatisticByDateAndUser(date, user).EnergyFee)
 		}
 		count += 1
 		if count%10000 == 0 {
@@ -100,8 +100,19 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 	date, ok := c.GetQuery("date")
 	if ok {
+		exchangeStatistics := s.db.GetExchangeStatisticsByDate(date)
+		totalFee, totalEnergyUsage := uint(0), uint(0)
+		for _, statistic := range exchangeStatistics {
+			statistic.ID = statistic.ChargeFee + statistic.CollectFee + statistic.WithdrawFee
+
+			totalFee += statistic.ID
+			totalEnergyUsage += statistic.ChargeEnergyUsage + statistic.CollectEnergyUsage + statistic.WithdrawEnergyUsage
+		}
+
 		c.JSON(200, gin.H{
-			"exchanges_statistic": s.db.GetExchangeStatistic(date),
+			"exchanges_statistic": exchangeStatistics,
+			"total_fee":           totalFee,
+			"total_energy_usage":  totalEnergyUsage,
 		})
 	} else {
 		c.JSON(200, gin.H{
@@ -129,16 +140,16 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	totalFee := uint(0)
 	totalEnergyUsage := uint64(0)
 	for i := 0; i < 7; i++ {
-		for _, es := range s.db.GetExchangeStatistic(startDate.AddDate(0, 0, i).Format("060102")) {
+		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += uint64(es.ChargeEnergyUsage) + uint64(es.CollectEnergyUsage) + uint64(es.WithdrawEnergyUsage)
-			exchangeName := regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(es.Name, ``)
+			exchangeName := utils.TrimExchangeName(es.Name)
 			if _, ok := resultMap[exchangeName]; !ok {
 				resultMap[exchangeName] = &models.ExchangeStatistic{}
 				resultMap[exchangeName].Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
 				resultMap[exchangeName].Name = exchangeName
 			}
-			resultMap[exchangeName].Merge(&es)
+			resultMap[exchangeName].Merge(es)
 		}
 	}
 
@@ -171,7 +182,7 @@ func (s *Server) specialStatistic(c *gin.Context) {
 	}
 
 	if ok {
-		chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatistic(date, addr)
+		chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatisticByDateAndAddr(date, addr)
 		c.JSON(200, gin.H{
 			"charge_fee":     chargeFee,
 			"withdraw_fee":   withdrawFee,
@@ -217,7 +228,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 
 	totalStatistics := &models.UserStatistic{}
 	for i := 0; i < days; i++ {
-		totalStatistics.Merge(s.db.GetUserFromStatistic(startDate.AddDate(0, 0, i).Format("060102"), "total"))
+		totalStatistics.Merge(s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "total"))
 	}
 
 	c.JSON(200, gin.H{

@@ -154,7 +154,7 @@ func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) *models.UserSt
 
 func (db *RawDB) GetExchangeStatisticsByDate(date string) []*models.ExchangeStatistic {
 	var exchangeStatistic []*models.ExchangeStatistic
-	db.db.Where("date = ?", date).Find(&exchangeStatistic)
+	db.db.Where("date = ?", date).Find(exchangeStatistic)
 	return exchangeStatistic
 }
 
@@ -291,7 +291,7 @@ func (db *RawDB) CheckCharger(address string, exchange types.Exchange) {
 		// If charger interact with other address which is not its exchange address
 		// Check if the other address is the same exchange
 		// Otherwise, this charger is not a real charger
-		if utils.IsSameExchange(charger.ExchangeName, exchange.Name) {
+		if !utils.IsSameExchange(charger.ExchangeName, exchange.Name) {
 			charger.IsFake = true
 		}
 	}

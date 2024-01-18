@@ -108,7 +108,9 @@ func (t *Tracker) doTrackBlock() {
 			}
 
 			// Charger should only interact with its own exchange
-			t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
+			if txToDB.Amount > 1000000 {
+				t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
+			}
 
 			t.db.UpdateToStatistic(txToDB.ToAddr, &txToDB)
 		} else if txToDB.Type == 2 {
@@ -169,7 +171,9 @@ func (t *Tracker) doTrackBlock() {
 				}
 
 				// Charger should only interact with its own exchange
-				t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
+				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+					t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
+				}
 
 				if _, ok := recorded[transferToDB.ToAddr]; !ok {
 					recorded[transferToDB.ToAddr] = true

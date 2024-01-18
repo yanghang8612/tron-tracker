@@ -100,17 +100,27 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 	date, ok := c.GetQuery("date")
 	if ok {
-		exchangeStatistics := s.db.GetExchangeStatisticsByDate(date)
+		resultMap := make(map[string]*models.ExchangeStatistic)
 		totalFee, totalEnergyUsage := uint(0), uint(0)
-		for _, statistic := range exchangeStatistics {
-			statistic.ID = statistic.ChargeFee + statistic.CollectFee + statistic.WithdrawFee
+		for _, es := range s.db.GetExchangeStatisticsByDate(date) {
+			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
+			exchangeName := utils.TrimExchangeName(es.Name)
+			if _, ok := resultMap[exchangeName]; !ok {
+				resultMap[exchangeName] = &models.ExchangeStatistic{}
+				resultMap[exchangeName].Name = exchangeName
+			}
+			resultMap[exchangeName].Merge(es)
+		}
 
-			totalFee += statistic.ID
-			totalEnergyUsage += statistic.ChargeEnergyUsage + statistic.CollectEnergyUsage + statistic.WithdrawEnergyUsage
+		resultArray := make([]*models.ExchangeStatistic, 0)
+		for _, es := range resultMap {
+			es.ID = es.ChargeFee + es.CollectFee + es.WithdrawFee
+			resultArray = append(resultArray, es)
 		}
 
 		c.JSON(200, gin.H{
-			"exchanges_statistic": exchangeStatistics,
+			"exchanges_statistic": resultArray,
 			"total_fee":           totalFee,
 			"total_energy_usage":  totalEnergyUsage,
 		})
@@ -138,11 +148,11 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 
 	resultMap := make(map[string]*models.ExchangeStatistic)
 	totalFee := uint(0)
-	totalEnergyUsage := uint64(0)
+	totalEnergyUsage := uint(0)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
-			totalEnergyUsage += uint64(es.ChargeEnergyUsage) + uint64(es.CollectEnergyUsage) + uint64(es.WithdrawEnergyUsage)
+			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
 			exchangeName := utils.TrimExchangeName(es.Name)
 			if _, ok := resultMap[exchangeName]; !ok {
 				resultMap[exchangeName] = &models.ExchangeStatistic{}

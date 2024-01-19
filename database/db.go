@@ -1,8 +1,12 @@
 package database
 
 import (
+	"bufio"
 	"errors"
+	"log"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,6 +14,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"tron-tracker/database/models"
+	"tron-tracker/net"
 	"tron-tracker/types"
 	"tron-tracker/utils"
 )
@@ -31,6 +36,7 @@ func newCache() *dbCache {
 
 type RawDB struct {
 	db *gorm.DB
+	el *types.ExchangeList
 
 	lastTrackedDate     string
 	lastTrackedBlockNum uint
@@ -56,47 +62,47 @@ func New() *RawDB {
 		panic(dbErr)
 	}
 
-	// if db.Migrator().HasTable(&models.Charger{}) {
-	// 	dbErr = db.AutoMigrate(&models.Charger{})
-	// 	if dbErr != nil {
-	// 		panic(dbErr)
-	// 	}
-	//
-	// 	f, err := os.Open("all")
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	defer f.Close()
-	//
-	// 	scanner := bufio.NewScanner(f)
-	//
-	// 	zap.L().Info("Start loading charge")
-	// 	count := 0
-	// 	var chargeToSave []*models.Charger
-	// 	for scanner.Scan() {
-	// 		line := scanner.Text()
-	// 		cols := strings.Split(line, ",")
-	// 		chargeToSave = append(chargeToSave, &models.Charger{
-	// 			Address:         cols[0],
-	// 			ExchangeName:    cols[1],
-	// 			ExchangeAddress: cols[2],
-	// 		})
-	// 		if len(chargeToSave) == 1000 {
-	// 			db.Create(&chargeToSave)
-	// 			chargeToSave = make([]*models.Charger, 0)
-	// 		}
-	// 		count++
-	// 		if count%1000000 == 0 {
-	// 			zap.S().Infof("Loaded [%d] charge", count)
-	// 		}
-	// 	}
-	// 	db.Create(&chargeToSave)
-	// 	zap.L().Info("Complete loading charge")
-	//
-	// 	if err := scanner.Err(); err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// }
+	if !db.Migrator().HasTable(&models.Charger{}) {
+		dbErr = db.AutoMigrate(&models.Charger{})
+		if dbErr != nil {
+			panic(dbErr)
+		}
+
+		f, err := os.Open("all")
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+
+		zap.L().Info("Start loading charge")
+		count := 0
+		var chargeToSave []*models.Charger
+		for scanner.Scan() {
+			line := scanner.Text()
+			cols := strings.Split(line, ",")
+			chargeToSave = append(chargeToSave, &models.Charger{
+				Address:         cols[0],
+				ExchangeName:    cols[1],
+				ExchangeAddress: cols[2],
+			})
+			if len(chargeToSave) == 1000 {
+				db.Create(&chargeToSave)
+				chargeToSave = make([]*models.Charger, 0)
+			}
+			count++
+			if count%1000000 == 0 {
+				zap.S().Infof("Loaded [%d] charge", count)
+			}
+		}
+		db.Create(&chargeToSave)
+		zap.L().Info("Complete loading charge")
+
+		if err := scanner.Err(); err != nil {
+			log.Fatal(err)
+		}
+	}
 
 	dbErr = db.AutoMigrate(&models.Meta{})
 	if dbErr != nil {
@@ -104,16 +110,18 @@ func New() *RawDB {
 	}
 
 	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231231"}).FirstOrCreate(&LastTrackedDateMeta)
+	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231102"}).FirstOrCreate(&LastTrackedDateMeta)
 	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
 	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "57810000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
 	return &RawDB{
-		db:                  db,
+		db: db,
+		el: net.GetExchanges(),
+
 		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		lastTrackedDate:     LastTrackedDateMeta.Val,
 		isTableMigrated:     make(map[string]bool),
@@ -140,10 +148,6 @@ func (db *RawDB) Close() {
 
 func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
-}
-
-func (db *RawDB) GetChargers() map[string]*models.Charger {
-	return db.cache.chargers
 }
 
 func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) *models.UserStatistic {
@@ -205,6 +209,10 @@ func (db *RawDB) GetTotalStatisticsByDate(date string) *models.UserStatistic {
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
+	if block.BlockHeader.RawData.Number%100 == 0 {
+		db.el = net.GetExchanges()
+	}
+
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {
 		db.curDate = nextDate
@@ -269,21 +277,14 @@ func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
 	}
 }
 
-func (db *RawDB) SaveCharger(address string, exchange types.Exchange) {
-	if _, ok := db.cache.chargers[address]; !ok {
-		db.cache.chargers[address] = &models.Charger{
-			Address:         address,
-			ExchangeName:    exchange.Name,
-			ExchangeAddress: exchange.Address,
+func (db *RawDB) SaveCharger(from, to string) {
+	if _, ok := db.cache.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
+		db.cache.chargers[from] = &models.Charger{
+			Address:         from,
+			ExchangeName:    db.el.Get(to).Name,
+			ExchangeAddress: to,
 		}
 	}
-}
-
-func (db *RawDB) GetCharger(address string) (bool, *models.Charger) {
-	if charger, ok := db.cache.chargers[address]; ok {
-		return true, charger
-	}
-	return false, nil
 }
 
 func (db *RawDB) CheckCharger(address string, exchange types.Exchange) {
@@ -292,7 +293,6 @@ func (db *RawDB) CheckCharger(address string, exchange types.Exchange) {
 		// Check if the other address is the same exchange
 		// Otherwise, this charger is not a real charger
 		if !utils.IsSameExchange(charger.ExchangeName, exchange.Name) {
-			charger.IsFake = true
 		}
 	}
 }
@@ -357,79 +357,77 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	zap.S().Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	// reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
-	// for _, charger := range cache.chargers {
-	// 	db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
-	// 	if shouldReport, reportContent := reporter.Add(1); shouldReport {
-	// 		zap.L().Info(reportContent)
-	// 	}
-	// }
+	for _, charger := range cache.chargers {
+		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
+		if shouldReport, reportContent := reporter.Add(1); shouldReport {
+			zap.L().Info(reportContent)
+		}
+	}
 
-	// zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	zap.S().Info("Start updating exchange statistic")
 
 	exchangeStats := make(map[string]*models.ExchangeStatistic)
-	for address, charger := range cache.chargers {
-		if charger.IsFake {
-			continue
-		}
-
-		if _, ok := exchangeStats[charger.ExchangeAddress]; !ok {
-			exchangeStats[charger.ExchangeAddress] = &models.ExchangeStatistic{
-				Date:    cache.date,
-				Name:    charger.ExchangeName,
-				Address: charger.ExchangeAddress,
-			}
-		}
-
-		// 充币统计
-		if chargeStatistic, ok := cache.toStats[address]; ok {
-			exchangeStats[charger.ExchangeAddress].ChargeTxCount += chargeStatistic.TXTotal
-			exchangeStats[charger.ExchangeAddress].ChargeFee += chargeStatistic.Fee
-			exchangeStats[charger.ExchangeAddress].ChargeNetFee += chargeStatistic.NetFee
-			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += chargeStatistic.NetUsage
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += chargeStatistic.EnergyFee
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += chargeStatistic.EnergyUsage + chargeStatistic.EnergyOriginUsage
+	for _, exchange := range db.el.Exchanges {
+		exchangeStats[exchange.Address] = &models.ExchangeStatistic{
+			Date:    cache.date,
+			Name:    exchange.Name,
+			Address: exchange.Address,
 		}
 
 		// 归集统计
-		if collectStats, ok := cache.fromStats[address]; ok {
-			exchangeStats[charger.ExchangeAddress].CollectTxCount += collectStats.TXTotal
-			exchangeStats[charger.ExchangeAddress].CollectFee += collectStats.Fee
-			exchangeStats[charger.ExchangeAddress].CollectNetFee += collectStats.NetFee
-			exchangeStats[charger.ExchangeAddress].CollectNetUsage += collectStats.NetUsage
-			exchangeStats[charger.ExchangeAddress].CollectEnergyFee += collectStats.EnergyFee
-			exchangeStats[charger.ExchangeAddress].CollectEnergyUsage += collectStats.EnergyUsage + collectStats.EnergyOriginUsage
-		}
-	}
-	for address := range exchangeStats {
-		// 提币统计
-		if withdrawStats, ok := cache.fromStats[address]; ok {
-			exchangeStats[address].WithdrawTxCount += withdrawStats.TXTotal
-			exchangeStats[address].WithdrawFee += withdrawStats.Fee
-			exchangeStats[address].WithdrawNetFee += withdrawStats.NetFee
-			exchangeStats[address].WithdrawNetUsage += withdrawStats.NetUsage
-			exchangeStats[address].WithdrawEnergyFee += withdrawStats.EnergyFee
-			exchangeStats[address].WithdrawEnergyUsage += withdrawStats.EnergyUsage + withdrawStats.EnergyOriginUsage
+		if collectStat, ok := cache.toStats[exchange.Address]; ok {
+			exchangeStats[exchange.Address].CollectTxCount += collectStat.TXTotal
+			exchangeStats[exchange.Address].CollectFee += collectStat.Fee
+			exchangeStats[exchange.Address].CollectNetFee += collectStat.NetFee
+			exchangeStats[exchange.Address].CollectNetUsage += collectStat.NetUsage
+			exchangeStats[exchange.Address].CollectEnergyFee += collectStat.EnergyFee
+			exchangeStats[exchange.Address].CollectEnergyUsage += collectStat.EnergyUsage + collectStat.EnergyOriginUsage
 		}
 
-		db.db.Create(exchangeStats[address])
+		// 提币统计
+		if withdrawStat, ok := cache.fromStats[exchange.Address]; ok {
+			exchangeStats[exchange.Address].WithdrawTxCount += withdrawStat.TXTotal
+			exchangeStats[exchange.Address].WithdrawFee += withdrawStat.Fee
+			exchangeStats[exchange.Address].WithdrawNetFee += withdrawStat.NetFee
+			exchangeStats[exchange.Address].WithdrawNetUsage += withdrawStat.NetUsage
+			exchangeStats[exchange.Address].WithdrawEnergyFee += withdrawStat.EnergyFee
+			exchangeStats[exchange.Address].WithdrawEnergyUsage += withdrawStat.EnergyUsage + withdrawStat.EnergyOriginUsage
+		}
+	}
+
+	for _, toStat := range cache.toStats {
+		if ok, charger := db.isCharger(toStat.Address); ok {
+			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TXTotal
+			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
+			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee
+			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += toStat.NetUsage
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += toStat.EnergyFee
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += toStat.EnergyUsage + toStat.EnergyOriginUsage
+		}
+	}
+
+	for _, statistic := range exchangeStats {
+		db.db.Create(statistic)
 	}
 
 	zap.S().Info("Complete updating exchange statistic")
 }
 
-func (db *RawDB) isCharger(address string) bool {
-	if _, ok := db.cache.chargers[address]; ok {
-		return true
+func (db *RawDB) isCharger(address string) (bool, *models.Charger) {
+	if charger, ok := db.cache.chargers[address]; ok {
+		return true, charger
 	}
-	result := db.db.Where("address = ?", address).First(&models.Charger{})
+
+	charger := models.Charger{}
+	result := db.db.Where("address = ?", address).First(&charger)
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return false
+		return false, nil
 	}
-	return true
+	return true, &charger
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {

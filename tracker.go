@@ -16,7 +16,6 @@ import (
 
 type Tracker struct {
 	db *database.RawDB
-	el *types.ExchangeList
 
 	reporter *utils.Reporter
 	loopWG   sync.WaitGroup
@@ -26,7 +25,6 @@ type Tracker struct {
 func New(db *database.RawDB) *Tracker {
 	return &Tracker{
 		db: db,
-		el: net.GetExchanges(),
 
 		reporter: utils.NewReporter(1000, 60*time.Second, "Tracker report, tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]"),
 		quitCh:   make(chan struct{}),
@@ -71,10 +69,6 @@ func (t *Tracker) doTrackBlock() {
 		return
 	}
 
-	if block.BlockHeader.RawData.Number%100 == 0 {
-		t.el = net.GetExchanges()
-	}
-
 	if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
 		zap.L().Info(reportContent)
 	}
@@ -103,14 +97,14 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 
 			// Filter exchange charger and small value TRX charger
-			if t.el.Contains(txToDB.ToAddr) && !t.el.Contains(txToDB.FromAddr) && txToDB.Amount > 1000000 {
-				t.db.SaveCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
+			if txToDB.Amount > 1000000 {
+				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr)
 			}
 
 			// Charger should only interact with its own exchange
-			if txToDB.Amount > 1000000 {
-				t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
-			}
+			// if txToDB.Amount > 1000000 {
+			// 	t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
+			// }
 
 			t.db.UpdateToStatistic(txToDB.ToAddr, &txToDB)
 		} else if txToDB.Type == 2 {
@@ -162,18 +156,15 @@ func (t *Tracker) doTrackBlock() {
 				}
 				transfers = append(transfers, transferToDB)
 
-				// Filter exchange charger
-				if t.el.Contains(transferToDB.ToAddr) && !t.el.Contains(txToDB.FromAddr) {
-					// Filter small value USDT charger
-					if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-						t.db.SaveCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
-					}
+				// Filter small value USDT charger
+				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr)
 				}
 
 				// Charger should only interact with its own exchange
-				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-					t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
-				}
+				// if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+				// 	t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
+				// }
 
 				if _, ok := recorded[transferToDB.ToAddr]; !ok {
 					recorded[transferToDB.ToAddr] = true

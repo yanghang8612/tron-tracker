@@ -402,6 +402,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	for _, toStat := range cache.toStats {
 		charger, ok := cache.chargers[toStat.Address]
 		if !ok {
+			charger = &models.Charger{}
 			result := db.db.Where("address = ?", toStat.Address).First(charger)
 			ok = !errors.Is(result.Error, gorm.ErrRecordNotFound)
 		}

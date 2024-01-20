@@ -400,7 +400,13 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 
 	for _, toStat := range cache.toStats {
-		if ok, charger := db.isCharger(toStat.Address); ok {
+		charger, ok := cache.chargers[toStat.Address]
+		if !ok {
+			result := db.db.Where("address = ?", toStat.Address).First(charger)
+			ok = !errors.Is(result.Error, gorm.ErrRecordNotFound)
+		}
+
+		if ok {
 			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TXTotal
 			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
 			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee
@@ -415,19 +421,6 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 
 	zap.S().Info("Complete updating exchange statistic")
-}
-
-func (db *RawDB) isCharger(address string) (bool, *models.Charger) {
-	if charger, ok := db.cache.chargers[address]; ok {
-		return true, charger
-	}
-
-	charger := models.Charger{}
-	result := db.db.Where("address = ?", address).First(&charger)
-	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return false, nil
-	}
-	return true, &charger
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {

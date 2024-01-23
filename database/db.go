@@ -250,49 +250,39 @@ func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
 	db.db.Table(dbName).Create(transfers)
 }
 
-func (db *RawDB) UpdateToStatistic(to string, tx *models.Transaction) {
-	db.cache.date = generateDate(tx.Timestamp)
-	if stats, ok := db.cache.toStats[to]; ok {
-		stats.Add(tx)
-	} else {
-		db.cache.toStats[to] = models.NewUserStatistic(to, tx)
-	}
-}
-
-func (db *RawDB) UpdateFromStatistic(tx *models.Transaction) {
-	db.updateFromStatistic(tx.FromAddr, tx)
-	db.updateFromStatistic("total", tx)
+func (db *RawDB) UpdateUserStatistic(tx *models.Transaction) {
+	db.updateUserStatistic(tx.FromAddr, tx, db.cache.fromStats)
+	db.updateUserStatistic("total", tx, db.cache.fromStats)
 
 	if len(tx.Name) > 0 && tx.Name != "_" {
-		db.updateFromStatistic(tx.Name, tx)
+		db.updateUserStatistic(tx.Name, tx, db.cache.fromStats)
 	}
+
+	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
 }
 
-func (db *RawDB) updateFromStatistic(user string, tx *models.Transaction) {
+func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
 	db.cache.date = generateDate(tx.Timestamp)
-	if stats, ok := db.cache.fromStats[user]; ok {
-		stats.Add(tx)
+	if stat, ok := stats[user]; ok {
+		stat.Add(tx)
 	} else {
-		db.cache.fromStats[user] = models.NewUserStatistic(user, tx)
+		stats[user] = models.NewUserStatistic(user, tx)
 	}
 }
 
 func (db *RawDB) SaveCharger(from, to string) {
-	if _, ok := db.cache.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
+	if charger, ok := db.cache.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
 		db.cache.chargers[from] = &models.Charger{
 			Address:         from,
 			ExchangeName:    db.el.Get(to).Name,
 			ExchangeAddress: to,
 		}
-	}
-}
-
-func (db *RawDB) CheckCharger(address string, exchange types.Exchange) {
-	if charger, ok := db.cache.chargers[address]; ok {
+	} else if ok {
 		// If charger interact with other address which is not its exchange address
 		// Check if the other address is the same exchange
 		// Otherwise, this charger is not a real charger
-		if !utils.IsSameExchange(charger.ExchangeName, exchange.Name) {
+		if !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
+			charger.IsFake = true
 		}
 	}
 }
@@ -360,6 +350,10 @@ func (db *RawDB) persist(cache *dbCache) {
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
 	for _, charger := range cache.chargers {
+		if charger.IsFake {
+			continue
+		}
+
 		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			zap.L().Info(reportContent)
@@ -380,7 +374,7 @@ func (db *RawDB) persist(cache *dbCache) {
 
 		// 归集统计
 		if collectStat, ok := cache.toStats[exchange.Address]; ok {
-			exchangeStats[exchange.Address].CollectTxCount += collectStat.TXTotal
+			exchangeStats[exchange.Address].CollectTxCount += collectStat.TRXTotal - collectStat.SmallTRXTotal + collectStat.USDTTotal - collectStat.SmallUSDTTotal
 			exchangeStats[exchange.Address].CollectFee += collectStat.Fee
 			exchangeStats[exchange.Address].CollectNetFee += collectStat.NetFee
 			exchangeStats[exchange.Address].CollectNetUsage += collectStat.NetUsage
@@ -390,7 +384,7 @@ func (db *RawDB) persist(cache *dbCache) {
 
 		// 提币统计
 		if withdrawStat, ok := cache.fromStats[exchange.Address]; ok {
-			exchangeStats[exchange.Address].WithdrawTxCount += withdrawStat.TXTotal
+			exchangeStats[exchange.Address].WithdrawTxCount += withdrawStat.TRXTotal - withdrawStat.SmallTRXTotal + withdrawStat.USDTTotal - withdrawStat.SmallUSDTTotal
 			exchangeStats[exchange.Address].WithdrawFee += withdrawStat.Fee
 			exchangeStats[exchange.Address].WithdrawNetFee += withdrawStat.NetFee
 			exchangeStats[exchange.Address].WithdrawNetUsage += withdrawStat.NetUsage
@@ -401,6 +395,11 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	for _, toStat := range cache.toStats {
 		charger, ok := cache.chargers[toStat.Address]
+		if ok && charger.IsFake {
+			zap.S().Debugf("Skip fake charger [%s]", toStat.Address)
+			continue
+		}
+
 		if !ok {
 			charger = &models.Charger{}
 			result := db.db.Where("address = ?", toStat.Address).First(charger)
@@ -408,7 +407,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		}
 
 		if ok {
-			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TXTotal
+			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TRXTotal - toStat.SmallTRXTotal + toStat.USDTTotal - toStat.SmallUSDTTotal
 			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
 			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee
 			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += toStat.NetUsage

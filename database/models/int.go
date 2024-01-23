@@ -13,12 +13,20 @@ func NewBigInt(val *big.Int) BigInt {
 	return BigInt{val: val}
 }
 
-func (bi *BigInt) Scan(value interface{}) error {
-	bi.val = new(big.Int)
-	bi.val, _ = bi.val.SetString(string(value.([]byte)), 10)
+func (b BigInt) Scan(value interface{}) error {
+	b.val = new(big.Int)
+	b.val, _ = b.val.SetString(string(value.([]byte)), 10)
 	return nil
 }
 
-func (bi BigInt) Value() (driver.Value, error) {
-	return bi.val.String(), nil
+func (b BigInt) Value() (driver.Value, error) {
+	return b.val.String(), nil
+}
+
+func (b BigInt) Int64() int64 {
+	return b.val.Int64()
+}
+
+func (b BigInt) Neg() {
+	b.val.Neg(b.val)
 }

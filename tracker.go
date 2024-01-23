@@ -94,56 +94,61 @@ func (t *Tracker) doTrackBlock() {
 		if txToDB.Type == 1 {
 			txToDB.Name = "_"
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 
+			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
+			txToDB.SetAmount(amount)
 			// Filter exchange charger and small value TRX charger
-			if txToDB.Amount > 1000000 {
+			if amount > 1000000 {
 				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr)
 			}
-
-			// Charger should only interact with its own exchange
-			// if txToDB.Amount > 1000000 {
-			// 	t.db.CheckCharger(txToDB.FromAddr, t.el.Get(txToDB.ToAddr))
-			// }
-
-			t.db.UpdateToStatistic(txToDB.ToAddr, &txToDB)
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
 			txToDB.Name = string(name)
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64)))
 		} else if txToDB.Type == 12 {
-			txToDB.Amount = int64(txInfoList[idx].UnfreezeAmount)
+			txToDB.SetAmount(int64(txInfoList[idx].UnfreezeAmount))
 		} else if txToDB.Type == 13 {
-			txToDB.Amount = int64(txInfoList[idx].WithdrawAmount)
+			txToDB.SetAmount(int64(txInfoList[idx].WithdrawAmount))
 		} else if txToDB.Type == 30 || txToDB.Type == 31 {
 			txToDB.Name = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
+			data := tx.RawData.Contract[0].Parameter.Value["data"].(string)
+			if len(data) >= 8 {
+				txToDB.Method = data[:8]
+			}
+			if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
+				txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
+				txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal
 			txToDB.EnergyFee = txInfoList[idx].Receipt.EnergyFee
 			txToDB.EnergyUsage = txInfoList[idx].Receipt.EnergyUsage
 			txToDB.EnergyOriginUsage = txInfoList[idx].Receipt.OriginEnergyUsage
 		} else if txToDB.Type == 54 {
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["frozen_balance"].(float64))
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["frozen_balance"].(float64)))
 		} else if txToDB.Type == 55 {
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["unfreeze_balance"].(float64))
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["unfreeze_balance"].(float64)))
 		} else if txToDB.Type == 56 {
-			txToDB.Amount = int64(txInfoList[idx].WithdrawExpireAmount)
+			txToDB.SetAmount(int64(txInfoList[idx].WithdrawExpireAmount))
 		} else if txToDB.Type == 57 {
 			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 58 {
 			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
-			txToDB.Amount = int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64))
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 59 {
+			amount := int64(0)
 			for _, entry := range txInfoList[idx].CancelUnfreezeV2Amount {
-				txToDB.Amount += int64(entry.Value)
+				amount += int64(entry.Value)
 			}
+			txToDB.SetAmount(amount)
 		}
 		if resource, ok := tx.RawData.Contract[0].Parameter.Value["resource"]; ok && resource.(string) == "BANDWIDTH" {
-			txToDB.Amount = -txToDB.Amount
+			txToDB.Amount.Neg()
 		}
 		transactions = append(transactions, txToDB)
+		t.db.UpdateUserStatistic(&txToDB)
 
-		recorded := make(map[string]bool)
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 				var transferToDB = models.TRC20Transfer{
@@ -160,19 +165,8 @@ func (t *Tracker) doTrackBlock() {
 				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
 					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr)
 				}
-
-				// Charger should only interact with its own exchange
-				// if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
-				// 	t.db.CheckCharger(transferToDB.FromAddr, t.el.Get(transferToDB.ToAddr))
-				// }
-
-				if _, ok := recorded[transferToDB.ToAddr]; !ok {
-					recorded[transferToDB.ToAddr] = true
-					t.db.UpdateToStatistic(transferToDB.ToAddr, &txToDB)
-				}
 			}
 		}
-		t.db.UpdateFromStatistic(&txToDB)
 	}
 	t.db.SaveTransactions(&transactions)
 	t.db.SaveTransfers(&transfers)

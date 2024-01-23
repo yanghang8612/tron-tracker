@@ -12,9 +12,12 @@ type UserStatistic struct {
 	NetFee            uint
 	TXTotal           uint
 	TRXTotal          uint
+	SmallTRXTotal     uint
 	TRC10Total        uint
 	TRC20Total        uint
 	SCTotal           uint
+	USDTTotal         uint
+	SmallUSDTTotal    uint
 	StakeTotal        uint
 	DelegateTotal     uint
 	VoteTotal         uint
@@ -37,6 +40,9 @@ func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
 	switch tx.Type {
 	case 1:
 		stats.TRXTotal = 1
+		if tx.Amount.Int64() < 100000 {
+			stats.SmallTRXTotal = 1
+		}
 	case 2:
 		stats.TRC10Total = 1
 	case 3:
@@ -45,6 +51,16 @@ func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
 		stats.StakeTotal = 1
 	case 30, 31:
 		stats.SCTotal = 1
+		if len(tx.ToAddr) > 0 {
+			stats.TRC20Total = 1
+			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+				stats.USDTTotal = 1
+				if tx.Amount.Int64() < 500000 {
+					stats.SmallUSDTTotal = 1
+				}
+			}
+		}
+
 	case 57, 58:
 		stats.DelegateTotal = 1
 	}
@@ -71,8 +87,8 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.TXTotal += other.TXTotal
 	o.TRXTotal += other.TRXTotal
 	o.TRC10Total += other.TRC10Total
-	o.TRC20Total += other.TRC20Total
 	o.SCTotal += other.SCTotal
+	o.USDTTotal += other.USDTTotal
 	o.StakeTotal += other.StakeTotal
 	o.DelegateTotal += other.DelegateTotal
 	o.VoteTotal += other.VoteTotal
@@ -96,6 +112,9 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	switch tx.Type {
 	case 1:
 		o.TRXTotal++
+		if tx.Amount.Int64() < 100000 {
+			o.SmallTRXTotal++
+		}
 	case 2:
 		o.TRC10Total++
 	case 3:
@@ -104,6 +123,15 @@ func (o *UserStatistic) Add(tx *Transaction) {
 		o.StakeTotal++
 	case 30, 31:
 		o.SCTotal++
+		if len(tx.ToAddr) > 0 {
+			o.TRC20Total++
+			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+				o.USDTTotal++
+				if tx.Amount.Int64() < 500000 {
+					o.SmallUSDTTotal++
+				}
+			}
+		}
 	case 57, 58:
 		o.DelegateTotal++
 	}

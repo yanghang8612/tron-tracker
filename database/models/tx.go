@@ -1,5 +1,7 @@
 package models
 
+import "math/big"
+
 type Transaction struct {
 	ID                uint   `gorm:"primaryKey"`
 	Hash              string `gorm:"size:64;index"`
@@ -9,7 +11,7 @@ type Transaction struct {
 	Timestamp         int64
 	Type              uint8  `gorm:"index:idx_key"`
 	Name              string `gorm:"index:idx_key"`
-	Amount            int64
+	Amount            BigInt
 	Fee               uint
 	EnergyTotal       uint
 	EnergyFee         uint
@@ -19,6 +21,11 @@ type Transaction struct {
 	NetFee            uint
 	Result            string
 	SigCount          uint
+	Method            string `gorm:"size:8;"`
+}
+
+func (tx Transaction) SetAmount(amount int64) {
+	tx.Amount = NewBigInt(big.NewInt(amount))
 }
 
 type TRC20Transfer struct {

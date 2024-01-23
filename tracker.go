@@ -74,11 +74,11 @@ func (t *Tracker) doTrackBlock() {
 	}
 
 	txInfoList, _ := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)
-	transactions := make([]models.Transaction, 0)
-	transfers := make([]models.TRC20Transfer, 0)
+	transactions := make([]*models.Transaction, 0)
+	transfers := make([]*models.TRC20Transfer, 0)
 	t.db.SetLastTrackedBlock(block)
 	for idx, tx := range block.Transactions {
-		var txToDB = models.Transaction{
+		var txToDB = &models.Transaction{
 			Hash:      tx.TxID,
 			FromAddr:  utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Height:    block.BlockHeader.RawData.Number,
@@ -112,13 +112,16 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.SetAmount(int64(txInfoList[idx].WithdrawAmount))
 		} else if txToDB.Type == 30 || txToDB.Type == 31 {
 			txToDB.Name = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
-			data := tx.RawData.Contract[0].Parameter.Value["data"].(string)
-			if len(data) >= 8 {
-				txToDB.Method = data[:8]
-			}
-			if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
-				txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
-				txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+			if value, ok := tx.RawData.Contract[0].Parameter.Value["data"]; ok && txToDB.Type == 31 {
+				data := value.(string)
+				if len(data) >= 8 {
+					txToDB.Method = data[:8]
+				}
+
+				if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
+					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
+					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal
 			txToDB.EnergyFee = txInfoList[idx].Receipt.EnergyFee
@@ -147,11 +150,11 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount.Neg()
 		}
 		transactions = append(transactions, txToDB)
-		t.db.UpdateUserStatistic(&txToDB)
+		t.db.UpdateUserStatistic(txToDB)
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
-				var transferToDB = models.TRC20Transfer{
+				var transferToDB = &models.TRC20Transfer{
 					Hash:      tx.TxID,
 					Token:     utils.EncodeToBase58(log.Address),
 					FromAddr:  utils.EncodeToBase58(log.Topics[1][24:]),
@@ -168,6 +171,6 @@ func (t *Tracker) doTrackBlock() {
 			}
 		}
 	}
-	t.db.SaveTransactions(&transactions)
-	t.db.SaveTransfers(&transfers)
+	t.db.SaveTransactions(transactions)
+	t.db.SaveTransfers(transfers)
 }

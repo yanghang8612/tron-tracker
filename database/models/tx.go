@@ -24,7 +24,7 @@ type Transaction struct {
 	Method            string `gorm:"size:8;"`
 }
 
-func (tx Transaction) SetAmount(amount int64) {
+func (tx *Transaction) SetAmount(amount int64) {
 	tx.Amount = NewBigInt(big.NewInt(amount))
 }
 

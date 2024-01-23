@@ -51,7 +51,7 @@ type RawDB struct {
 }
 
 func New() *RawDB {
-	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "root@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -230,8 +230,8 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	zap.S().Debugf("Updated last tracked block num [%d]", db.lastTrackedBlockNum)
 }
 
-func (db *RawDB) SaveTransactions(transactions *[]models.Transaction) {
-	if transactions == nil || len(*transactions) == 0 {
+func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
+	if transactions == nil || len(transactions) == 0 {
 		return
 	}
 
@@ -240,8 +240,8 @@ func (db *RawDB) SaveTransactions(transactions *[]models.Transaction) {
 	db.db.Table(dbName).Create(transactions)
 }
 
-func (db *RawDB) SaveTransfers(transfers *[]models.TRC20Transfer) {
-	if transfers == nil || len(*transfers) == 0 {
+func (db *RawDB) SaveTransfers(transfers []*models.TRC20Transfer) {
+	if transfers == nil || len(transfers) == 0 {
 		return
 	}
 

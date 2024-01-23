@@ -51,7 +51,7 @@ type RawDB struct {
 }
 
 func New() *RawDB {
-	dsn := "root@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
+	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -110,12 +110,12 @@ func New() *RawDB {
 	}
 
 	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "231102"}).FirstOrCreate(&LastTrackedDateMeta)
+	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "240114"}).FirstOrCreate(&LastTrackedDateMeta)
 	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
 	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "56084338"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "58200000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
 	return &RawDB{

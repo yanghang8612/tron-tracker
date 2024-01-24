@@ -12,16 +12,16 @@ type Transaction struct {
 	Type              uint8  `gorm:"index:idx_key"`
 	Name              string `gorm:"index:idx_key"`
 	Amount            BigInt
-	Fee               uint
-	EnergyTotal       uint
-	EnergyFee         uint
-	EnergyUsage       uint
-	EnergyOriginUsage uint
-	NetUsage          uint
-	NetFee            uint
+	Fee               uint64
+	EnergyTotal       uint64
+	EnergyFee         uint64
+	EnergyUsage       uint64
+	EnergyOriginUsage uint64
+	NetUsage          uint64
+	NetFee            uint64
 	Result            string
-	SigCount          uint
-	Method            string `gorm:"size:8;"`
+	SigCount          uint8
+	Method            string `gorm:"size:8"`
 }
 
 func (tx *Transaction) SetAmount(amount int64) {

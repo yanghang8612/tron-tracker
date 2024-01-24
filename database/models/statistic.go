@@ -3,13 +3,13 @@ package models
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey"`
 	Address           string `gorm:"size:34;uniqueIndex"`
-	Fee               uint
-	EnergyTotal       uint
-	EnergyFee         uint
-	EnergyUsage       uint
-	EnergyOriginUsage uint
-	NetUsage          uint
-	NetFee            uint
+	Fee               uint64
+	EnergyTotal       uint64
+	EnergyFee         uint64
+	EnergyUsage       uint64
+	EnergyOriginUsage uint64
+	NetUsage          uint64
+	NetFee            uint64
 	TXTotal           uint
 	TRXTotal          uint
 	SmallTRXTotal     uint
@@ -141,28 +141,29 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type ExchangeStatistic struct {
-	ID                  uint   `gorm:"primaryKey" json:"total_fee,omitempty"`
-	Date                string `gorm:"index" json:"date,omitempty"`
-	Name                string `json:"name,omitempty"`
-	Address             string `json:"address,omitempty"`
-	ChargeTxCount       uint   `json:"charge_tx_count,omitempty"`
-	ChargeFee           uint   `json:"charge_fee,omitempty"`
-	ChargeNetFee        uint   `json:"charge_net_fee,omitempty"`
-	ChargeNetUsage      uint   `json:"charge_net_usage,omitempty"`
-	ChargeEnergyFee     uint   `json:"charge_energy_fee,omitempty"`
-	ChargeEnergyUsage   uint   `json:"charge_energy_usage,omitempty"`
-	CollectTxCount      uint   `json:"collect_tx_count,omitempty"`
-	CollectFee          uint   `json:"collect_fee,omitempty"`
-	CollectNetFee       uint   `json:"collect_net_fee,omitempty"`
-	CollectNetUsage     uint   `json:"collect_net_usage,omitempty"`
-	CollectEnergyFee    uint   `json:"collect_energy_fee,omitempty"`
-	CollectEnergyUsage  uint   `json:"collect_energy_usage,omitempty"`
-	WithdrawTxCount     uint   `json:"withdraw_tx_count,omitempty"`
-	WithdrawFee         uint   `json:"withdraw_fee,omitempty"`
-	WithdrawNetFee      uint   `json:"withdraw_net_fee,omitempty"`
-	WithdrawNetUsage    uint   `json:"withdraw_net_usage,omitempty"`
-	WithdrawEnergyFee   uint   `json:"withdraw_energy_fee,omitempty"`
-	WithdrawEnergyUsage uint   `json:"withdraw_energy_usage,omitempty"`
+	ID                  uint   `gorm:"primaryKey" json:"-"`
+	Date                string `gorm:"index;size:6"`
+	Name                string
+	Address             string `gorm:"size:34"`
+	TotalFee            uint64 `gorm:"-:all"`
+	ChargeTxCount       uint
+	ChargeFee           uint64
+	ChargeNetFee        uint64
+	ChargeNetUsage      uint64
+	ChargeEnergyFee     uint64
+	ChargeEnergyUsage   uint64
+	CollectTxCount      uint
+	CollectFee          uint64
+	CollectNetFee       uint64
+	CollectNetUsage     uint64
+	CollectEnergyFee    uint64
+	CollectEnergyUsage  uint64
+	WithdrawTxCount     uint
+	WithdrawFee         uint64
+	WithdrawNetFee      uint64
+	WithdrawNetUsage    uint64
+	WithdrawEnergyFee   uint64
+	WithdrawEnergyUsage uint64
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {

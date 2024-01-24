@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
-	_ "tron-tracker/log"
 	"tron-tracker/net"
 	"tron-tracker/types"
 	"tron-tracker/utils"
@@ -90,7 +89,7 @@ func (t *Tracker) doTrackBlock() {
 		txToDB.NetUsage = txInfoList[idx].Receipt.NetUsage
 		txToDB.NetFee = txInfoList[idx].Receipt.NetFee
 		txToDB.Result = txInfoList[idx].Receipt.Result
-		txToDB.SigCount = uint(len(tx.Signature))
+		txToDB.SigCount = uint8(len(tx.Signature))
 		if txToDB.Type == 1 {
 			txToDB.Name = "_"
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))

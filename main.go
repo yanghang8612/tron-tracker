@@ -7,6 +7,7 @@ import (
 
 	"tron-tracker/api"
 	"tron-tracker/database"
+	"tron-tracker/log"
 )
 
 func main() {
@@ -19,13 +20,16 @@ func main() {
 	// 	log.Fatal(err)
 	// }
 	// defer pprof.StopCPUProfile()
+	cfg := loadConfig()
 
-	db := database.New()
+	log.Init(&cfg.Log)
+
+	db := database.New(&cfg.DB)
 
 	tracker := New(db)
 	tracker.Start()
 
-	apiSrv := api.New(db)
+	apiSrv := api.New(db, &cfg.DeFi)
 	apiSrv.Start()
 
 	watchOSSignal(tracker, apiSrv)

@@ -109,12 +109,12 @@ func ConvertType(contractType string) uint8 {
 }
 
 type Receipt struct {
-	EnergyUsage       uint   `json:"energy_usage"`
-	EnergyFee         uint   `json:"energy_fee"`
-	OriginEnergyUsage uint   `json:"origin_energy_usage"`
-	EnergyUsageTotal  uint   `json:"energy_usage_total"`
-	NetUsage          uint   `json:"net_usage"`
-	NetFee            uint   `json:"net_fee"`
+	EnergyUsage       uint64 `json:"energy_usage"`
+	EnergyFee         uint64 `json:"energy_fee"`
+	OriginEnergyUsage uint64 `json:"origin_energy_usage"`
+	EnergyUsageTotal  uint64 `json:"energy_usage_total"`
+	NetUsage          uint64 `json:"net_usage"`
+	NetFee            uint64 `json:"net_fee"`
 	Result            string `json:"result"`
 }
 
@@ -126,7 +126,7 @@ type Log struct {
 
 type TransactionInfo struct {
 	ID                     string   `json:"id"`
-	Fee                    uint     `json:"fee"`
+	Fee                    uint64   `json:"fee"`
 	BlockNumber            uint     `json:"blockNumber"`
 	BlockTimeStamp         int64    `json:"blockTimeStamp"`
 	ContractResult         []string `json:"contractResult"`

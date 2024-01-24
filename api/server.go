@@ -19,14 +19,23 @@ import (
 	"tron-tracker/utils"
 )
 
+type DeFiConfig struct {
+	SunSwapV1  []string `toml:"sunswap_v1"`
+	SunSwapV2  []string `toml:"sunswap_v2"`
+	JustLend   []string `toml:"justlend"`
+	BTTC       []string `toml:"bttc"`
+	USDTCasino []string `toml:"usdtcasino"`
+}
+
 type Server struct {
 	router *gin.Engine
 	srv    *http.Server
 
-	db *database.RawDB
+	db     *database.RawDB
+	config *DeFiConfig
 }
 
-func New(db *database.RawDB) *Server {
+func New(db *database.RawDB, config *DeFiConfig) *Server {
 	router := gin.Default()
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -36,7 +45,9 @@ func New(db *database.RawDB) *Server {
 	return &Server{
 		router: router,
 		srv:    srv,
+
 		db:     db,
+		config: config,
 	}
 }
 
@@ -48,6 +59,7 @@ func (s *Server) Start() {
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)
+	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -101,7 +113,7 @@ func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 	date, ok := c.GetQuery("date")
 	if ok {
 		resultMap := make(map[string]*models.ExchangeStatistic)
-		totalFee, totalEnergyUsage := uint(0), uint(0)
+		totalFee, totalEnergyUsage := uint64(0), uint64(0)
 		for _, es := range s.db.GetExchangeStatisticsByDate(date) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
@@ -110,12 +122,12 @@ func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 				resultMap[exchangeName] = &models.ExchangeStatistic{}
 				resultMap[exchangeName].Name = exchangeName
 			}
-			resultMap[exchangeName].Merge(es)
+			resultMap[exchangeName].Merge(&es)
 		}
 
 		resultArray := make([]*models.ExchangeStatistic, 0)
 		for _, es := range resultMap {
-			es.ID = es.ChargeFee + es.CollectFee + es.WithdrawFee
+			es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
 			resultArray = append(resultArray, es)
 		}
 
@@ -133,22 +145,14 @@ func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
-	startDateStr, ok := c.GetQuery("start_date")
-	if !ok {
+	startDate := prepareDateParam(c, "start_date")
+	if startDate == nil {
 		return
 	}
 
-	startDate, err := time.Parse("060102", startDateStr)
-	if err != nil {
-		c.JSON(200, gin.H{
-			"code":  400,
-			"error": "start_date cannot be parsed",
-		})
-	}
-
 	resultMap := make(map[string]*models.ExchangeStatistic)
-	totalFee := uint(0)
-	totalEnergyUsage := uint(0)
+	totalFee := uint64(0)
+	totalEnergyUsage := uint64(0)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
@@ -156,21 +160,21 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 			exchangeName := utils.TrimExchangeName(es.Name)
 			if _, ok := resultMap[exchangeName]; !ok {
 				resultMap[exchangeName] = &models.ExchangeStatistic{}
-				resultMap[exchangeName].Date = startDateStr + "~" + startDate.AddDate(0, 0, 6).Format("060102")
+				resultMap[exchangeName].Date = startDate.Format("060102") + "~" + startDate.AddDate(0, 0, 6).Format("060102")
 				resultMap[exchangeName].Name = exchangeName
 			}
-			resultMap[exchangeName].Merge(es)
+			resultMap[exchangeName].Merge(&es)
 		}
 	}
 
 	resultArray := make([]*models.ExchangeStatistic, 0)
 	for _, es := range resultMap {
-		es.ID = es.ChargeFee + es.CollectFee + es.WithdrawFee
+		es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
 		resultArray = append(resultArray, es)
 	}
 
 	sort.Slice(resultArray, func(i, j int) bool {
-		return resultArray[i].ID > resultArray[j].ID
+		return resultArray[i].TotalFee > resultArray[j].TotalFee
 	})
 
 	c.JSON(200, gin.H{
@@ -181,12 +185,12 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {
-	date, ok := s.getStringParams(c, "date")
+	date, ok := getStringParam(c, "date")
 	if !ok {
 		return
 	}
 
-	addr, ok := s.getStringParams(c, "addr")
+	addr, ok := getStringParam(c, "addr")
 	if !ok {
 		return
 	}
@@ -222,31 +226,102 @@ func (s *Server) cachedCharges(c *gin.Context) {
 }
 
 func (s *Server) totalStatistics(c *gin.Context) {
-	startDateStr, ok := s.getStringParams(c, "start_date")
-	days, ok := s.getIntParams(c, "days")
+	startDate := prepareDateParam(c, "start_date")
+	if startDate == nil {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
 	if !ok {
 		return
 	}
 
-	startDate, err := time.Parse("060102", startDateStr)
+	totalStatistic := &models.UserStatistic{}
+	for i := 0; i < days; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		totalStatistic.Merge(&dayStatistic)
+	}
+
+	c.JSON(200, gin.H{
+		"total_statistic": totalStatistic,
+	})
+}
+
+func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
+	startDate := prepareDateParam(c, "start_date")
+	if startDate == nil {
+		return
+	}
+
+	var (
+		totalFee      uint64
+		exchangeFee   uint64
+		sunswapV1Fee  uint64
+		sunswapV2Fee  uint64
+		justlendFee   uint64
+		bttcFee       uint64
+		usdtcasinoFee uint64
+	)
+	for i := 0; i < 7; i++ {
+		date := startDate.AddDate(0, 0, i).Format("060102")
+
+		totalFee += s.db.GetTotalStatisticsByDate(date).Fee
+
+		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+			exchangeFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+		}
+
+		for _, addr := range s.config.SunSwapV1 {
+			sunswapV1Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+		}
+
+		for _, addr := range s.config.SunSwapV2 {
+			sunswapV2Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+		}
+
+		for _, addr := range s.config.JustLend {
+			justlendFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+		}
+
+		for _, addr := range s.config.BTTC {
+			bttcFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+		}
+
+		for _, addr := range s.config.BTTC {
+			usdtcasinoFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+		}
+	}
+
+	c.JSON(200, gin.H{
+		"total_fee":      totalFee,
+		"exchange_fee":   exchangeFee,
+		"sunswap_v1_fee": sunswapV1Fee,
+		"sunswap_v2_fee": sunswapV2Fee,
+		"justlend_fee":   justlendFee,
+		"bttc_fee":       bttcFee,
+		"usdtcasino_fee": usdtcasinoFee,
+	})
+}
+
+func prepareDateParam(c *gin.Context, name string) *time.Time {
+	dateStr, ok := getStringParam(c, name)
+	if !ok {
+		return nil
+	}
+
+	date, err := time.Parse("060102", dateStr)
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":  400,
 			"error": "start_date cannot be parsed",
 		})
+		return nil
 	}
 
-	totalStatistics := &models.UserStatistic{}
-	for i := 0; i < days; i++ {
-		totalStatistics.Merge(s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "total"))
-	}
-
-	c.JSON(200, gin.H{
-		"total_statistics": totalStatistics,
-	})
+	return &date
 }
 
-func (s *Server) getStringParams(c *gin.Context, name string) (string, bool) {
+func getStringParam(c *gin.Context, name string) (string, bool) {
 	param, ok := c.GetQuery(name)
 	if !ok {
 		c.JSON(200, gin.H{
@@ -258,7 +333,7 @@ func (s *Server) getStringParams(c *gin.Context, name string) (string, bool) {
 	return param, ok
 }
 
-func (s *Server) getIntParams(c *gin.Context, name string) (int, bool) {
+func getIntParam(c *gin.Context, name string) (int, bool) {
 	paramStr, ok := c.GetQuery(name)
 	if !ok {
 		c.JSON(200, gin.H{

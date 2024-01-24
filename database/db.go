@@ -3,6 +3,7 @@ package database
 import (
 	"bufio"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -18,6 +19,14 @@ import (
 	"tron-tracker/types"
 	"tron-tracker/utils"
 )
+
+type Config struct {
+	Host      string `toml:"host"`
+	User      string `toml:"user"`
+	Password  string `toml:"password"`
+	StartDate string `toml:"start_date"`
+	StartNum  int    `toml:"start_num"`
+}
 
 type dbCache struct {
 	date      string
@@ -50,58 +59,20 @@ type RawDB struct {
 	quitCh chan struct{}
 }
 
-func New() *RawDB {
-	dsn := "root:Root1234!@tcp(127.0.0.1:3306)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local"
-	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+func New(config *Config) *RawDB {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Password, config.Host)
+	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		SkipDefaultTransaction: true,
+	})
 	if dbErr != nil {
 		panic(dbErr)
 	}
+
+	loadChargers(db)
 
 	dbErr = db.AutoMigrate(&models.ExchangeStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
-	}
-
-	if !db.Migrator().HasTable(&models.Charger{}) {
-		dbErr = db.AutoMigrate(&models.Charger{})
-		if dbErr != nil {
-			panic(dbErr)
-		}
-
-		f, err := os.Open("all")
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer f.Close()
-
-		scanner := bufio.NewScanner(f)
-
-		zap.L().Info("Start loading charge")
-		count := 0
-		var chargeToSave []*models.Charger
-		for scanner.Scan() {
-			line := scanner.Text()
-			cols := strings.Split(line, ",")
-			chargeToSave = append(chargeToSave, &models.Charger{
-				Address:         cols[0],
-				ExchangeName:    cols[1],
-				ExchangeAddress: cols[2],
-			})
-			if len(chargeToSave) == 1000 {
-				db.Create(&chargeToSave)
-				chargeToSave = make([]*models.Charger, 0)
-			}
-			count++
-			if count%1000000 == 0 {
-				zap.S().Infof("Loaded [%d] charge", count)
-			}
-		}
-		db.Create(&chargeToSave)
-		zap.L().Info("Complete loading charge")
-
-		if err := scanner.Err(); err != nil {
-			log.Fatal(err)
-		}
 	}
 
 	dbErr = db.AutoMigrate(&models.Meta{})
@@ -110,12 +81,12 @@ func New() *RawDB {
 	}
 
 	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: "240114"}).FirstOrCreate(&LastTrackedDateMeta)
+	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&LastTrackedDateMeta)
 	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
 	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: "58200000"}).FirstOrCreate(&LastTrackedBlockNumMeta)
+	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
 	return &RawDB{
@@ -130,6 +101,53 @@ func New() *RawDB {
 		cache:   newCache(),
 
 		quitCh: make(chan struct{}),
+	}
+}
+
+func loadChargers(db *gorm.DB) {
+	if db.Migrator().HasTable(&models.Charger{}) {
+		return
+	}
+
+	dbErr := db.AutoMigrate(&models.Charger{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	f, err := os.Open("all")
+	if err != nil {
+		zap.S().Errorf("Load charger file error: [%s]", err.Error())
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+
+	zap.L().Info("Start loading charge")
+	count := 0
+	var chargeToSave []*models.Charger
+	for scanner.Scan() {
+		line := scanner.Text()
+		cols := strings.Split(line, ",")
+		chargeToSave = append(chargeToSave, &models.Charger{
+			Address:         cols[0],
+			ExchangeName:    cols[1],
+			ExchangeAddress: cols[2],
+		})
+		if len(chargeToSave) == 1000 {
+			db.Create(&chargeToSave)
+			chargeToSave = make([]*models.Charger, 0)
+		}
+		count++
+		if count%1000000 == 0 {
+			zap.S().Infof("Loaded [%d] charge", count)
+		}
+	}
+	db.Create(&chargeToSave)
+	zap.L().Info("Complete loading charge")
+
+	if err := scanner.Err(); err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -150,14 +168,20 @@ func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
 }
 
-func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) *models.UserStatistic {
+func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserStatistic {
 	var userStatistic models.UserStatistic
 	db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
-	return &userStatistic
+	return userStatistic
 }
 
-func (db *RawDB) GetExchangeStatisticsByDate(date string) []*models.ExchangeStatistic {
-	var exchangeStatistic []*models.ExchangeStatistic
+func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
+	var totalStatistic models.UserStatistic
+	db.db.Table("from_stats_" + date).Where("address = total").Limit(1).Find(&totalStatistic)
+	return totalStatistic
+}
+
+func (db *RawDB) GetExchangeStatisticsByDate(date string) []models.ExchangeStatistic {
+	var exchangeStatistic []models.ExchangeStatistic
 	db.db.Where("date = ?", date).Find(&exchangeStatistic)
 	return exchangeStatistic
 }
@@ -199,13 +223,6 @@ func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
 		}
 	}
 	return charges
-}
-
-func (db *RawDB) GetTotalStatisticsByDate(date string) *models.UserStatistic {
-	var totalStatistic models.UserStatistic
-	db.db.Table("from_stats_" + date).Where("address = total").Limit(1).Find(&totalStatistic)
-	return &totalStatistic
-
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {

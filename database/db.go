@@ -369,7 +369,13 @@ func (db *RawDB) persist(cache *dbCache) {
 			continue
 		}
 
-		db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
+		result := db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(&charger)
+		// If charger is fake, should delete it from database
+		if result.RowsAffected == 0 && charger.IsFake {
+			db.db.Delete(charger)
+			zap.S().Infof("Delete existed fake charger [%s]", charger.Address)
+		}
+
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			zap.L().Info(reportContent)
 		}
@@ -411,7 +417,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	for _, toStat := range cache.toStats {
 		charger, ok := cache.chargers[toStat.Address]
 		if ok && charger.IsFake {
-			zap.S().Debugf("Skip fake charger [%s]", toStat.Address)
+			zap.S().Infof("Skip fake charger [%s]", toStat.Address)
 			continue
 		}
 

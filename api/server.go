@@ -254,52 +254,74 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	}
 
 	var (
-		totalFee      uint64
-		exchangeFee   uint64
-		sunswapV1Fee  uint64
-		sunswapV2Fee  uint64
-		justlendFee   uint64
-		bttcFee       uint64
-		usdtcasinoFee uint64
+		totalFee         uint64
+		totalEnergy      uint64
+		exchangeFee      uint64
+		exchangeEnergy   uint64
+		sunswapV1Fee     uint64
+		sunswapV1Energy  uint64
+		sunswapV2Fee     uint64
+		sunswapV2Energy  uint64
+		justlendFee      uint64
+		justlendEnergy   uint64
+		bttcFee          uint64
+		bttcEnergy       uint64
+		usdtcasinoFee    uint64
+		usdtcasinoEnergy uint64
 	)
 	for i := 0; i < 7; i++ {
 		date := startDate.AddDate(0, 0, i).Format("060102")
 
 		totalFee += s.db.GetTotalStatisticsByDate(date).Fee
+		totalEnergy += s.db.GetTotalStatisticsByDate(date).EnergyTotal
 
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			exchangeFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+			exchangeEnergy += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
+			exchangeEnergy += exchangeFee / 420
 		}
 
 		for _, addr := range s.config.SunSwapV1 {
 			sunswapV1Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+			sunswapV1Energy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 
 		for _, addr := range s.config.SunSwapV2 {
 			sunswapV2Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+			sunswapV2Energy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 
 		for _, addr := range s.config.JustLend {
 			justlendFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+			justlendEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 
 		for _, addr := range s.config.BTTC {
 			bttcFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+			bttcEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 
 		for _, addr := range s.config.BTTC {
 			usdtcasinoFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
+			usdtcasinoEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 	}
 
 	c.JSON(200, gin.H{
-		"total_fee":      totalFee,
-		"exchange_fee":   exchangeFee,
-		"sunswap_v1_fee": sunswapV1Fee,
-		"sunswap_v2_fee": sunswapV2Fee,
-		"justlend_fee":   justlendFee,
-		"bttc_fee":       bttcFee,
-		"usdtcasino_fee": usdtcasinoFee,
+		"total_fee":         totalFee,
+		"total_energy":      totalEnergy,
+		"exchange_fee":      exchangeFee,
+		"exchange_energy":   exchangeEnergy,
+		"sunswap_v1_fee":    sunswapV1Fee,
+		"sunswap_v1_energy": sunswapV1Energy,
+		"sunswap_v2_fee":    sunswapV2Fee,
+		"sunswap_v2_energy": sunswapV2Energy,
+		"justlend_fee":      justlendFee,
+		"justlend_energy":   justlendEnergy,
+		"bttc_fee":          bttcFee,
+		"bttc_energy":       bttcEnergy,
+		"usdtcasino_fee":    usdtcasinoFee,
+		"usdtcasino_energy": usdtcasinoEnergy,
 	})
 }
 

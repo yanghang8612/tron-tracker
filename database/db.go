@@ -176,7 +176,7 @@ func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserSta
 
 func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
 	var totalStatistic models.UserStatistic
-	db.db.Table("from_stats_" + date).Where("address = total").Limit(1).Find(&totalStatistic)
+	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(&totalStatistic)
 	return totalStatistic
 }
 
@@ -243,8 +243,6 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	}
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
-
-	zap.S().Debugf("Updated last tracked block num [%d]", db.lastTrackedBlockNum)
 }
 
 func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {

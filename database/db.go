@@ -373,7 +373,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		// If charger is fake, should delete it from database
 		if result.RowsAffected == 0 && charger.IsFake {
 			db.db.Delete(charger)
-			zap.S().Infof("Delete existed fake charger [%s]", charger.Address)
+			zap.S().Infof("Delete existed fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
 		}
 
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
@@ -417,7 +417,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	for _, toStat := range cache.toStats {
 		charger, ok := cache.chargers[toStat.Address]
 		if ok && charger.IsFake {
-			zap.S().Infof("Skip fake charger [%s]", toStat.Address)
+			zap.S().Infof("Skip fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
 			continue
 		}
 
@@ -428,6 +428,12 @@ func (db *RawDB) persist(cache *dbCache) {
 		}
 
 		if ok {
+			if db.el.Contains(charger.Address) {
+				db.db.Delete(charger)
+				zap.S().Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)", charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
+				continue
+			}
+
 			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TRXTotal - toStat.SmallTRXTotal + toStat.USDTTotal - toStat.SmallUSDTTotal
 			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
 			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee

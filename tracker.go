@@ -163,8 +163,8 @@ func (t *Tracker) doTrackBlock() {
 				}
 				transfers = append(transfers, transferToDB)
 
-				// Filter small value USDT charger
-				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+				// Filter zero value charger
+				if txToDB.FromAddr == transferToDB.FromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
 					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr)
 				}
 			}

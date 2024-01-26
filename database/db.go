@@ -94,7 +94,7 @@ func New(config *Config) *RawDB {
 	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
-	var validTokens map[string]bool
+	validTokens := make(map[string]bool)
 	for _, token := range config.ValidTokens {
 		validTokens[token] = true
 	}

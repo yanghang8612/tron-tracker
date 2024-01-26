@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
 	"tron-tracker/types"
@@ -66,6 +67,7 @@ func New(config *Config) *RawDB {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Password, config.Host, config.DB)
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
+		Logger:                 logger.Discard,
 	})
 	if dbErr != nil {
 		panic(dbErr)

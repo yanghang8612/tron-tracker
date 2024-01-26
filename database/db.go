@@ -21,11 +21,13 @@ import (
 )
 
 type Config struct {
-	Host      string `toml:"host"`
-	User      string `toml:"user"`
-	Password  string `toml:"password"`
-	StartDate string `toml:"start_date"`
-	StartNum  int    `toml:"start_num"`
+	Host        string   `toml:"host"`
+	DB          string   `toml:"db"`
+	User        string   `toml:"user"`
+	Password    string   `toml:"password"`
+	StartDate   string   `toml:"start_date"`
+	StartNum    int      `toml:"start_num"`
+	ValidTokens []string `toml:"valid_tokens"`
 }
 
 type dbCache struct {
@@ -46,6 +48,7 @@ func newCache() *dbCache {
 type RawDB struct {
 	db *gorm.DB
 	el *types.ExchangeList
+	vt map[string]bool
 
 	lastTrackedDate     string
 	lastTrackedBlockNum uint
@@ -60,7 +63,7 @@ type RawDB struct {
 }
 
 func New(config *Config) *RawDB {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/tron_tracker?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Password, config.Host)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Password, config.Host, config.DB)
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 	})
@@ -89,9 +92,17 @@ func New(config *Config) *RawDB {
 	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
+	var validTokens map[string]bool
+	for _, token := range config.ValidTokens {
+		validTokens[token] = true
+	}
+	// TRX token symbol is "_"
+	validTokens["_"] = true
+
 	return &RawDB{
 		db: db,
 		el: net.GetExchanges(),
+		vt: validTokens,
 
 		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		lastTrackedDate:     LastTrackedDateMeta.Val,
@@ -285,7 +296,12 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 	}
 }
 
-func (db *RawDB) SaveCharger(from, to string) {
+func (db *RawDB) SaveCharger(from, to, token string) {
+	// Filter invalid token charger
+	if !db.vt[token] {
+		return
+	}
+
 	if charger, ok := db.cache.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
 		db.cache.chargers[from] = &models.Charger{
 			Address:         from,

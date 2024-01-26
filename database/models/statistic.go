@@ -144,7 +144,7 @@ type ExchangeStatistic struct {
 	ID                  uint   `gorm:"primaryKey" json:"-"`
 	Date                string `gorm:"index;size:6"`
 	Name                string
-	Address             string `gorm:"size:34" json:"omitempty"`
+	Address             string `gorm:"size:34" json:"address,omitempty"`
 	TotalFee            uint64 `gorm:"-:all"`
 	ChargeTxCount       uint
 	ChargeFee           uint64

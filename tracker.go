@@ -96,9 +96,9 @@ func (t *Tracker) doTrackBlock() {
 
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 			txToDB.SetAmount(amount)
-			// Filter exchange charger and small value TRX charger
-			if amount > 1000000 {
-				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr)
+			// The TRX charger should charge at least 50TRX
+			if amount > 50_000_000 {
+				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
 			}
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
@@ -165,7 +165,7 @@ func (t *Tracker) doTrackBlock() {
 
 				// Filter zero value charger
 				if txToDB.FromAddr == transferToDB.FromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
-					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr)
+					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr, transferToDB.Token)
 				}
 			}
 		}

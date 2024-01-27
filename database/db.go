@@ -298,6 +298,7 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 	}
 }
 
+// SaveCharger TODO We should give the chargers a certain amount of tolerance
 func (db *RawDB) SaveCharger(from, to, token string) {
 	// Filter invalid token charger
 	if !db.vt[token] {

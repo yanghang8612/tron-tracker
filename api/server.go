@@ -267,14 +267,14 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 	}
 
 	lastWeekTotalStatistic := &models.UserStatistic{}
-	for i := 7; i < 14; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+	for i := 1; i <= 7; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"))
 		lastWeekTotalStatistic.Merge(&dayStatistic)
 	}
 
 	lastWeekUSDTStatistic := &models.UserStatistic{}
-	for i := 7; i < 14; i++ {
-		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+	for i := 1; i <= 7; i++ {
+		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 		lastWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 

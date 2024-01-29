@@ -8,17 +8,9 @@ import (
 	"tron-tracker/api"
 	"tron-tracker/database"
 	"tron-tracker/log"
-	"tron-tracker/utils"
 )
 
 func main() {
-	a := uint64(74388855307020)
-	b := uint64(79693086114680)
-	println(utils.FormatChangePercent(b, a))
-	println(utils.FormatChangePercent(a, b))
-}
-
-func main1() {
 	// f, err := os.Create("cpuprofile")
 	// if err != nil {
 	// 	log.Fatal(err)

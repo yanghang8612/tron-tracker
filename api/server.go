@@ -307,6 +307,10 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 
 	curWeekStats := s.getOneWeekRevenueStatistics(*startDate)
 	totalWeekStats := s.db.GetTotalStatisticsByDate(startDate.Format("060102"))
+	for i := 0; i < 7; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		totalWeekStats.Merge(&dayStatistic)
+	}
 	lastWeekStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
 
 	result := make(map[string]any)

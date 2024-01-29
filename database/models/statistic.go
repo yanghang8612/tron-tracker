@@ -3,25 +3,25 @@ package models
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey"`
 	Address           string `gorm:"size:34;uniqueIndex"`
-	Fee               uint64
-	EnergyTotal       uint64
-	EnergyFee         uint64
-	EnergyUsage       uint64
-	EnergyOriginUsage uint64
-	NetUsage          uint64
-	NetFee            uint64
-	TXTotal           uint64
-	TRXTotal          uint64
-	SmallTRXTotal     uint64
-	TRC10Total        uint64
-	TRC20Total        uint64
-	SCTotal           uint64
-	USDTTotal         uint64
-	SmallUSDTTotal    uint64
-	StakeTotal        uint64
-	DelegateTotal     uint64
-	VoteTotal         uint64
-	MultiSigTotal     uint64
+	Fee               int64
+	EnergyTotal       int64
+	EnergyFee         int64
+	EnergyUsage       int64
+	EnergyOriginUsage int64
+	NetUsage          int64
+	NetFee            int64
+	TXTotal           int64
+	TRXTotal          int64
+	SmallTRXTotal     int64
+	TRC10Total        int64
+	TRC20Total        int64
+	SCTotal           int64
+	USDTTotal         int64
+	SmallUSDTTotal    int64
+	StakeTotal        int64
+	DelegateTotal     int64
+	VoteTotal         int64
+	MultiSigTotal     int64
 }
 
 func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
@@ -145,25 +145,25 @@ type ExchangeStatistic struct {
 	Date                string `gorm:"index;size:6"`
 	Name                string
 	Address             string `gorm:"size:34" json:"address,omitempty"`
-	TotalFee            uint64 `gorm:"-:all"`
-	ChargeTxCount       uint64
-	ChargeFee           uint64
-	ChargeNetFee        uint64
-	ChargeNetUsage      uint64
-	ChargeEnergyFee     uint64
-	ChargeEnergyUsage   uint64
-	CollectTxCount      uint64
-	CollectFee          uint64
-	CollectNetFee       uint64
-	CollectNetUsage     uint64
-	CollectEnergyFee    uint64
-	CollectEnergyUsage  uint64
-	WithdrawTxCount     uint64
-	WithdrawFee         uint64
-	WithdrawNetFee      uint64
-	WithdrawNetUsage    uint64
-	WithdrawEnergyFee   uint64
-	WithdrawEnergyUsage uint64
+	TotalFee            int64  `gorm:"-:all"`
+	ChargeTxCount       int64
+	ChargeFee           int64
+	ChargeNetFee        int64
+	ChargeNetUsage      int64
+	ChargeEnergyFee     int64
+	ChargeEnergyUsage   int64
+	CollectTxCount      int64
+	CollectFee          int64
+	CollectNetFee       int64
+	CollectNetUsage     int64
+	CollectEnergyFee    int64
+	CollectEnergyUsage  int64
+	WithdrawTxCount     int64
+	WithdrawFee         int64
+	WithdrawNetFee      int64
+	WithdrawNetUsage    int64
+	WithdrawEnergyFee   int64
+	WithdrawEnergyUsage int64
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/now"
 	"go.uber.org/zap"
@@ -115,7 +116,7 @@ func (s *Server) exchangesDailyStatistic(c *gin.Context) {
 	date, ok := c.GetQuery("date")
 	if ok {
 		resultMap := make(map[string]*models.ExchangeStatistic)
-		totalFee, totalEnergyUsage := uint64(0), uint64(0)
+		totalFee, totalEnergyUsage := int64(0), int64(0)
 		for _, es := range s.db.GetExchangeStatisticsByDate(date) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
@@ -153,8 +154,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	}
 
 	resultMap := make(map[string]*models.ExchangeStatistic)
-	totalFee := uint64(0)
-	totalEnergyUsage := uint64(0)
+	totalFee, totalEnergyUsage := int64(0), int64(0)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
@@ -280,21 +280,21 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"fee":                utils.FormatReadableNumber(curWeekTotalStatistic.Fee / 7_000_000),
+		"fee":                humanize.Comma(curWeekTotalStatistic.Fee / 7_000_000),
 		"fee_change":         utils.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
-		"usdt_fee":           utils.FormatReadableNumber(curWeekUSDTStatistic.Fee / 7_000_000),
+		"usdt_fee":           humanize.Comma(curWeekUSDTStatistic.Fee / 7_000_000),
 		"usdt_fee_change":    utils.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
-		"tx_total":           utils.FormatReadableNumber(curWeekTotalStatistic.TXTotal / 7),
+		"tx_total":           humanize.Comma(curWeekTotalStatistic.TXTotal / 7),
 		"tx_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.TXTotal, curWeekTotalStatistic.TXTotal),
-		"trx_total":          utils.FormatReadableNumber(curWeekTotalStatistic.TRXTotal / 7),
+		"trx_total":          humanize.Comma(curWeekTotalStatistic.TRXTotal / 7),
 		"trx_total_change":   utils.FormatChangePercent(lastWeekTotalStatistic.TRXTotal, curWeekTotalStatistic.TRXTotal),
-		"trc10_total":        utils.FormatReadableNumber(curWeekTotalStatistic.TRC10Total / 7),
+		"trc10_total":        humanize.Comma(curWeekTotalStatistic.TRC10Total / 7),
 		"trc10_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.TRC10Total, curWeekTotalStatistic.TRC10Total),
-		"sc_total":           utils.FormatReadableNumber(curWeekTotalStatistic.SCTotal / 7),
+		"sc_total":           humanize.Comma(curWeekTotalStatistic.SCTotal / 7),
 		"sc_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal, curWeekTotalStatistic.SCTotal),
-		"usdt_total":         utils.FormatReadableNumber(curWeekTotalStatistic.USDTTotal / 7),
+		"usdt_total":         humanize.Comma(curWeekTotalStatistic.USDTTotal / 7),
 		"usdt_total_change":  utils.FormatChangePercent(lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.USDTTotal),
-		"other_total":        utils.FormatReadableNumber((curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7),
+		"other_total":        humanize.Comma((curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7),
 		"other_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal),
 	})
 }
@@ -315,8 +315,8 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 
 	result := make(map[string]any)
 	for k, v := range curWeekStats {
-		result[k] = utils.FormatReadableNumber(v)
-		result[k+"_last_week"] = utils.FormatReadableNumber(lastWeekStats[k])
+		result[k] = humanize.Comma(v)
+		result[k+"_last_week"] = humanize.Comma(lastWeekStats[k])
 		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
 		if strings.Contains(k, "fee") {
 			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee/7_000_000, v)
@@ -326,22 +326,22 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	c.JSON(200, result)
 }
 
-func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]uint64 {
+func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int64 {
 	var (
-		totalFee         uint64
-		totalEnergy      uint64
-		exchangeFee      uint64
-		exchangeEnergy   uint64
-		sunswapV1Fee     uint64
-		sunswapV1Energy  uint64
-		sunswapV2Fee     uint64
-		sunswapV2Energy  uint64
-		justlendFee      uint64
-		justlendEnergy   uint64
-		bttcFee          uint64
-		bttcEnergy       uint64
-		usdtcasinoFee    uint64
-		usdtcasinoEnergy uint64
+		totalFee         int64
+		totalEnergy      int64
+		exchangeFee      int64
+		exchangeEnergy   int64
+		sunswapV1Fee     int64
+		sunswapV1Energy  int64
+		sunswapV2Fee     int64
+		sunswapV2Energy  int64
+		justlendFee      int64
+		justlendEnergy   int64
+		bttcFee          int64
+		bttcEnergy       int64
+		usdtcasinoFee    int64
+		usdtcasinoEnergy int64
 	)
 	for i := 0; i < 7; i++ {
 		date := startDate.AddDate(0, 0, i).Format("060102")
@@ -381,7 +381,7 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]uin
 		}
 	}
 
-	return map[string]uint64{
+	return map[string]int64{
 		"total_fee":         totalFee / 7_000_000,
 		"total_energy":      totalEnergy / 7,
 		"exchange_fee":      exchangeFee / 7_000_000,

@@ -12,13 +12,13 @@ type Transaction struct {
 	Type              uint8  `gorm:"index:idx_key"`
 	Name              string `gorm:"index:idx_key"`
 	Amount            BigInt
-	Fee               uint64
-	EnergyTotal       uint64
-	EnergyFee         uint64
-	EnergyUsage       uint64
-	EnergyOriginUsage uint64
-	NetUsage          uint64
-	NetFee            uint64
+	Fee               int64
+	EnergyTotal       int64
+	EnergyFee         int64
+	EnergyUsage       int64
+	EnergyOriginUsage int64
+	NetUsage          int64
+	NetFee            int64
 	Result            string
 	SigCount          uint8
 	Method            string `gorm:"size:8"`

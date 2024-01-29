@@ -109,12 +109,12 @@ func ConvertType(contractType string) uint8 {
 }
 
 type Receipt struct {
-	EnergyUsage       uint64 `json:"energy_usage"`
-	EnergyFee         uint64 `json:"energy_fee"`
-	OriginEnergyUsage uint64 `json:"origin_energy_usage"`
-	EnergyUsageTotal  uint64 `json:"energy_usage_total"`
-	NetUsage          uint64 `json:"net_usage"`
-	NetFee            uint64 `json:"net_fee"`
+	EnergyUsage       int64  `json:"energy_usage"`
+	EnergyFee         int64  `json:"energy_fee"`
+	OriginEnergyUsage int64  `json:"origin_energy_usage"`
+	EnergyUsageTotal  int64  `json:"energy_usage_total"`
+	NetUsage          int64  `json:"net_usage"`
+	NetFee            int64  `json:"net_fee"`
 	Result            string `json:"result"`
 }
 
@@ -126,7 +126,7 @@ type Log struct {
 
 type TransactionInfo struct {
 	ID                     string   `json:"id"`
-	Fee                    uint64   `json:"fee"`
+	Fee                    int64    `json:"fee"`
 	BlockNumber            uint     `json:"blockNumber"`
 	BlockTimeStamp         int64    `json:"blockTimeStamp"`
 	ContractResult         []string `json:"contractResult"`
@@ -134,11 +134,11 @@ type TransactionInfo struct {
 	Receipt                Receipt  `json:"receipt"`
 	Log                    []Log    `json:"log"`
 	Result                 string   `json:"result"`
-	WithdrawAmount         uint64   `json:"withdraw_amount"`
-	UnfreezeAmount         uint64   `json:"unfreeze_amount"`
-	WithdrawExpireAmount   uint64   `json:"withdraw_expire_amount"`
+	WithdrawAmount         int64    `json:"withdraw_amount"`
+	UnfreezeAmount         int64    `json:"unfreeze_amount"`
+	WithdrawExpireAmount   int64    `json:"withdraw_expire_amount"`
 	CancelUnfreezeV2Amount []struct {
 		Key   string `json:"key"`
-		Value uint64 `json:"value"`
+		Value int64  `json:"value"`
 	} `json:"cancel_unfreezeV2_amount"`
 }

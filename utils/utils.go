@@ -2,7 +2,7 @@ package utils
 
 import "fmt"
 
-func FormatChangePercent(oldValue uint64, newValue uint64) string {
+func FormatChangePercent(oldValue, newValue int64) string {
 	if oldValue == 0 {
 		return "∞%"
 	} else {
@@ -12,15 +12,11 @@ func FormatChangePercent(oldValue uint64, newValue uint64) string {
 	}
 }
 
-func FormatOfPercent(total uint64, part uint64) string {
+func FormatOfPercent(total, part int64) string {
 	if total == 0 {
 		return "∞%"
 	} else {
 		percent := float64(part) / float64(total) * 100.0
 		return fmt.Sprintf("%.2f%%", percent)
 	}
-}
-
-func FormatReadableNumber(num uint64) string {
-	return fmt.Sprintf("%.0f", float64(num))
 }

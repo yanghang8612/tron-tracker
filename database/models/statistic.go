@@ -10,18 +10,18 @@ type UserStatistic struct {
 	EnergyOriginUsage uint64
 	NetUsage          uint64
 	NetFee            uint64
-	TXTotal           uint
-	TRXTotal          uint
-	SmallTRXTotal     uint
-	TRC10Total        uint
-	TRC20Total        uint
-	SCTotal           uint
-	USDTTotal         uint
-	SmallUSDTTotal    uint
-	StakeTotal        uint
-	DelegateTotal     uint
-	VoteTotal         uint
-	MultiSigTotal     uint
+	TXTotal           uint64
+	TRXTotal          uint64
+	SmallTRXTotal     uint64
+	TRC10Total        uint64
+	TRC20Total        uint64
+	SCTotal           uint64
+	USDTTotal         uint64
+	SmallUSDTTotal    uint64
+	StakeTotal        uint64
+	DelegateTotal     uint64
+	VoteTotal         uint64
+	MultiSigTotal     uint64
 }
 
 func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
@@ -146,19 +146,19 @@ type ExchangeStatistic struct {
 	Name                string
 	Address             string `gorm:"size:34" json:"address,omitempty"`
 	TotalFee            uint64 `gorm:"-:all"`
-	ChargeTxCount       uint
+	ChargeTxCount       uint64
 	ChargeFee           uint64
 	ChargeNetFee        uint64
 	ChargeNetUsage      uint64
 	ChargeEnergyFee     uint64
 	ChargeEnergyUsage   uint64
-	CollectTxCount      uint
+	CollectTxCount      uint64
 	CollectFee          uint64
 	CollectNetFee       uint64
 	CollectNetUsage     uint64
 	CollectEnergyFee    uint64
 	CollectEnergyUsage  uint64
-	WithdrawTxCount     uint
+	WithdrawTxCount     uint64
 	WithdrawFee         uint64
 	WithdrawNetFee      uint64
 	WithdrawNetUsage    uint64

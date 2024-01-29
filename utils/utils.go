@@ -20,3 +20,7 @@ func FormatOfPercent(total uint64, part uint64) string {
 		return fmt.Sprintf("%.2f%%", percent)
 	}
 }
+
+func FormatReadableNumber(num uint64) string {
+	return fmt.Sprintf("%.0f", float64(num))
+}

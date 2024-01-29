@@ -280,22 +280,22 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"fee":                curWeekTotalStatistic.Fee / 7_000_000,
+		"fee":                utils.FormatReadableNumber(curWeekTotalStatistic.Fee / 7_000_000),
 		"fee_change":         utils.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
-		"usdt_fee":           curWeekUSDTStatistic.Fee / 7_000_000,
+		"usdt_fee":           utils.FormatReadableNumber(curWeekUSDTStatistic.Fee / 7_000_000),
 		"usdt_fee_change":    utils.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
-		"tx_total":           curWeekTotalStatistic.TXTotal / 7,
-		"tx_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TXTotal), uint64(curWeekTotalStatistic.TXTotal)),
-		"trx_total":          curWeekTotalStatistic.TRXTotal / 7,
-		"trx_total_change":   utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRXTotal), uint64(curWeekTotalStatistic.TRXTotal)),
-		"trc10_total":        curWeekTotalStatistic.TRC10Total / 7,
-		"trc10_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRC10Total), uint64(curWeekTotalStatistic.TRC10Total)),
-		"sc_total":           curWeekTotalStatistic.SCTotal / 7,
-		"sc_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal), uint64(curWeekTotalStatistic.SCTotal)),
-		"usdt_total":         curWeekTotalStatistic.USDTTotal / 7,
-		"usdt_total_change":  utils.FormatChangePercent(uint64(lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.USDTTotal)),
-		"other_total":        (curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7,
-		"other_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal)),
+		"tx_total":           utils.FormatReadableNumber(curWeekTotalStatistic.TXTotal / 7),
+		"tx_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.TXTotal, curWeekTotalStatistic.TXTotal),
+		"trx_total":          utils.FormatReadableNumber(curWeekTotalStatistic.TRXTotal / 7),
+		"trx_total_change":   utils.FormatChangePercent(lastWeekTotalStatistic.TRXTotal, curWeekTotalStatistic.TRXTotal),
+		"trc10_total":        utils.FormatReadableNumber(curWeekTotalStatistic.TRC10Total / 7),
+		"trc10_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.TRC10Total, curWeekTotalStatistic.TRC10Total),
+		"sc_total":           utils.FormatReadableNumber(curWeekTotalStatistic.SCTotal / 7),
+		"sc_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal, curWeekTotalStatistic.SCTotal),
+		"usdt_total":         utils.FormatReadableNumber(curWeekTotalStatistic.USDTTotal / 7),
+		"usdt_total_change":  utils.FormatChangePercent(lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.USDTTotal),
+		"other_total":        utils.FormatReadableNumber((curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7),
+		"other_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal),
 	})
 }
 
@@ -306,7 +306,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	}
 
 	curWeekStats := s.getOneWeekRevenueStatistics(*startDate)
-	totalWeekStats := s.db.GetTotalStatisticsByDate(startDate.Format("060102"))
+	totalWeekStats := &models.UserStatistic{}
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		totalWeekStats.Merge(&dayStatistic)
@@ -315,8 +315,8 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 
 	result := make(map[string]any)
 	for k, v := range curWeekStats {
-		result[k] = v
-		result[k+"_last_week"] = lastWeekStats[k]
+		result[k] = utils.FormatReadableNumber(v)
+		result[k+"_last_week"] = utils.FormatReadableNumber(lastWeekStats[k])
 		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
 		if strings.Contains(k, "fee") {
 			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee, v)

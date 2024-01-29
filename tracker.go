@@ -97,7 +97,7 @@ func (t *Tracker) doTrackBlock() {
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 			txToDB.SetAmount(amount)
 			// The TRX charger should charge at least 50TRX
-			if amount > 1_000_000 {
+			if amount > 50_000_000 {
 				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
 			}
 		} else if txToDB.Type == 2 {
@@ -164,7 +164,7 @@ func (t *Tracker) doTrackBlock() {
 				transfers = append(transfers, transferToDB)
 
 				// Filter zero value charger
-				if transferToDB.Token != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" || utils.ConvertHexToBigInt(log.Data).Int64() > 500000 {
+				if txToDB.FromAddr == transferToDB.FromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
 					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr, transferToDB.Token)
 				}
 			}

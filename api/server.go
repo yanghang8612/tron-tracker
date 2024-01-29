@@ -59,6 +59,7 @@ func (s *Server) Start() {
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)
+	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 
 	go func() {
@@ -247,12 +248,76 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	})
 }
 
+func (s *Server) tronWeeklyStatistics(c *gin.Context) {
+	startDate := prepareDateParam(c, "start_date")
+	if startDate == nil {
+		return
+	}
+
+	curWeekTotalStatistic := &models.UserStatistic{}
+	for i := 0; i < 7; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		curWeekTotalStatistic.Merge(&dayStatistic)
+	}
+
+	curWeekUSDTStatistic := &models.UserStatistic{}
+	for i := 0; i < 7; i++ {
+		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		curWeekUSDTStatistic.Merge(&dayStatistic)
+	}
+
+	lastWeekTotalStatistic := &models.UserStatistic{}
+	for i := 7; i < 14; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		lastWeekTotalStatistic.Merge(&dayStatistic)
+	}
+
+	lastWeekUSDTStatistic := &models.UserStatistic{}
+	for i := 7; i < 14; i++ {
+		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		lastWeekUSDTStatistic.Merge(&dayStatistic)
+	}
+
+	c.JSON(200, gin.H{
+		"fee":                curWeekTotalStatistic.Fee,
+		"fee_change":         utils.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
+		"usdt_fee":           curWeekUSDTStatistic.Fee,
+		"usdt_fee_change":    utils.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
+		"tx_total":           curWeekTotalStatistic.TXTotal,
+		"tx_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TXTotal), uint64(curWeekTotalStatistic.TXTotal)),
+		"trx_total":          curWeekTotalStatistic.TRXTotal,
+		"trx_total_change":   utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRXTotal), uint64(curWeekTotalStatistic.TRXTotal)),
+		"trc10_total":        curWeekTotalStatistic.TRC10Total,
+		"trc10_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRC10Total), uint64(curWeekTotalStatistic.TRC10Total)),
+		"sc_total":           curWeekTotalStatistic.SCTotal,
+		"sc_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal), uint64(curWeekTotalStatistic.SCTotal)),
+		"usdt_total":         curWeekTotalStatistic.USDTTotal,
+		"usdt_total_change":  utils.FormatChangePercent(uint64(lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.USDTTotal)),
+		"other_total":        curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal,
+		"other_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal)),
+	})
+}
+
 func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	startDate := prepareDateParam(c, "start_date")
 	if startDate == nil {
 		return
 	}
 
+	curWeekStats := s.getOneWeekRevenueStatistics(*startDate)
+	lastWeekStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
+
+	result := make(map[string]any)
+	for k, v := range curWeekStats {
+		result[k] = v
+		result[k+"_last_week"] = lastWeekStats[k]
+		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
+	}
+
+	c.JSON(200, result)
+}
+
+func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]uint64 {
 	var (
 		totalFee         uint64
 		totalEnergy      uint64
@@ -307,7 +372,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, gin.H{
+	return map[string]uint64{
 		"total_fee":         totalFee,
 		"total_energy":      totalEnergy,
 		"exchange_fee":      exchangeFee,
@@ -322,7 +387,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 		"bttc_energy":       bttcEnergy,
 		"usdtcasino_fee":    usdtcasinoFee,
 		"usdtcasino_energy": usdtcasinoEnergy,
-	})
+	}
 }
 
 func prepareDateParam(c *gin.Context, name string) *time.Time {

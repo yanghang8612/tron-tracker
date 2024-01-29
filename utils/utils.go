@@ -12,9 +12,11 @@ func FormatChangePercent(oldValue uint64, newValue uint64) string {
 	}
 }
 
-func main() {
-	a := uint64(74388855307020)
-	b := uint64(79693086114680)
-	println(FormatChangePercent(b, a))
-	println(FormatChangePercent(a, b))
+func FormatOfPercent(total uint64, part uint64) string {
+	if total == 0 {
+		return "∞%"
+	} else {
+		percent := float64(part) / float64(total) * 100.0
+		return fmt.Sprintf("%.2f%%", percent)
+	}
 }

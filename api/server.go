@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -279,21 +280,21 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"fee":                curWeekTotalStatistic.Fee,
+		"fee":                curWeekTotalStatistic.Fee / 7_000_000,
 		"fee_change":         utils.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
-		"usdt_fee":           curWeekUSDTStatistic.Fee,
+		"usdt_fee":           curWeekUSDTStatistic.Fee / 7_000_000,
 		"usdt_fee_change":    utils.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
-		"tx_total":           curWeekTotalStatistic.TXTotal,
+		"tx_total":           curWeekTotalStatistic.TXTotal / 7,
 		"tx_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TXTotal), uint64(curWeekTotalStatistic.TXTotal)),
-		"trx_total":          curWeekTotalStatistic.TRXTotal,
+		"trx_total":          curWeekTotalStatistic.TRXTotal / 7,
 		"trx_total_change":   utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRXTotal), uint64(curWeekTotalStatistic.TRXTotal)),
-		"trc10_total":        curWeekTotalStatistic.TRC10Total,
+		"trc10_total":        curWeekTotalStatistic.TRC10Total / 7,
 		"trc10_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.TRC10Total), uint64(curWeekTotalStatistic.TRC10Total)),
-		"sc_total":           curWeekTotalStatistic.SCTotal,
+		"sc_total":           curWeekTotalStatistic.SCTotal / 7,
 		"sc_total_change":    utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal), uint64(curWeekTotalStatistic.SCTotal)),
-		"usdt_total":         curWeekTotalStatistic.USDTTotal,
+		"usdt_total":         curWeekTotalStatistic.USDTTotal / 7,
 		"usdt_total_change":  utils.FormatChangePercent(uint64(lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.USDTTotal)),
-		"other_total":        curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal,
+		"other_total":        (curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7,
 		"other_total_change": utils.FormatChangePercent(uint64(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal), uint64(curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal)),
 	})
 }
@@ -305,6 +306,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	}
 
 	curWeekStats := s.getOneWeekRevenueStatistics(*startDate)
+	totalWeekStats := s.db.GetTotalStatisticsByDate(startDate.Format("060102"))
 	lastWeekStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
 
 	result := make(map[string]any)
@@ -312,6 +314,9 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 		result[k] = v
 		result[k+"_last_week"] = lastWeekStats[k]
 		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
+		if strings.Contains(k, "fee") {
+			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee, v)
+		}
 	}
 
 	c.JSON(200, result)
@@ -373,20 +378,20 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]uin
 	}
 
 	return map[string]uint64{
-		"total_fee":         totalFee,
-		"total_energy":      totalEnergy,
-		"exchange_fee":      exchangeFee,
-		"exchange_energy":   exchangeEnergy,
-		"sunswap_v1_fee":    sunswapV1Fee,
-		"sunswap_v1_energy": sunswapV1Energy,
-		"sunswap_v2_fee":    sunswapV2Fee,
-		"sunswap_v2_energy": sunswapV2Energy,
-		"justlend_fee":      justlendFee,
-		"justlend_energy":   justlendEnergy,
-		"bttc_fee":          bttcFee,
-		"bttc_energy":       bttcEnergy,
-		"usdtcasino_fee":    usdtcasinoFee,
-		"usdtcasino_energy": usdtcasinoEnergy,
+		"total_fee":         totalFee / 7_000_000,
+		"total_energy":      totalEnergy / 7,
+		"exchange_fee":      exchangeFee / 7_000_000,
+		"exchange_energy":   exchangeEnergy / 7,
+		"sunswap_v1_fee":    sunswapV1Fee / 7_000_000,
+		"sunswap_v1_energy": sunswapV1Energy / 7,
+		"sunswap_v2_fee":    sunswapV2Fee / 7_000_000,
+		"sunswap_v2_energy": sunswapV2Energy / 7,
+		"justlend_fee":      justlendFee / 7_000_000,
+		"justlend_energy":   justlendEnergy / 7,
+		"bttc_fee":          bttcFee / 7_000_000,
+		"bttc_energy":       bttcEnergy / 7,
+		"usdtcasino_fee":    usdtcasinoFee / 7_000_000,
+		"usdtcasino_energy": usdtcasinoEnergy / 7,
 	}
 }
 

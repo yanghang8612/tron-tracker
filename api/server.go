@@ -319,7 +319,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 		result[k+"_last_week"] = utils.FormatReadableNumber(lastWeekStats[k])
 		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
 		if strings.Contains(k, "fee") {
-			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee, v)
+			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee/7_000_000, v)
 		}
 	}
 

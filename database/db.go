@@ -240,7 +240,7 @@ func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	if block.BlockHeader.RawData.Number%100 == 0 {
-		db.el = net.GetExchanges()
+		db.updateExchanges()
 	}
 
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
@@ -331,6 +331,18 @@ func (db *RawDB) Run() {
 		case cache := <-db.flushCh:
 			db.persist(cache)
 		}
+	}
+}
+
+func (db *RawDB) updateExchanges() {
+	for i := 0; i < 3; i++ {
+		el := net.GetExchanges()
+		if len(el.Exchanges) == 0 {
+			zap.S().Info("No exchange found, retry %d times", i+1)
+			continue
+		}
+
+		db.el = el
 	}
 }
 

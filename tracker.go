@@ -106,9 +106,9 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64)))
 		} else if txToDB.Type == 12 {
-			txToDB.SetAmount(int64(txInfoList[idx].UnfreezeAmount))
+			txToDB.SetAmount(txInfoList[idx].UnfreezeAmount)
 		} else if txToDB.Type == 13 {
-			txToDB.SetAmount(int64(txInfoList[idx].WithdrawAmount))
+			txToDB.SetAmount(txInfoList[idx].WithdrawAmount)
 		} else if txToDB.Type == 30 || txToDB.Type == 31 {
 			txToDB.Name = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
 			if value, ok := tx.RawData.Contract[0].Parameter.Value["data"]; ok && txToDB.Type == 31 {
@@ -141,7 +141,7 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 59 {
 			amount := int64(0)
 			for _, entry := range txInfoList[idx].CancelUnfreezeV2Amount {
-				amount += int64(entry.Value)
+				amount += entry.Value
 			}
 			txToDB.SetAmount(amount)
 		}

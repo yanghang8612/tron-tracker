@@ -43,11 +43,11 @@ func GetExchanges() *types.ExchangeList {
 	var exchanges = types.ExchangeList{}
 	resp, err := client.R().Get("https://apilist.tronscanapi.com/api/hot/exchanges")
 	if err != nil {
-		zap.S().Panic(err)
+		zap.S().Error(err)
 	} else {
 		err = json.Unmarshal(resp.Body(), &exchanges)
 		if err != nil {
-			zap.S().Panic(err)
+			zap.S().Error(err)
 		}
 	}
 	return &exchanges

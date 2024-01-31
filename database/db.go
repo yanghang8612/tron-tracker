@@ -47,9 +47,10 @@ func newCache() *dbCache {
 }
 
 type RawDB struct {
-	db *gorm.DB
-	el *types.ExchangeList
-	vt map[string]bool
+	db          *gorm.DB
+	el          *types.ExchangeList
+	elUpdatedAt time.Time
+	vt          map[string]bool
 
 	lastTrackedDate     string
 	lastTrackedBlockNum uint
@@ -102,9 +103,10 @@ func New(config *Config) *RawDB {
 	validTokens["_"] = true
 
 	return &RawDB{
-		db: db,
-		el: net.GetExchanges(),
-		vt: validTokens,
+		db:          db,
+		el:          net.GetExchanges(),
+		elUpdatedAt: time.Now(),
+		vt:          validTokens,
 
 		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		lastTrackedDate:     LastTrackedDateMeta.Val,
@@ -239,9 +241,7 @@ func (db *RawDB) GetCachedChargesByAddr(addr string) []string {
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
-	if block.BlockHeader.RawData.Number%100 == 0 {
-		db.updateExchanges()
-	}
+	db.updateExchanges()
 
 	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
 	if db.curDate == "" {
@@ -335,6 +335,10 @@ func (db *RawDB) Run() {
 }
 
 func (db *RawDB) updateExchanges() {
+	if time.Now().Sub(db.elUpdatedAt) < 10*time.Minute {
+		return
+	}
+
 	for i := 0; i < 3; i++ {
 		el := net.GetExchanges()
 		if len(el.Exchanges) == 0 {
@@ -343,6 +347,7 @@ func (db *RawDB) updateExchanges() {
 		}
 
 		db.el = el
+		db.elUpdatedAt = time.Now()
 	}
 }
 

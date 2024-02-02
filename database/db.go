@@ -300,22 +300,12 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 
 // SaveCharger TODO We should give the chargers a certain amount of tolerance
 func (db *RawDB) SaveCharger(from, to, token string) {
-	if from == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
-		zap.S().Infof("Found charger [%s] for exchange - [%s](%s)", from, db.el.Get(to).Name, to)
-		zap.S().Infof("%v", db.vt)
-	}
 	// Filter invalid token charger
 	if !db.vt[token] {
-		if from == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
-			zap.S().Infof("Invalid token-[%s] for charger [%s] for exchange - [%s](%s)", token, from, db.el.Get(to).Name, to)
-		}
 		return
 	}
 
 	if charger, ok := db.cache.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
-		if from == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
-			zap.S().Infof("Cache charger [%s] for exchange - [%s](%s)", from, db.el.Get(to).Name, to)
-		}
 		db.cache.chargers[from] = &models.Charger{
 			Address:         from,
 			ExchangeName:    db.el.Get(to).Name,
@@ -326,9 +316,6 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		// Check if the other address is the same exchange
 		// Otherwise, this charger is not a real charger
 		if !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
-			if from == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
-				zap.S().Infof("Mark fake charger [%s] for exchange - [%s](%s)", from, db.el.Get(to).Name, to)
-			}
 			charger.IsFake = true
 		}
 	}
@@ -414,9 +401,6 @@ func (db *RawDB) persist(cache *dbCache) {
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
 	for _, charger := range cache.chargers {
-		if charger.Address == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
-			zap.S().Infof("Save charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeName, charger.ExchangeAddress)
-		}
 		result := db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(charger)
 		// If charger is fake, should delete it from database
 		if result.RowsAffected == 0 && charger.IsFake {

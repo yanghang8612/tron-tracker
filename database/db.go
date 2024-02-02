@@ -302,13 +302,7 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 func (db *RawDB) SaveCharger(from, to, token string) {
 	if from == "TPQcBQDLHp3UHcEUBGXv7ghNJghcDJakRe" {
 		zap.S().Infof("Found charger [%s] for exchange - [%s](%s)", from, db.el.Get(to).Name, to)
-		zap.S().Infof("%s %s %s", from, to, token)
-		zap.S().Infof("%v", db.el.Exchanges)
-		zap.S().Infof("%v", db.cache.chargers[from])
-		zap.S().Infof("%v", db.el.Contains(from))
-		zap.S().Infof("%v", db.el.Get(from))
-		zap.S().Infof("%v", db.el.Contains(to))
-		zap.S().Infof("%v", db.el.Get(to))
+		zap.S().Infof("%v", db.vt)
 	}
 	// Filter invalid token charger
 	if !db.vt[token] {

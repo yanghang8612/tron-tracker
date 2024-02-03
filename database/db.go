@@ -298,7 +298,6 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 	}
 }
 
-// SaveCharger TODO We should give the chargers a certain amount of tolerance
 func (db *RawDB) SaveCharger(from, to, token string) {
 	// Filter invalid token charger
 	if !db.vt[token] {
@@ -311,11 +310,13 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 			ExchangeName:    db.el.Get(to).Name,
 			ExchangeAddress: to,
 		}
-	} else if ok {
+	} else if ok && !charger.IsFake {
 		// If charger interact with other address which is not its exchange address
-		// Check if the other address is the same exchange
+		// Check if the other address is backup address or the same exchange
 		// Otherwise, this charger is not a real charger
-		if !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
+		if len(charger.BackupAddress) == 0 {
+			charger.BackupAddress = to
+		} else if charger.BackupAddress != to && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
 			charger.IsFake = true
 		}
 	}

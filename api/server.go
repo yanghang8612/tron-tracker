@@ -113,38 +113,40 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 }
 
 func (s *Server) exchangesDailyStatistic(c *gin.Context) {
-	date, ok := c.GetQuery("date")
-	if ok {
-		resultMap := make(map[string]*models.ExchangeStatistic)
-		totalFee, totalEnergyUsage := int64(0), int64(0)
-		for _, es := range s.db.GetExchangeStatisticsByDate(date) {
-			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
-			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-			exchangeName := utils.TrimExchangeName(es.Name)
-			if _, ok := resultMap[exchangeName]; !ok {
-				resultMap[exchangeName] = &models.ExchangeStatistic{}
-				resultMap[exchangeName].Name = exchangeName
-			}
-			resultMap[exchangeName].Merge(&es)
-		}
-
-		resultArray := make([]*models.ExchangeStatistic, 0)
-		for _, es := range resultMap {
-			es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
-			resultArray = append(resultArray, es)
-		}
-
-		c.JSON(200, gin.H{
-			"exchanges_statistic": resultArray,
-			"total_fee":           totalFee,
-			"total_energy_usage":  totalEnergyUsage,
-		})
-	} else {
-		c.JSON(200, gin.H{
-			"code":  400,
-			"error": "date must be present",
-		})
+	date := prepareDateParam(c, "date")
+	if date == nil {
+		return
 	}
+
+	resultMap := make(map[string]*models.ExchangeStatistic)
+	totalFee, totalEnergyUsage := int64(0), int64(0)
+	for _, es := range s.db.GetExchangeStatisticsByDate(date.Format("060102")) {
+		totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+		totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
+		exchangeName := utils.TrimExchangeName(es.Name)
+		if _, ok := resultMap[exchangeName]; !ok {
+			resultMap[exchangeName] = &models.ExchangeStatistic{}
+			resultMap[exchangeName].Date = date.Format("060102")
+			resultMap[exchangeName].Name = exchangeName
+		}
+		resultMap[exchangeName].Merge(&es)
+	}
+
+	resultArray := make([]*models.ExchangeStatistic, 0)
+	for _, es := range resultMap {
+		es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
+		resultArray = append(resultArray, es)
+	}
+
+	sort.Slice(resultArray, func(i, j int) bool {
+		return resultArray[i].TotalFee > resultArray[j].TotalFee
+	})
+
+	c.JSON(200, gin.H{
+		"exchanges_statistic": resultArray,
+		"total_fee":           totalFee,
+		"total_energy_usage":  totalEnergyUsage,
+	})
 }
 
 func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {

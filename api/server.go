@@ -404,7 +404,7 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 			bttcEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}
 
-		for _, addr := range s.config.BTTC {
+		for _, addr := range s.config.USDTCasino {
 			usdtcasinoFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
 			usdtcasinoEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
 		}

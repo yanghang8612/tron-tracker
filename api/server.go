@@ -254,7 +254,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 		resultArray = append(resultArray, es)
 	}
 
-	sort.Slice(result, func(i, j int) bool {
+	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].FeePerDay > resultArray[j].FeePerDay
 	})
 

@@ -3,6 +3,7 @@ package utils
 import (
 	"encoding/hex"
 	"regexp"
+	"strings"
 
 	"github.com/btcsuite/btcd/btcutil/base58"
 )
@@ -16,6 +17,9 @@ func EncodeToBase58(addrInHex string) string {
 }
 
 func TrimExchangeName(name string) string {
+	if strings.Contains(name, "Bitpie") {
+		return "Bitpie"
+	}
 	return regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(name, ``)
 }
 

@@ -56,11 +56,11 @@ func New(db *database.RawDB, config *DeFiConfig) *Server {
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/total-fee-of-tronlink-users", s.totalFeeOfTronLinkUsers)
-	s.router.GET("/exchanges_daily_statistic", s.exchangesDailyStatistic)
-	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
+	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)
+	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 
@@ -80,6 +80,7 @@ func (s *Server) Stop() {
 func (s *Server) lastTrackedBlockNumber(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"last_tracked_block_number": s.db.GetLastTrackedBlockNum(),
+		"last_tracked_block_time":   time.Unix(s.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -94,13 +95,17 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 
 	zap.L().Info("Start count TronLink user fee")
 	count := 0
-	var totalFee uint64
+	var totalFee int64
 	lastMonday := now.BeginningOfWeek().Add(-1 * 24 * 6 * time.Hour)
 	for scanner.Scan() {
 		user := scanner.Text()
 		for i := 0; i < 7; i++ {
 			date := lastMonday.Add(time.Duration(i) * 24 * time.Hour).Format("060102")
-			totalFee += uint64(s.db.GetFromStatisticByDateAndUser(date, user).EnergyFee)
+			fee := s.db.GetFromStatisticByDateAndUser(date, user).Fee
+			if fee > 1_000_000_000_000 {
+				zap.S().Infof("User [%s] fee on [%s] is [%d]", user, date, fee)
+			}
+			totalFee += fee
 		}
 		count += 1
 		if count%10000 == 0 {
@@ -112,59 +117,27 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 	})
 }
 
-func (s *Server) exchangesDailyStatistic(c *gin.Context) {
-	date := prepareDateParam(c, "date")
-	if date == nil {
-		return
-	}
-
-	resultMap := make(map[string]*models.ExchangeStatistic)
-	totalFee, totalEnergyUsage := int64(0), int64(0)
-	for _, es := range s.db.GetExchangeStatisticsByDate(date.Format("060102")) {
-		totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
-		totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-		exchangeName := utils.TrimExchangeName(es.Name)
-		if _, ok := resultMap[exchangeName]; !ok {
-			resultMap[exchangeName] = &models.ExchangeStatistic{}
-			resultMap[exchangeName].Date = date.Format("060102")
-			resultMap[exchangeName].Name = exchangeName
-		}
-		resultMap[exchangeName].Merge(&es)
-	}
-
-	resultArray := make([]*models.ExchangeStatistic, 0)
-	for _, es := range resultMap {
-		es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
-		resultArray = append(resultArray, es)
-	}
-
-	sort.Slice(resultArray, func(i, j int) bool {
-		return resultArray[i].TotalFee > resultArray[j].TotalFee
-	})
-
-	c.JSON(200, gin.H{
-		"exchanges_statistic": resultArray,
-		"total_fee":           totalFee,
-		"total_energy_usage":  totalEnergyUsage,
-	})
-}
-
-func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
+func (s *Server) exchangesStatistic(c *gin.Context) {
 	startDate := prepareDateParam(c, "start_date")
 	if startDate == nil {
 		return
 	}
 
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
 	resultMap := make(map[string]*models.ExchangeStatistic)
 	totalFee, totalEnergyUsage := int64(0), int64(0)
-	for i := 0; i < 7; i++ {
+	for i := 0; i < days; i++ {
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
 			exchangeName := utils.TrimExchangeName(es.Name)
 			if _, ok := resultMap[exchangeName]; !ok {
 				resultMap[exchangeName] = &models.ExchangeStatistic{}
-				resultMap[exchangeName].Date = startDate.Format("060102") + "~" + startDate.AddDate(0, 0, 6).Format("060102")
+				resultMap[exchangeName].Date = startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
 				resultMap[exchangeName].Name = exchangeName
 			}
 			resultMap[exchangeName].Merge(&es)
@@ -249,6 +222,61 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"total_statistic": totalStatistic,
 	})
+}
+
+func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
+	startDate := prepareDateParam(c, "start_date")
+	if startDate == nil {
+		return
+	}
+
+	curWeekStats := s.getOneWeekExchangeStatistics(*startDate)
+	lastWeekStats := s.getOneWeekExchangeStatistics(startDate.AddDate(0, 0, -7))
+
+	type JsonStat struct {
+		Name               string
+		FeePerDay          int64
+		ChangeFromLastWeek string
+	}
+
+	result := make(map[string]*JsonStat)
+
+	for name, fee := range curWeekStats {
+		result[name] = &JsonStat{
+			Name:               name,
+			FeePerDay:          fee / 7_000_000,
+			ChangeFromLastWeek: utils.FormatChangePercent(lastWeekStats[name], fee),
+		}
+	}
+
+	resultArray := make([]*JsonStat, 0)
+	for _, es := range result {
+		resultArray = append(resultArray, es)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return resultArray[i].FeePerDay > resultArray[j].FeePerDay
+	})
+
+	c.JSON(200, resultArray)
+}
+
+func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]int64 {
+	resultMap := make(map[string]int64)
+	totalFee := int64(0)
+	for i := 0; i < 7; i++ {
+		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+			exchangeName := utils.TrimExchangeName(es.Name)
+			if _, ok := resultMap[exchangeName]; !ok {
+				resultMap[exchangeName] = totalFee
+			}
+			resultMap[exchangeName] += totalFee
+		}
+	}
+	resultMap["total_fee"] = totalFee
+
+	return resultMap
 }
 
 func (s *Server) tronWeeklyStatistics(c *gin.Context) {

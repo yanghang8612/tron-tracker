@@ -52,9 +52,10 @@ type RawDB struct {
 	elUpdatedAt time.Time
 	vt          map[string]bool
 
-	lastTrackedDate     string
-	lastTrackedBlockNum uint
-	isTableMigrated     map[string]bool
+	lastTrackedDate      string
+	lastTrackedBlockNum  uint
+	lastTrackedBlockTime int64
+	isTableMigrated      map[string]bool
 
 	curDate string
 	flushCh chan *dbCache
@@ -108,8 +109,8 @@ func New(config *Config) *RawDB {
 		elUpdatedAt: time.Now(),
 		vt:          validTokens,
 
-		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		lastTrackedDate:     LastTrackedDateMeta.Val,
+		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		isTableMigrated:     make(map[string]bool),
 
 		flushCh: make(chan *dbCache),
@@ -181,6 +182,10 @@ func (db *RawDB) Close() {
 
 func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
+}
+
+func (db *RawDB) GetLastTrackedBlockTime() int64 {
+	return db.lastTrackedBlockTime
 }
 
 func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserStatistic {
@@ -256,6 +261,7 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	}
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
+	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
 }
 
 func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {

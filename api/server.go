@@ -263,18 +263,14 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 
 func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]int64 {
 	resultMap := make(map[string]int64)
-	totalFee := int64(0)
 	for i := 0; i < 7; i++ {
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
-			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeName := utils.TrimExchangeName(es.Name)
-			if _, ok := resultMap[exchangeName]; !ok {
-				resultMap[exchangeName] = totalFee
-			}
-			resultMap[exchangeName] += totalFee
+			resultMap[exchangeName] += fee
+			resultMap["total_fee"] += fee
 		}
 	}
-	resultMap["total_fee"] = totalFee
 
 	return resultMap
 }
@@ -466,6 +462,8 @@ func getIntParam(c *gin.Context, name string) (int, bool) {
 			"code":  400,
 			"error": name + " must be present",
 		})
+
+		return 0, false
 	}
 
 	param, err := strconv.Atoi(paramStr)
@@ -474,7 +472,9 @@ func getIntParam(c *gin.Context, name string) (int, bool) {
 			"code":  400,
 			"error": name + " cannot cast into int",
 		})
+
+		return 0, false
 	}
 
-	return param, ok && err == nil
+	return param, true
 }

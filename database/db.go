@@ -194,6 +194,16 @@ func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserSta
 	return userStatistic
 }
 
+func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int64, int64) {
+	type result struct {
+		F int64
+		E int64
+	}
+	var res result
+	db.db.Table("from_stats_"+date).Select("sum(fee) as f, sum(energy_total) as e").Where("address IN ?", users).Limit(1).Find(&res)
+	return res.F, res.E
+}
+
 func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
 	var totalStatistic models.UserStatistic
 	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(&totalStatistic)

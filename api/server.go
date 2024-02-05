@@ -56,11 +56,11 @@ func New(db *database.RawDB, config *DeFiConfig) *Server {
 
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
-	s.router.GET("/total-fee-of-tronlink-users", s.totalFeeOfTronLinkUsers)
 	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)
+	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
 	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
@@ -82,41 +82,6 @@ func (s *Server) lastTrackedBlockNumber(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"last_tracked_block_number": s.db.GetLastTrackedBlockNum(),
 		"last_tracked_block_time":   time.Unix(s.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"),
-	})
-}
-
-func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
-	f, err := os.Open("week.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-
-	zap.L().Info("Start count TronLink user fee")
-	count := 0
-	var (
-		totalFee    int64
-		totalEnergy int64
-	)
-	lastMonday := now.BeginningOfWeek().Add(-1 * 24 * 6 * time.Hour)
-	for scanner.Scan() {
-		user := scanner.Text()
-		for i := 0; i < 7; i++ {
-			date := lastMonday.Add(time.Duration(i) * 24 * time.Hour).Format("060102")
-			userStats := s.db.GetFromStatisticByDateAndUser(date, user)
-			totalFee += userStats.Fee
-			totalEnergy += userStats.EnergyTotal
-		}
-		count += 1
-		if count%10000 == 0 {
-			zap.S().Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
-		}
-	}
-	c.JSON(200, gin.H{
-		"total_fee":    totalFee,
-		"total_energy": totalEnergy,
 	})
 }
 
@@ -224,6 +189,50 @@ func (s *Server) totalStatistics(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"total_statistic": totalStatistic,
+	})
+}
+
+func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
+	f, err := os.Open("week.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+
+	zap.L().Info("Start count TronLink user fee")
+	count := 0
+	var (
+		totalFee    int64
+		totalEnergy int64
+	)
+	lastMonday := now.BeginningOfWeek().AddDate(0, 0, -6)
+	zap.S().Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
+
+	users := make([]string, 0)
+	for scanner.Scan() {
+		user := scanner.Text()
+		users = append(users, user)
+
+		if len(users) == 100 {
+			for i := 0; i < 7; i++ {
+				date := lastMonday.AddDate(0, 0, i).Format("060102")
+				fee, energy := s.db.GetFeeAndEnergyByDateAndUsers(date, users)
+				totalFee += fee
+				totalEnergy += energy
+			}
+			users = make([]string, 0)
+		}
+
+		count += 1
+		if count%10000 == 0 {
+			zap.S().Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
+		}
+	}
+	c.JSON(200, gin.H{
+		"total_fee":    totalFee,
+		"total_energy": totalEnergy,
 	})
 }
 

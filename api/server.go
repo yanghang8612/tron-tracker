@@ -95,17 +95,18 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 
 	zap.L().Info("Start count TronLink user fee")
 	count := 0
-	var totalFee int64
+	var (
+		totalFee    int64
+		totalEnergy int64
+	)
 	lastMonday := now.BeginningOfWeek().Add(-1 * 24 * 6 * time.Hour)
 	for scanner.Scan() {
 		user := scanner.Text()
 		for i := 0; i < 7; i++ {
 			date := lastMonday.Add(time.Duration(i) * 24 * time.Hour).Format("060102")
-			fee := s.db.GetFromStatisticByDateAndUser(date, user).Fee
-			if fee > 1_000_000_000_000 {
-				zap.S().Infof("User [%s] fee on [%s] is [%d]", user, date, fee)
-			}
-			totalFee += fee
+			userStats := s.db.GetFromStatisticByDateAndUser(date, user)
+			totalFee += userStats.Fee
+			totalEnergy += userStats.EnergyTotal
 		}
 		count += 1
 		if count%10000 == 0 {
@@ -113,7 +114,8 @@ func (s *Server) totalFeeOfTronLinkUsers(c *gin.Context) {
 		}
 	}
 	c.JSON(200, gin.H{
-		"total_fee": totalFee,
+		"total_fee":    totalFee,
+		"total_energy": totalEnergy,
 	})
 }
 

@@ -376,9 +376,10 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		totalEnergy += s.db.GetTotalStatisticsByDate(date).EnergyTotal
 
 		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
-			exchangeFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
+			exchangeFee += fee
 			exchangeEnergy += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-			exchangeEnergy += exchangeFee / 420
+			exchangeEnergy += fee / 420
 		}
 
 		for _, addr := range s.config.SunSwapV1 {

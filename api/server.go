@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -343,11 +344,11 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 
 	result := make(map[string]any)
 	for k, v := range curWeekStats {
-		result[k] = humanize.Comma(v)
-		result[k+"_last_week"] = humanize.Comma(lastWeekStats[k])
-		result[k+"_change"] = utils.FormatChangePercent(lastWeekStats[k], v)
 		if strings.Contains(k, "fee") {
+			result[k] = fmt.Sprintf("%s TRX (%s)", humanize.Comma(v), utils.FormatChangePercent(lastWeekStats[k], v))
 			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee/7_000_000, v)
+		} else {
+			result[k] = fmt.Sprintf("%s (%s)", humanize.Comma(v), utils.FormatChangePercent(lastWeekStats[k], v))
 		}
 	}
 

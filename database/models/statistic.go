@@ -150,18 +150,21 @@ type ExchangeStatistic struct {
 	ChargeFee           int64
 	ChargeNetFee        int64
 	ChargeNetUsage      int64
+	ChargeEnergyTotal   int64
 	ChargeEnergyFee     int64
 	ChargeEnergyUsage   int64
 	CollectTxCount      int64
 	CollectFee          int64
 	CollectNetFee       int64
 	CollectNetUsage     int64
+	CollectEnergyTotal  int64
 	CollectEnergyFee    int64
 	CollectEnergyUsage  int64
 	WithdrawTxCount     int64
 	WithdrawFee         int64
 	WithdrawNetFee      int64
 	WithdrawNetUsage    int64
+	WithdrawEnergyTotal int64
 	WithdrawEnergyFee   int64
 	WithdrawEnergyUsage int64
 }
@@ -175,18 +178,21 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.ChargeFee += other.ChargeFee
 	o.ChargeNetFee += other.ChargeNetFee
 	o.ChargeNetUsage += other.ChargeNetUsage
+	o.ChargeEnergyTotal += other.ChargeEnergyTotal
 	o.ChargeEnergyFee += other.ChargeEnergyFee
 	o.ChargeEnergyUsage += other.ChargeEnergyUsage
 	o.CollectTxCount += other.CollectTxCount
 	o.CollectFee += other.CollectFee
 	o.CollectNetFee += other.CollectNetFee
 	o.CollectNetUsage += other.CollectNetUsage
+	o.CollectEnergyTotal += other.CollectEnergyTotal
 	o.CollectEnergyFee += other.CollectEnergyFee
 	o.CollectEnergyUsage += other.CollectEnergyUsage
 	o.WithdrawTxCount += other.WithdrawTxCount
 	o.WithdrawFee += other.WithdrawFee
 	o.WithdrawNetFee += other.WithdrawNetFee
 	o.WithdrawNetUsage += other.WithdrawNetUsage
+	o.WithdrawEnergyTotal += other.WithdrawEnergyTotal
 	o.WithdrawEnergyFee += other.WithdrawEnergyFee
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
 }

@@ -448,6 +448,7 @@ func (db *RawDB) persist(cache *dbCache) {
 			exchangeStats[exchange.Address].CollectFee += collectStat.Fee
 			exchangeStats[exchange.Address].CollectNetFee += collectStat.NetFee
 			exchangeStats[exchange.Address].CollectNetUsage += collectStat.NetUsage
+			exchangeStats[exchange.Address].CollectEnergyTotal += collectStat.EnergyTotal
 			exchangeStats[exchange.Address].CollectEnergyFee += collectStat.EnergyFee
 			exchangeStats[exchange.Address].CollectEnergyUsage += collectStat.EnergyUsage + collectStat.EnergyOriginUsage
 		}
@@ -458,6 +459,7 @@ func (db *RawDB) persist(cache *dbCache) {
 			exchangeStats[exchange.Address].WithdrawFee += withdrawStat.Fee
 			exchangeStats[exchange.Address].WithdrawNetFee += withdrawStat.NetFee
 			exchangeStats[exchange.Address].WithdrawNetUsage += withdrawStat.NetUsage
+			exchangeStats[exchange.Address].WithdrawEnergyTotal += withdrawStat.EnergyTotal
 			exchangeStats[exchange.Address].WithdrawEnergyFee += withdrawStat.EnergyFee
 			exchangeStats[exchange.Address].WithdrawEnergyUsage += withdrawStat.EnergyUsage + withdrawStat.EnergyOriginUsage
 		}
@@ -487,6 +489,7 @@ func (db *RawDB) persist(cache *dbCache) {
 			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
 			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee
 			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += toStat.NetUsage
+			exchangeStats[charger.ExchangeAddress].ChargeEnergyTotal += toStat.EnergyTotal
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += toStat.EnergyFee
 			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += toStat.EnergyUsage + toStat.EnergyOriginUsage
 		}

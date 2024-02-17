@@ -56,6 +56,7 @@ type RawDB struct {
 	lastTrackedBlockNum  uint
 	lastTrackedBlockTime int64
 	isTableMigrated      map[string]bool
+	tableLock            sync.Mutex
 
 	curDate string
 	flushCh chan *dbCache
@@ -503,6 +504,9 @@ func (db *RawDB) persist(cache *dbCache) {
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
+	db.tableLock.Lock()
+	defer db.tableLock.Unlock()
+
 	if ok, _ := db.isTableMigrated[tableName]; !ok {
 		err := db.db.Table(tableName).AutoMigrate(&model)
 		if err != nil {

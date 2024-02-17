@@ -246,9 +246,9 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 	lastWeekStats := s.getOneWeekExchangeStatistics(startDate.AddDate(0, 0, -7))
 
 	type JsonStat struct {
-		Name               string
-		FeePerDay          int64
-		ChangeFromLastWeek string
+		Name               string `json:"name"`
+		FeePerDay          int64  `json:"fee_per_day"`
+		ChangeFromLastWeek string `json:"change_from_last_week"`
 	}
 
 	result := make(map[string]*JsonStat)

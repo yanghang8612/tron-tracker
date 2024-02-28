@@ -36,6 +36,8 @@ type Server struct {
 
 	db     *database.RawDB
 	config *DeFiConfig
+
+	logger *zap.SugaredLogger
 }
 
 func New(db *database.RawDB, config *DeFiConfig) *Server {
@@ -51,6 +53,8 @@ func New(db *database.RawDB, config *DeFiConfig) *Server {
 
 		db:     db,
 		config: config,
+
+		logger: zap.S().Named("[api]"),
 	}
 }
 
@@ -201,14 +205,14 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 
 	scanner := bufio.NewScanner(f)
 
-	zap.L().Info("Start count TronLink user fee")
+	s.logger.Info("Start count TronLink user fee")
 	count := 0
 	var (
 		totalFee    int64
 		totalEnergy int64
 	)
 	lastMonday := now.BeginningOfWeek().AddDate(0, 0, -6)
-	zap.S().Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
+	s.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
 
 	users := make([]string, 0)
 	for scanner.Scan() {
@@ -227,7 +231,7 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 
 		count += 1
 		if count%10000 == 0 {
-			zap.S().Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
+			s.logger.Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
 		}
 	}
 	c.JSON(200, gin.H{

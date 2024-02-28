@@ -19,6 +19,8 @@ type Tracker struct {
 	reporter *utils.Reporter
 	loopWG   sync.WaitGroup
 	quitCh   chan struct{}
+
+	logger *zap.SugaredLogger
 }
 
 func New(db *database.RawDB) *Tracker {
@@ -27,6 +29,8 @@ func New(db *database.RawDB) *Tracker {
 
 		reporter: utils.NewReporter(1000, 60*time.Second, "Tracker report, tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]"),
 		quitCh:   make(chan struct{}),
+
+		logger: zap.S().Named("[tracker]"),
 	}
 }
 
@@ -36,7 +40,7 @@ func (t *Tracker) Start() {
 	t.loopWG.Add(1)
 	go t.loop()
 
-	zap.L().Info("Tracker started")
+	t.logger.Info("Tracker started")
 }
 
 func (t *Tracker) Stop() {
@@ -48,9 +52,9 @@ func (t *Tracker) loop() {
 	for {
 		select {
 		case <-t.quitCh:
-			zap.L().Info("Tracker quit, start closing rawdb")
+			t.logger.Info("Tracker quit, start closing rawdb")
 			t.db.Close()
-			zap.L().Info("Tracker quit, rawdb closed")
+			t.logger.Info("Tracker quit, rawdb closed")
 			t.loopWG.Done()
 			return
 		default:
@@ -69,7 +73,7 @@ func (t *Tracker) doTrackBlock() {
 	}
 
 	if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
-		zap.L().Info(reportContent)
+		t.logger.Info(reportContent)
 	}
 
 	txInfoList, _ := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)
@@ -98,7 +102,7 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.SetAmount(amount)
 			// The TRX charger should charge at least 50TRX
 			if amount > 50_000_000 {
-				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
+				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name, txToDB.Hash)
 			}
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
@@ -131,7 +135,7 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 55 {
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["unfreeze_balance"].(float64)))
 		} else if txToDB.Type == 56 {
-			txToDB.SetAmount(int64(txInfoList[idx].WithdrawExpireAmount))
+			txToDB.SetAmount(txInfoList[idx].WithdrawExpireAmount)
 		} else if txToDB.Type == 57 {
 			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
@@ -165,7 +169,7 @@ func (t *Tracker) doTrackBlock() {
 
 				// Filter zero value charger
 				if txToDB.FromAddr == transferToDB.FromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
-					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr, transferToDB.Token)
+					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr, transferToDB.Token, txToDB.Hash)
 				}
 			}
 		}

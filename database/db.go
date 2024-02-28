@@ -64,6 +64,8 @@ type RawDB struct {
 
 	loopWG sync.WaitGroup
 	quitCh chan struct{}
+
+	logger *zap.SugaredLogger
 }
 
 func New(config *Config) *RawDB {
@@ -75,8 +77,6 @@ func New(config *Config) *RawDB {
 	if dbErr != nil {
 		panic(dbErr)
 	}
-
-	loadChargers(db)
 
 	dbErr = db.AutoMigrate(&models.ExchangeStatistic{})
 	if dbErr != nil {
@@ -104,7 +104,7 @@ func New(config *Config) *RawDB {
 	// TRX token symbol is "_"
 	validTokens["_"] = true
 
-	return &RawDB{
+	rawDB := &RawDB{
 		db:          db,
 		el:          net.GetExchanges(),
 		elUpdatedAt: time.Now(),
@@ -118,29 +118,34 @@ func New(config *Config) *RawDB {
 		cache:   newCache(),
 
 		quitCh: make(chan struct{}),
+		logger: zap.S().Named("[db]"),
 	}
+
+	rawDB.loadChargers()
+
+	return rawDB
 }
 
-func loadChargers(db *gorm.DB) {
-	if db.Migrator().HasTable(&models.Charger{}) {
+func (db *RawDB) loadChargers() {
+	if db.db.Migrator().HasTable(&models.Charger{}) {
 		return
 	}
 
-	dbErr := db.AutoMigrate(&models.Charger{})
+	dbErr := db.db.AutoMigrate(&models.Charger{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
 
 	f, err := os.Open("all")
 	if err != nil {
-		zap.S().Errorf("Load charger file error: [%s]", err.Error())
+		db.logger.Errorf("Load charger file error: [%s]", err.Error())
 		return
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 
-	zap.L().Info("Start loading charge")
+	db.logger.Info("Start loading charge")
 	count := 0
 	var chargeToSave []*models.Charger
 	for scanner.Scan() {
@@ -152,16 +157,16 @@ func loadChargers(db *gorm.DB) {
 			ExchangeAddress: cols[2],
 		})
 		if len(chargeToSave) == 1000 {
-			db.Create(&chargeToSave)
+			db.db.Create(&chargeToSave)
 			chargeToSave = make([]*models.Charger, 0)
 		}
 		count++
 		if count%1000000 == 0 {
-			zap.S().Infof("Loaded [%d] charge", count)
+			db.logger.Infof("Loaded [%d] charge", count)
 		}
 	}
-	db.Create(&chargeToSave)
-	zap.L().Info("Complete loading charge")
+	db.db.Create(&chargeToSave)
+	db.logger.Info("Complete loading charge")
 
 	if err := scanner.Err(); err != nil {
 		log.Fatal(err)
@@ -315,7 +320,7 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 	}
 }
 
-func (db *RawDB) SaveCharger(from, to, token string) {
+func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 	// Filter invalid token charger
 	if !db.vt[token] {
 		return
@@ -334,6 +339,7 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		if len(charger.BackupAddress) == 0 {
 			charger.BackupAddress = to
 		} else if charger.BackupAddress != to && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
+			db.logger.Infof("Set charger [%s] as fake charger caused by tx - [%s]", from, txHash)
 			charger.IsFake = true
 		}
 	}
@@ -343,7 +349,7 @@ func (db *RawDB) Run() {
 	for {
 		select {
 		case <-db.quitCh:
-			zap.L().Info("rawdb closed")
+			db.logger.Info("rawdb closed")
 			db.loopWG.Done()
 			return
 		case cache := <-db.flushCh:
@@ -360,7 +366,7 @@ func (db *RawDB) updateExchanges() {
 	for i := 0; i < 3; i++ {
 		el := net.GetExchanges()
 		if len(el.Exchanges) == 0 {
-			zap.S().Info("No exchange found, retry %d times", i+1)
+			db.logger.Info("No exchange found, retry %d times", i+1)
 			continue
 		}
 
@@ -374,7 +380,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		return
 	}
 
-	zap.S().Infof("Start persisting cache for date [%s]", cache.date)
+	db.logger.Infof("Start persisting cache for date [%s]", cache.date)
 
 	fromDBName := "from_stats_" + cache.date
 	db.createTableIfNotExist(fromDBName, models.UserStatistic{})
@@ -389,12 +395,12 @@ func (db *RawDB) persist(cache *dbCache) {
 			statsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			zap.L().Info(reportContent)
+			db.logger.Info(reportContent)
 		}
 	}
 	db.db.Table(fromDBName).Create(&statsToPersist)
 
-	zap.S().Info(reporter.Finish("Complete saving from statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Complete saving from statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	toDBName := "to_stats_" + cache.date
 	db.createTableIfNotExist(toDBName, models.UserStatistic{})
@@ -409,12 +415,12 @@ func (db *RawDB) persist(cache *dbCache) {
 			statsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			zap.L().Info(reportContent)
+			db.logger.Info(reportContent)
 		}
 	}
 	db.db.Table(toDBName).Create(&statsToPersist)
 
-	zap.S().Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
 
@@ -423,17 +429,17 @@ func (db *RawDB) persist(cache *dbCache) {
 		// If charger is fake, should delete it from database
 		if result.RowsAffected == 0 && charger.IsFake {
 			db.db.Delete(charger)
-			zap.S().Infof("Delete existed fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
+			db.logger.Infof("Delete existed fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
 		}
 
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			zap.L().Info(reportContent)
+			db.logger.Info(reportContent)
 		}
 	}
 
-	zap.S().Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	zap.S().Info("Start updating exchange statistic")
+	db.logger.Info("Start updating exchange statistic")
 
 	exchangeStats := make(map[string]*models.ExchangeStatistic)
 	for _, exchange := range db.el.Exchanges {
@@ -469,7 +475,7 @@ func (db *RawDB) persist(cache *dbCache) {
 	for _, toStat := range cache.toStats {
 		charger, ok := cache.chargers[toStat.Address]
 		if ok && charger.IsFake {
-			zap.S().Infof("Skip fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
+			db.logger.Infof("Skip fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
 			continue
 		}
 
@@ -482,7 +488,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		if ok {
 			if db.el.Contains(charger.Address) {
 				db.db.Delete(charger)
-				zap.S().Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)", charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
+				db.logger.Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)", charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
 				continue
 			}
 
@@ -500,7 +506,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		db.db.Create(statistic)
 	}
 
-	zap.S().Info("Complete updating exchange statistic")
+	db.logger.Info("Complete updating exchange statistic")
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {

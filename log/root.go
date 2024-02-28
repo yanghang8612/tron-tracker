@@ -46,6 +46,7 @@ func getEncoder() zapcore.Encoder {
 			EncodeTime:     cEncodeTime,
 			EncodeDuration: zapcore.SecondsDurationEncoder,
 			// EncodeCaller:   cEncodeCaller,
+			ConsoleSeparator: " ",
 		})
 }
 
@@ -86,7 +87,7 @@ func getLevelEnabler() zapcore.Level {
 
 // cEncodeLevel 自定义日志级别显示
 func cEncodeLevel(level zapcore.Level, enc zapcore.PrimitiveArrayEncoder) {
-	enc.AppendString("[" + level.CapitalString() + "]")
+	enc.AppendString(level.CapitalString())
 }
 
 // cEncodeTime 自定义时间格式显示

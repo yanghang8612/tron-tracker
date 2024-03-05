@@ -422,14 +422,19 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charge in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charger in [%.2fs], speed [%.2frecords/sec]")
 
 	for _, charger := range cache.chargers {
-		result := db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(charger)
-		// If charger is fake, should delete it from database
-		if result.RowsAffected == 0 && charger.IsFake {
-			db.db.Delete(charger)
-			db.logger.Infof("Delete existed fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
+		if charger.IsFake {
+			charger = &models.Charger{}
+			result := db.db.Where("address = ?", charger.Address).First(charger)
+			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				// If charger is fake, should delete it from database
+				db.db.Delete(charger)
+				db.logger.Infof("Delete existed fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
+			}
+		} else {
+			db.db.Where(models.Charger{Address: charger.Address}).FirstOrCreate(charger)
 		}
 
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
@@ -437,7 +442,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		}
 	}
 
-	db.logger.Info(reporter.Finish("Complete saving charge for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Complete saving charger for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
 	db.logger.Info("Start updating exchange statistic")
 

@@ -140,6 +140,65 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	}
 }
 
+type TokenStatistic struct {
+	ID                uint   `gorm:"primaryKey"`
+	Address           string `gorm:"size:34;uniqueIndex"`
+	Fee               int64
+	EnergyTotal       int64
+	EnergyFee         int64
+	EnergyUsage       int64
+	EnergyOriginUsage int64
+	NetUsage          int64
+	NetFee            int64
+	TXTotal           int64
+}
+
+func NewTokenStatistic(address string, tx *Transaction) *TokenStatistic {
+	var stats = &TokenStatistic{
+		Address:           address,
+		Fee:               tx.Fee,
+		EnergyTotal:       tx.EnergyTotal,
+		EnergyFee:         tx.EnergyFee,
+		EnergyUsage:       tx.EnergyUsage,
+		EnergyOriginUsage: tx.EnergyOriginUsage,
+		NetUsage:          tx.NetUsage,
+		NetFee:            tx.NetFee,
+		TXTotal:           1,
+	}
+
+	return stats
+}
+
+func (o *TokenStatistic) Merge(other *TokenStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.Fee += other.Fee
+	o.EnergyTotal += other.EnergyTotal
+	o.EnergyFee += other.EnergyFee
+	o.EnergyUsage += other.EnergyUsage
+	o.EnergyOriginUsage += other.EnergyOriginUsage
+	o.NetUsage += other.NetUsage
+	o.NetFee += other.NetFee
+	o.TXTotal += other.TXTotal
+}
+
+func (o *TokenStatistic) Add(tx *Transaction) {
+	if tx == nil {
+		return
+	}
+
+	o.Fee += tx.Fee
+	o.EnergyTotal += tx.EnergyTotal
+	o.EnergyFee += tx.EnergyFee
+	o.EnergyUsage += tx.EnergyUsage
+	o.EnergyOriginUsage += tx.EnergyOriginUsage
+	o.NetUsage += tx.NetUsage
+	o.NetFee += tx.NetFee
+	o.TXTotal++
+}
+
 type ExchangeStatistic struct {
 	ID                  uint   `gorm:"primaryKey" json:"-"`
 	Date                string `gorm:"index;size:6"`

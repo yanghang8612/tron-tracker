@@ -5,6 +5,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/robfig/cron/v3"
 	"tron-tracker/api"
 	"tron-tracker/database"
 	"tron-tracker/log"
@@ -25,6 +26,10 @@ func main() {
 	log.Init(&cfg.Log)
 
 	db := database.New(&cfg.DB)
+
+	cron := cron.New()
+	_, _ = cron.AddFunc("0 */10 8-24 * * 1", db.DoTronLinkWeeklyStatistics)
+	cron.Start()
 
 	tracker := New(db)
 	tracker.Start()

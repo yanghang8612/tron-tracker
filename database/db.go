@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -32,17 +33,19 @@ type Config struct {
 }
 
 type dbCache struct {
-	date      string
-	fromStats map[string]*models.UserStatistic
-	toStats   map[string]*models.UserStatistic
-	chargers  map[string]*models.Charger
+	date       string
+	fromStats  map[string]*models.UserStatistic
+	toStats    map[string]*models.UserStatistic
+	tokenStats map[string]*models.TokenStatistic
+	chargers   map[string]*models.Charger
 }
 
 func newCache() *dbCache {
 	return &dbCache{
-		fromStats: make(map[string]*models.UserStatistic),
-		toStats:   make(map[string]*models.UserStatistic),
-		chargers:  make(map[string]*models.Charger),
+		fromStats:  make(map[string]*models.UserStatistic),
+		toStats:    make(map[string]*models.UserStatistic),
+		tokenStats: make(map[string]*models.TokenStatistic),
+		chargers:   make(map[string]*models.Charger),
 	}
 }
 
@@ -57,6 +60,7 @@ type RawDB struct {
 	lastTrackedBlockTime int64
 	isTableMigrated      map[string]bool
 	tableLock            sync.Mutex
+	statsLock            sync.Mutex
 
 	curDate string
 	flushCh chan *dbCache
@@ -305,7 +309,7 @@ func (db *RawDB) UpdateUserStatistic(tx *models.Transaction) {
 	db.updateUserStatistic("total", tx, db.cache.fromStats)
 
 	if len(tx.Name) > 0 && tx.Name != "_" {
-		db.updateUserStatistic(tx.Name, tx, db.cache.fromStats)
+		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
 	}
 
 	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
@@ -317,6 +321,14 @@ func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats 
 		stat.Add(tx)
 	} else {
 		stats[user] = models.NewUserStatistic(user, tx)
+	}
+}
+
+func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats map[string]*models.TokenStatistic) {
+	if stat, ok := stats[name]; ok {
+		stat.Add(tx)
+	} else {
+		stats[name] = models.NewTokenStatistic(name, tx)
 	}
 }
 
@@ -343,6 +355,67 @@ func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 			charger.IsFake = true
 		}
 	}
+}
+
+func (db *RawDB) DoTronLinkWeeklyStatistics() {
+	db.statsLock.Lock()
+	defer db.statsLock.Unlock()
+
+	thisMonday := now.BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+
+	statsResultFilePath := fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday)
+	if _, err := os.Stat(statsResultFilePath); err == nil {
+		return
+	}
+
+	statsResultFile, err := os.Create(statsResultFilePath)
+	if err != nil {
+		db.logger.Errorf("Create stats file error: [%s]", err.Error())
+		return
+	}
+	defer statsResultFile.Close()
+
+	weeklyUsersFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
+	if err != nil {
+		db.logger.Info("Weekly file has`t been created yet")
+		return
+	}
+	defer weeklyUsersFile.Close()
+
+	scanner := bufio.NewScanner(weeklyUsersFile)
+
+	db.logger.Info("Start count TronLink user fee")
+	count := 0
+	var (
+		totalFee    int64
+		totalEnergy int64
+	)
+	lastMonday := now.BeginningOfWeek().AddDate(0, 0, -6)
+	db.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
+
+	users := make([]string, 0)
+	for scanner.Scan() {
+		user := scanner.Text()
+		users = append(users, user)
+
+		if len(users) == 100 {
+			for i := 0; i < 7; i++ {
+				date := lastMonday.AddDate(0, 0, i).Format("060102")
+				fee, energy := db.GetFeeAndEnergyByDateAndUsers(date, users)
+				totalFee += fee
+				totalEnergy += energy
+			}
+			users = make([]string, 0)
+		}
+
+		count += 1
+		if count%10000 == 0 {
+			db.logger.Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
+		}
+	}
+
+	statsResultFile.WriteString(strconv.FormatInt(totalFee, 10))
+	statsResultFile.WriteString(strconv.FormatInt(totalEnergy, 10))
 }
 
 func (db *RawDB) Run() {
@@ -382,43 +455,63 @@ func (db *RawDB) persist(cache *dbCache) {
 
 	db.logger.Infof("Start persisting cache for date [%s]", cache.date)
 
-	fromDBName := "from_stats_" + cache.date
-	db.createTableIfNotExist(fromDBName, models.UserStatistic{})
+	fromStatsDBName := "from_stats_" + cache.date
+	db.createTableIfNotExist(fromStatsDBName, models.UserStatistic{})
 
 	reporter := utils.NewReporter(0, 60*time.Second, "Saved [%d] from statistic in [%.2fs], speed [%.2frecords/sec]")
 
-	statsToPersist := make([]*models.UserStatistic, 0)
+	fromStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
-		statsToPersist = append(statsToPersist, stats)
-		if len(statsToPersist) == 200 {
-			db.db.Table(fromDBName).Create(&statsToPersist)
-			statsToPersist = make([]*models.UserStatistic, 0)
+		fromStatsToPersist = append(fromStatsToPersist, stats)
+		if len(fromStatsToPersist) == 200 {
+			db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
+			fromStatsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			db.logger.Info(reportContent)
 		}
 	}
-	db.db.Table(fromDBName).Create(&statsToPersist)
+	db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
 
 	db.logger.Info(reporter.Finish("Complete saving from statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 
-	toDBName := "to_stats_" + cache.date
-	db.createTableIfNotExist(toDBName, models.UserStatistic{})
+	toStatsDBName := "to_stats_" + cache.date
+	db.createTableIfNotExist(toStatsDBName, models.UserStatistic{})
 
 	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
 
-	statsToPersist = make([]*models.UserStatistic, 0)
+	toStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.toStats {
-		statsToPersist = append(statsToPersist, stats)
-		if len(statsToPersist) == 200 {
-			db.db.Table(toDBName).Create(&statsToPersist)
-			statsToPersist = make([]*models.UserStatistic, 0)
+		toStatsToPersist = append(toStatsToPersist, stats)
+		if len(toStatsToPersist) == 200 {
+			db.db.Table(toStatsDBName).Create(&toStatsToPersist)
+			toStatsToPersist = make([]*models.UserStatistic, 0)
 		}
 		if shouldReport, reportContent := reporter.Add(1); shouldReport {
 			db.logger.Info(reportContent)
 		}
 	}
-	db.db.Table(toDBName).Create(&statsToPersist)
+	db.db.Table(toStatsDBName).Create(&toStatsToPersist)
+
+	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+
+	tokenStatsDBName := "token_stats_" + cache.date
+	db.createTableIfNotExist(tokenStatsDBName, models.TokenStatistic{})
+
+	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] token statistic in [%.2fs], speed [%.2frecords/sec]")
+
+	tokenStatsToPersist := make([]*models.TokenStatistic, 0)
+	for _, stats := range cache.tokenStats {
+		tokenStatsToPersist = append(tokenStatsToPersist, stats)
+		if len(tokenStatsToPersist) == 200 {
+			db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
+			tokenStatsToPersist = make([]*models.TokenStatistic, 0)
+		}
+		if shouldReport, reportContent := reporter.Add(1); shouldReport {
+			db.logger.Info(reportContent)
+		}
+	}
+	db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
 
 	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
 

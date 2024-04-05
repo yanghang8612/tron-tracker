@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"sort"
@@ -197,46 +196,36 @@ func (s *Server) totalStatistics(c *gin.Context) {
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
-	f, err := os.Open("week.txt")
+	thisMonday := now.BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+
+	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
 	if err != nil {
-		log.Fatal(err)
+		c.JSON(200, gin.H{
+			"code":    500,
+			"message": "week stats file not found",
+		})
+		return
 	}
-	defer f.Close()
+	defer statsResultFile.Close()
 
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(statsResultFile)
 
-	s.logger.Info("Start count TronLink user fee")
-	count := 0
-	var (
-		totalFee    int64
-		totalEnergy int64
-	)
-	lastMonday := now.BeginningOfWeek().AddDate(0, 0, -6)
-	s.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
-
-	users := make([]string, 0)
+	nums := make([]int, 0)
 	for scanner.Scan() {
-		user := scanner.Text()
-		users = append(users, user)
-
-		if len(users) == 100 {
-			for i := 0; i < 7; i++ {
-				date := lastMonday.AddDate(0, 0, i).Format("060102")
-				fee, energy := s.db.GetFeeAndEnergyByDateAndUsers(date, users)
-				totalFee += fee
-				totalEnergy += energy
-			}
-			users = make([]string, 0)
+		num, err := strconv.Atoi(scanner.Text())
+		if err != nil {
+			c.JSON(200, gin.H{
+				"code":    500,
+				"message": "week stats file cannot be parsed",
+			})
+			return
 		}
 
-		count += 1
-		if count%10000 == 0 {
-			s.logger.Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
-		}
+		nums = append(nums, num)
 	}
 	c.JSON(200, gin.H{
-		"total_fee":    totalFee,
-		"total_energy": totalEnergy,
+		"total_fee":    nums[0],
+		"total_energy": nums[1],
 	})
 }
 

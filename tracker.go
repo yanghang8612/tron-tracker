@@ -76,7 +76,14 @@ func (t *Tracker) doTrackBlock() {
 		t.logger.Info(reportContent)
 	}
 
-	txInfoList, _ := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)
+	txInfoList, err := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)
+	// This happens when fetching the block from FullNode succeeds,
+	// but fetching the info of the transactions in the block fails.
+	if err != nil {
+		t.logger.Error(err)
+		return
+	}
+
 	transactions := make([]*models.Transaction, 0)
 	transfers := make([]*models.TRC20Transfer, 0)
 	t.db.SetLastTrackedBlock(block)

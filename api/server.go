@@ -61,7 +61,6 @@ func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
-	s.router.GET("/cached_charges", s.cachedCharges)
 	s.router.GET("/total_statistics", s.totalStatistics)
 	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
 	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
@@ -159,20 +158,6 @@ func (s *Server) specialStatistic(c *gin.Context) {
 	}
 }
 
-func (s *Server) cachedCharges(c *gin.Context) {
-	addr, ok := c.GetQuery("addr")
-	if ok {
-		c.JSON(200, gin.H{
-			"cached_charges": s.db.GetCachedChargesByAddr(addr),
-		})
-	} else {
-		c.JSON(200, gin.H{
-			"code":  400,
-			"error": "addr must be present",
-		})
-	}
-}
-
 func (s *Server) totalStatistics(c *gin.Context) {
 	startDate := prepareDateParam(c, "start_date")
 	if startDate == nil {
@@ -198,7 +183,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 	thisMonday := now.BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
-	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
+	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday))
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":    500,
@@ -292,9 +277,9 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 		curWeekTotalStatistic.Merge(&dayStatistic)
 	}
 
-	curWeekUSDTStatistic := &models.UserStatistic{}
+	curWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 0; i < 7; i++ {
-		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		dayStatistic := s.db.GetTokenStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 		curWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 
@@ -304,9 +289,9 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 		lastWeekTotalStatistic.Merge(&dayStatistic)
 	}
 
-	lastWeekUSDTStatistic := &models.UserStatistic{}
+	lastWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 1; i <= 7; i++ {
-		dayStatistic := s.db.GetFromStatisticByDateAndUser(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		dayStatistic := s.db.GetTokenStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 		lastWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 
@@ -388,28 +373,33 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		}
 
 		for _, addr := range s.config.SunSwapV1 {
-			sunswapV1Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
-			sunswapV1Energy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
+			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			sunswapV1Fee += tokenStats.Fee
+			sunswapV1Energy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.config.SunSwapV2 {
-			sunswapV2Fee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
-			sunswapV2Energy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
+			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			sunswapV2Fee += tokenStats.Fee
+			sunswapV2Energy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.config.JustLend {
-			justlendFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
-			justlendEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
+			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			justlendFee += tokenStats.Fee
+			justlendEnergy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.config.BTTC {
-			bttcFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
-			bttcEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
+			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			bttcFee += tokenStats.Fee
+			bttcEnergy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.config.USDTCasino {
-			usdtcasinoFee += s.db.GetFromStatisticByDateAndUser(date, addr).Fee
-			usdtcasinoEnergy += s.db.GetFromStatisticByDateAndUser(date, addr).EnergyTotal
+			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			usdtcasinoFee += tokenStats.Fee
+			usdtcasinoEnergy += tokenStats.EnergyTotal
 		}
 	}
 
@@ -441,7 +431,7 @@ func prepareDateParam(c *gin.Context, name string) *time.Time {
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":  400,
-			"error": "start_date cannot be parsed",
+			"error": name + " cannot be parsed",
 		})
 		return nil
 	}

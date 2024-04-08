@@ -1,7 +1,7 @@
 package models
 
 type UserStatistic struct {
-	ID                uint   `gorm:"primaryKey"`
+	ID                uint   `gorm:"primaryKey" json:"-"`
 	Address           string `gorm:"size:34;uniqueIndex"`
 	Fee               int64
 	EnergyTotal       int64
@@ -141,7 +141,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type TokenStatistic struct {
-	ID                uint   `gorm:"primaryKey"`
+	ID                uint   `gorm:"primaryKey" json:"-"`
 	Address           string `gorm:"size:34;uniqueIndex"`
 	Fee               int64
 	EnergyTotal       int64

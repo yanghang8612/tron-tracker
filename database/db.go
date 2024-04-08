@@ -220,6 +220,12 @@ func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
 	return totalStatistic
 }
 
+func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatistic {
+	var tokenStatistic models.TokenStatistic
+	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStatistic)
+	return tokenStatistic
+}
+
 func (db *RawDB) GetExchangeStatisticsByDate(date string) []models.ExchangeStatistic {
 	var exchangeStatistic []models.ExchangeStatistic
 	db.db.Where("date = ?", date).Find(&exchangeStatistic)

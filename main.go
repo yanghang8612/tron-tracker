@@ -27,9 +27,9 @@ func main() {
 
 	db := database.New(&cfg.DB)
 
-	cron := cron.New()
-	_, _ = cron.AddFunc("0 */10 0-12 * * 1", db.DoTronLinkWeeklyStatistics)
-	cron.Start()
+	c := cron.New(cron.WithSeconds())
+	_, _ = c.AddFunc("0 */5 0-12 * * 1", db.DoTronLinkWeeklyStatistics)
+	c.Start()
 
 	tracker := New(db)
 	tracker.Start()

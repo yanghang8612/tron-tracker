@@ -375,18 +375,20 @@ func (db *RawDB) DoTronLinkWeeklyStatistics() {
 	}
 
 	statsResultFile, err := os.Create(statsResultFilePath)
+	defer statsResultFile.Close()
+
 	if err != nil {
 		db.logger.Errorf("Create stats file error: [%s]", err.Error())
 		return
 	}
-	defer statsResultFile.Close()
 
 	weeklyUsersFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
+	defer weeklyUsersFile.Close()
+
 	if err != nil {
 		db.logger.Info("Weekly file has`t been created yet")
 		return
 	}
-	defer weeklyUsersFile.Close()
 
 	scanner := bufio.NewScanner(weeklyUsersFile)
 
@@ -402,6 +404,12 @@ func (db *RawDB) DoTronLinkWeeklyStatistics() {
 	users := make([]string, 0)
 	for scanner.Scan() {
 		user := scanner.Text()
+
+		// If user is exchange address, skip it
+		if db.el.Contains(user) {
+			continue
+		}
+
 		users = append(users, user)
 
 		if len(users) == 100 {
@@ -420,7 +428,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics() {
 		}
 	}
 
-	statsResultFile.WriteString(strconv.FormatInt(totalFee, 10))
+	statsResultFile.WriteString(strconv.FormatInt(totalFee, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(totalEnergy, 10))
 }
 

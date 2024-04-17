@@ -398,7 +398,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		totalFee    int64
 		totalEnergy int64
 	)
-	lastMonday := now.BeginningOfWeek().AddDate(0, 0, -6)
+	lastMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, -6)
 	db.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
 
 	users := make([]string, 0)

@@ -190,7 +190,9 @@ func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
-	thisMonday := now.BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+	date := prepareDateParam(c, "date")
+
+	thisMonday := now.With(*date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
 	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday))
 	if err != nil {

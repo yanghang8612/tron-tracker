@@ -363,14 +363,14 @@ func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 	}
 }
 
-func (db *RawDB) DoTronLinkWeeklyStatistics() {
+func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	db.statsLock.Lock()
 	defer db.statsLock.Unlock()
 
-	thisMonday := now.BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
 	statsResultFilePath := fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday)
-	if _, err := os.Stat(statsResultFilePath); err == nil {
+	if _, err := os.Stat(statsResultFilePath); err == nil && !override {
 		return
 	}
 
@@ -392,7 +392,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics() {
 
 	scanner := bufio.NewScanner(weeklyUsersFile)
 
-	db.logger.Info("Start count TronLink user fee")
+	db.logger.Info("Start count TronLink user fee for week " + thisMonday)
 	count := 0
 	var (
 		totalFee    int64

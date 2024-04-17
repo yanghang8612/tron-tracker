@@ -62,6 +62,7 @@ func (s *Server) Start() {
 	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
 	s.router.GET("/special_statistic", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
+	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
 	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
 	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
@@ -178,6 +179,14 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"total_statistic": totalStatistic,
 	})
+}
+
+func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
+	date := prepareDateParam(c, "date")
+
+	go func() {
+		s.db.DoTronLinkWeeklyStatistics(*date, true)
+	}()
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {

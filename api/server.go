@@ -182,11 +182,11 @@ func (s *Server) totalStatistics(c *gin.Context) {
 }
 
 func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
-	date := prepareDateParam(c, "date")
-
-	go func() {
-		s.db.DoTronLinkWeeklyStatistics(*date, true)
-	}()
+	if date := prepareDateParam(c, "date"); date != nil {
+		go func() {
+			s.db.DoTronLinkWeeklyStatistics(*date, true)
+		}()
+	}
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {

@@ -144,10 +144,10 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 56 {
 			txToDB.SetAmount(txInfoList[idx].WithdrawExpireAmount)
 		} else if txToDB.Type == 57 {
-			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 58 {
-			txToDB.ToAddr = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
+			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 59 {
 			amount := int64(0)

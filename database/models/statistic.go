@@ -86,9 +86,12 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.NetFee += other.NetFee
 	o.TXTotal += other.TXTotal
 	o.TRXTotal += other.TRXTotal
+	o.SmallTRXTotal += other.SmallTRXTotal
 	o.TRC10Total += other.TRC10Total
+	o.TRC20Total += other.TRC20Total
 	o.SCTotal += other.SCTotal
 	o.USDTTotal += other.USDTTotal
+	o.SmallUSDTTotal += other.SmallUSDTTotal
 	o.StakeTotal += other.StakeTotal
 	o.DelegateTotal += other.DelegateTotal
 	o.VoteTotal += other.VoteTotal
@@ -233,6 +236,7 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 		return
 	}
 
+	o.TotalFee += other.TotalFee
 	o.ChargeTxCount += other.ChargeTxCount
 	o.ChargeFee += other.ChargeFee
 	o.ChargeNetFee += other.ChargeNetFee

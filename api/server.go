@@ -458,16 +458,57 @@ func (s *Server) trxWeeklyStatistics(c *gin.Context) {
 		}
 	}
 
+	type ResEntity struct {
+		Address   string `json:"address"`
+		TXChanged int    `json:"tx_changed"`
+	}
+
 	sort.Slice(changedStats, func(i, j int) bool {
 		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
 	})
 
-	resStats := make([]*models.UserStatistic, 0)
+	resStatsSortedByTRX := make([]*ResEntity, 0)
+	pickTop20AndLast20(changedStats, resStatsSortedByTRX, func(t *models.UserStatistic) *ResEntity {
+		return &ResEntity{
+			Address:   t.Address,
+			TXChanged: int(t.TRXTotal),
+		}
+	})
 
-	resStats = append(resStats, changedStats[:20]...)
-	resStats = append(resStats, changedStats[len(changedStats)-20:]...)
+	sort.Slice(changedStats, func(i, j int) bool {
+		return changedStats[i].SmallTRXTotal > changedStats[j].SmallTRXTotal
+	})
 
-	c.JSON(200, resStats)
+	resStatsSortedBySmallTRX := make([]*ResEntity, 0)
+	pickTop20AndLast20(changedStats, resStatsSortedBySmallTRX, func(t *models.UserStatistic) *ResEntity {
+		return &ResEntity{
+			Address:   t.Address,
+			TXChanged: int(t.SmallTRXTotal),
+		}
+	})
+
+	c.JSON(200, gin.H{
+		"sorted_by_trx":       resStatsSortedByTRX,
+		"sorted_by_small_trx": resStatsSortedBySmallTRX,
+	})
+}
+
+func pickTop20AndLast20[T any, S any](src []T, dsc []S, convert func(T) S) {
+	if len(src) <= 40 {
+		for _, s := range src {
+			dsc = append(dsc, convert(s))
+		}
+		return
+	}
+
+	for i := 0; i < 20; i++ {
+		dsc = append(dsc, convert(src[i]))
+	}
+
+	for i := 20; i > 0; i-- {
+		dsc = append(dsc, convert(src[len(src)-i]))
+	}
+
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

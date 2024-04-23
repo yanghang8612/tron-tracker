@@ -451,6 +451,11 @@ func (s *Server) trxStatistics(c *gin.Context) {
 	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), days)
 
 	changedStats := make([]*models.UserStatistic, 0)
+
+	for _, stats := range curWeekStats {
+		changedStats = append(changedStats, stats)
+	}
+
 	for user, stats := range lastWeekStats {
 		if _, ok := curWeekStats[user]; !ok {
 			stats.TRXTotal = -stats.TRXTotal
@@ -459,7 +464,6 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		} else {
 			curWeekStats[user].TRXTotal -= stats.TRXTotal
 			curWeekStats[user].SmallTRXTotal -= stats.SmallTRXTotal
-			changedStats = append(changedStats, curWeekStats[user])
 		}
 	}
 
@@ -468,27 +472,24 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		TXChanged int    `json:"tx_changed"`
 	}
 
-	sort.Slice(changedStats, func(i, j int) bool {
-		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
-	})
-
-	resStatsSortedByTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
+	convertFunc := func(t *models.UserStatistic) *ResEntity {
 		return &ResEntity{
 			Address:   t.Address,
 			TXChanged: int(t.TRXTotal),
 		}
+	}
+
+	sort.Slice(changedStats, func(i, j int) bool {
+		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
 	})
+
+	resStatsSortedByTRX := pickTop20AndLast20(changedStats, convertFunc)
 
 	sort.Slice(changedStats, func(i, j int) bool {
 		return changedStats[i].SmallTRXTotal > changedStats[j].SmallTRXTotal
 	})
 
-	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
-		return &ResEntity{
-			Address:   t.Address,
-			TXChanged: int(t.SmallTRXTotal),
-		}
-	})
+	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, convertFunc)
 
 	c.JSON(200, gin.H{
 		"sorted_by_trx":       resStatsSortedByTRX,

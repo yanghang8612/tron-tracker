@@ -67,6 +67,7 @@ func (s *Server) Start() {
 	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
+	s.router.GET("/trx_weekly_statistics", s.trxWeeklyStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -89,8 +90,8 @@ func (s *Server) lastTrackedBlockNumber(c *gin.Context) {
 }
 
 func (s *Server) exchangesStatistic(c *gin.Context) {
-	startDate := prepareDateParam(c, "start_date")
-	if startDate == nil {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
 		return
 	}
 
@@ -160,8 +161,8 @@ func (s *Server) specialStatistic(c *gin.Context) {
 }
 
 func (s *Server) totalStatistics(c *gin.Context) {
-	startDate := prepareDateParam(c, "start_date")
-	if startDate == nil {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
 		return
 	}
 
@@ -182,17 +183,20 @@ func (s *Server) totalStatistics(c *gin.Context) {
 }
 
 func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
-	if date := prepareDateParam(c, "date"); date != nil {
+	if date, ok := prepareDateParam(c, "date"); ok {
 		go func() {
-			s.db.DoTronLinkWeeklyStatistics(*date, true)
+			s.db.DoTronLinkWeeklyStatistics(date, true)
 		}()
 	}
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
-	date := prepareDateParam(c, "date")
+	date, ok := prepareDateParam(c, "date")
+	if !ok {
+		return
+	}
 
-	thisMonday := now.With(*date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
 	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday))
 	if err != nil {
@@ -226,12 +230,12 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
-	startDate := prepareDateParam(c, "start_date")
-	if startDate == nil {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
 		return
 	}
 
-	curWeekStats := s.getOneWeekExchangeStatistics(*startDate)
+	curWeekStats := s.getOneWeekExchangeStatistics(startDate)
 	lastWeekStats := s.getOneWeekExchangeStatistics(startDate.AddDate(0, 0, -7))
 
 	type JsonStat struct {
@@ -277,8 +281,8 @@ func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]in
 }
 
 func (s *Server) tronWeeklyStatistics(c *gin.Context) {
-	startDate := prepareDateParam(c, "start_date")
-	if startDate == nil {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
 		return
 	}
 
@@ -327,12 +331,12 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
-	startDate := prepareDateParam(c, "start_date")
-	if startDate == nil {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
 		return
 	}
 
-	curWeekStats := s.getOneWeekRevenueStatistics(*startDate)
+	curWeekStats := s.getOneWeekRevenueStatistics(startDate)
 	totalWeekStats := &models.UserStatistic{}
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
@@ -432,10 +436,44 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 	}
 }
 
-func prepareDateParam(c *gin.Context, name string) *time.Time {
+func (s *Server) trxWeeklyStatistics(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	curWeekStats := s.db.GetFromStatisticByDateAndDays(startDate, 7)
+	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), 7)
+
+	changedStats := make([]*models.UserStatistic, 0)
+	for user, stats := range lastWeekStats {
+		if _, ok := curWeekStats[user]; !ok {
+			stats.TRXTotal = -stats.TRXTotal
+			stats.SmallTRXTotal = -stats.SmallTRXTotal
+			changedStats = append(changedStats, stats)
+		} else {
+			curWeekStats[user].TRXTotal -= stats.TRXTotal
+			curWeekStats[user].SmallTRXTotal -= stats.SmallTRXTotal
+			changedStats = append(changedStats, curWeekStats[user])
+		}
+	}
+
+	sort.Slice(changedStats, func(i, j int) bool {
+		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
+	})
+
+	resStats := make([]*models.UserStatistic, 0)
+
+	resStats = append(resStats, changedStats[:20]...)
+	resStats = append(resStats, changedStats[len(changedStats)-20:]...)
+
+	c.JSON(200, resStats)
+}
+
+func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {
 	dateStr, ok := getStringParam(c, name)
 	if !ok {
-		return nil
+		return time.Time{}, false
 	}
 
 	date, err := time.Parse("060102", dateStr)
@@ -444,10 +482,10 @@ func prepareDateParam(c *gin.Context, name string) *time.Time {
 			"code":  400,
 			"error": name + " cannot be parsed",
 		})
-		return nil
+		return time.Time{}, false
 	}
 
-	return &date
+	return date, true
 }
 
 func getStringParam(c *gin.Context, name string) (string, bool) {

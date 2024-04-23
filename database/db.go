@@ -198,6 +198,27 @@ func (db *RawDB) GetLastTrackedBlockTime() int64 {
 	return db.lastTrackedBlockTime
 }
 
+func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
+	userStatisticMap := make(map[string]*models.UserStatistic)
+
+	for i := 0; i < days; i++ {
+		dayStatistics := make([]*models.UserStatistic, 0)
+		db.db.Table("from_stats_" + date.AddDate(0, 0, i).Format("060102")).Find(&dayStatistics)
+
+		for _, stats := range dayStatistics {
+			user := stats.Address
+
+			if _, ok := userStatisticMap[user]; !ok {
+				userStatisticMap[user] = stats
+			} else {
+				userStatisticMap[user].Merge(stats)
+			}
+		}
+	}
+
+	return userStatisticMap
+}
+
 func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserStatistic {
 	var userStatistic models.UserStatistic
 	db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
@@ -453,10 +474,11 @@ func (db *RawDB) updateExchanges() {
 	for i := 0; i < 3; i++ {
 		el := net.GetExchanges()
 		if len(el.Exchanges) == 0 {
-			db.logger.Info("No exchange found, retry %d times", i+1)
+			db.logger.Infof("No exchange found, retry %d times", i+1)
 			continue
 		}
 
+		db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
 		db.el = el
 		db.elUpdatedAt = time.Now()
 	}

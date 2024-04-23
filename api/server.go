@@ -59,15 +59,15 @@ func New(db *database.RawDB, config *DeFiConfig) *Server {
 
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
-	s.router.GET("/exchanges_statistic", s.exchangesStatistic)
-	s.router.GET("/special_statistic", s.specialStatistic)
+	s.router.GET("/exchange_statistics", s.exchangesStatistic)
+	s.router.GET("/special_statistics", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
 	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
 	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
-	s.router.GET("/exchanges_weekly_statistic", s.exchangesWeeklyStatistic)
+	s.router.GET("/exchange_weekly_statistics", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
-	s.router.GET("/trx_weekly_statistics", s.trxWeeklyStatistics)
+	s.router.GET("/trx_statistics", s.trxStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -436,14 +436,19 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 	}
 }
 
-func (s *Server) trxWeeklyStatistics(c *gin.Context) {
+func (s *Server) trxStatistics(c *gin.Context) {
 	startDate, ok := prepareDateParam(c, "start_date")
 	if !ok {
 		return
 	}
 
-	curWeekStats := s.db.GetFromStatisticByDateAndDays(startDate, 7)
-	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), 7)
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	curWeekStats := s.db.GetFromStatisticByDateAndDays(startDate, days)
+	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), days)
 
 	changedStats := make([]*models.UserStatistic, 0)
 	for user, stats := range lastWeekStats {
@@ -467,8 +472,7 @@ func (s *Server) trxWeeklyStatistics(c *gin.Context) {
 		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
 	})
 
-	resStatsSortedByTRX := make([]*ResEntity, 0)
-	pickTop20AndLast20(changedStats, resStatsSortedByTRX, func(t *models.UserStatistic) *ResEntity {
+	resStatsSortedByTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
 		return &ResEntity{
 			Address:   t.Address,
 			TXChanged: int(t.TRXTotal),
@@ -479,8 +483,7 @@ func (s *Server) trxWeeklyStatistics(c *gin.Context) {
 		return changedStats[i].SmallTRXTotal > changedStats[j].SmallTRXTotal
 	})
 
-	resStatsSortedBySmallTRX := make([]*ResEntity, 0)
-	pickTop20AndLast20(changedStats, resStatsSortedBySmallTRX, func(t *models.UserStatistic) *ResEntity {
+	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
 		return &ResEntity{
 			Address:   t.Address,
 			TXChanged: int(t.SmallTRXTotal),
@@ -493,22 +496,24 @@ func (s *Server) trxWeeklyStatistics(c *gin.Context) {
 	})
 }
 
-func pickTop20AndLast20[T any, S any](src []T, dsc []S, convert func(T) S) {
+func pickTop20AndLast20[T any, S any](src []T, convert func(T) S) []S {
+	dsc := make([]S, 0)
+
 	if len(src) <= 40 {
 		for _, s := range src {
 			dsc = append(dsc, convert(s))
 		}
-		return
+	} else {
+		for i := 0; i < 20; i++ {
+			dsc = append(dsc, convert(src[i]))
+		}
+
+		for i := 20; i > 0; i-- {
+			dsc = append(dsc, convert(src[len(src)-i]))
+		}
 	}
 
-	for i := 0; i < 20; i++ {
-		dsc = append(dsc, convert(src[i]))
-	}
-
-	for i := 20; i > 0; i-- {
-		dsc = append(dsc, convert(src[len(src)-i]))
-	}
-
+	return dsc
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

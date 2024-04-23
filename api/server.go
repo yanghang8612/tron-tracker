@@ -447,6 +447,11 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		return
 	}
 
+	n, ok := getIntParam(c, "n")
+	if !ok {
+		return
+	}
+
 	curWeekStats := s.db.GetFromStatisticByDateAndDays(startDate, days)
 	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), days)
 
@@ -476,7 +481,7 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
 	})
 
-	resStatsSortedByTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
+	resStatsSortedByTRX := pickTopNAndLastN(changedStats, n, func(t *models.UserStatistic) *ResEntity {
 		return &ResEntity{
 			Address:   t.Address,
 			TXChanged: int(t.TRXTotal),
@@ -487,7 +492,7 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		return changedStats[i].SmallTRXTotal > changedStats[j].SmallTRXTotal
 	})
 
-	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
+	resStatsSortedBySmallTRX := pickTopNAndLastN(changedStats, n, func(t *models.UserStatistic) *ResEntity {
 		return &ResEntity{
 			Address:   t.Address,
 			TXChanged: int(t.SmallTRXTotal),
@@ -500,19 +505,19 @@ func (s *Server) trxStatistics(c *gin.Context) {
 	})
 }
 
-func pickTop20AndLast20[T any, S any](src []T, convert func(T) S) []S {
+func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
 	dsc := make([]S, 0)
 
-	if len(src) <= 40 {
+	if len(src) <= 2*n {
 		for _, s := range src {
 			dsc = append(dsc, convert(s))
 		}
 	} else {
-		for i := 0; i < 20; i++ {
+		for i := 0; i < n; i++ {
 			dsc = append(dsc, convert(src[i]))
 		}
 
-		for i := 20; i > 0; i-- {
+		for i := n; i > 0; i-- {
 			dsc = append(dsc, convert(src[len(src)-i]))
 		}
 	}

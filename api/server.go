@@ -472,24 +472,27 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		TXChanged int    `json:"tx_changed"`
 	}
 
-	convertFunc := func(t *models.UserStatistic) *ResEntity {
-		return &ResEntity{
-			Address:   t.Address,
-			TXChanged: int(t.TRXTotal),
-		}
-	}
-
 	sort.Slice(changedStats, func(i, j int) bool {
 		return changedStats[i].TRXTotal > changedStats[j].TRXTotal
 	})
 
-	resStatsSortedByTRX := pickTop20AndLast20(changedStats, convertFunc)
+	resStatsSortedByTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
+		return &ResEntity{
+			Address:   t.Address,
+			TXChanged: int(t.TRXTotal),
+		}
+	})
 
 	sort.Slice(changedStats, func(i, j int) bool {
 		return changedStats[i].SmallTRXTotal > changedStats[j].SmallTRXTotal
 	})
 
-	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, convertFunc)
+	resStatsSortedBySmallTRX := pickTop20AndLast20(changedStats, func(t *models.UserStatistic) *ResEntity {
+		return &ResEntity{
+			Address:   t.Address,
+			TXChanged: int(t.SmallTRXTotal),
+		}
+	})
 
 	c.JSON(200, gin.H{
 		"sorted_by_trx":       resStatsSortedByTRX,

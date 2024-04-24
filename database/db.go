@@ -219,9 +219,15 @@ func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[str
 	return userStatisticMap
 }
 
-func (db *RawDB) GetFromStatisticByDateAndUser(date, user string) models.UserStatistic {
+func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date, user string, days int) models.UserStatistic {
 	var userStatistic models.UserStatistic
-	db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&userStatistic)
+
+	for i := 0; i < days; i++ {
+		dayStatistic := models.UserStatistic{}
+		db.db.Table("from_stats_"+date).Where("address = ?", user).Limit(1).Find(&dayStatistic)
+		userStatistic.Merge(&dayStatistic)
+	}
+
 	return userStatistic
 }
 

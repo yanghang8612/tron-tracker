@@ -68,6 +68,7 @@ func (s *Server) Start() {
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 	s.router.GET("/trx_statistics", s.trxStatistics)
+	s.router.GET("/user_statistics", s.userStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -523,6 +524,25 @@ func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
 	}
 
 	return dsc
+}
+
+func (s *Server) userStatistics(c *gin.Context) {
+	date, ok := getStringParam(c, "date")
+	if !ok {
+		return
+	}
+
+	user, ok := getStringParam(c, "user")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(date, user, days))
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

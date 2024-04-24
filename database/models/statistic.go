@@ -2,26 +2,26 @@ package models
 
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey" json:"-"`
-	Address           string `gorm:"size:34;uniqueIndex"`
-	Fee               int64
-	EnergyTotal       int64
-	EnergyFee         int64
-	EnergyUsage       int64
-	EnergyOriginUsage int64
-	NetUsage          int64
-	NetFee            int64
-	TXTotal           int64
-	TRXTotal          int64
-	SmallTRXTotal     int64
-	TRC10Total        int64
-	TRC20Total        int64
-	SCTotal           int64
-	USDTTotal         int64
-	SmallUSDTTotal    int64
-	StakeTotal        int64
-	DelegateTotal     int64
-	VoteTotal         int64
-	MultiSigTotal     int64
+	Address           string `gorm:"size:34;uniqueIndex" json:"address"`
+	Fee               int64  `json:"fee"`
+	EnergyTotal       int64  `json:"energy_total"`
+	EnergyFee         int64  `json:"energy_fee"`
+	EnergyUsage       int64  `json:"energy_usage"`
+	EnergyOriginUsage int64  `json:"energy_origin_usage"`
+	NetUsage          int64  `json:"net_usage"`
+	NetFee            int64  `json:"net_fee"`
+	TXTotal           int64  `json:"tx_total"`
+	TRXTotal          int64  `json:"trx_total"`
+	SmallTRXTotal     int64  `json:"small_trx_total"`
+	TRC10Total        int64  `json:"trc10_total"`
+	TRC20Total        int64  `json:"trc20_total"`
+	SCTotal           int64  `json:"sc_total"`
+	USDTTotal         int64  `json:"usdt_total"`
+	SmallUSDTTotal    int64  `json:"small_usdt_total"`
+	StakeTotal        int64  `json:"stake_total"`
+	DelegateTotal     int64  `json:"delegate_total"`
+	VoteTotal         int64  `json:"vote_total"`
+	MultiSigTotal     int64  `json:"multi_sig_total"`
 }
 
 func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
@@ -145,15 +145,15 @@ func (o *UserStatistic) Add(tx *Transaction) {
 
 type TokenStatistic struct {
 	ID                uint   `gorm:"primaryKey" json:"-"`
-	Address           string `gorm:"size:34;uniqueIndex"`
-	Fee               int64
-	EnergyTotal       int64
-	EnergyFee         int64
-	EnergyUsage       int64
-	EnergyOriginUsage int64
-	NetUsage          int64
-	NetFee            int64
-	TXTotal           int64
+	Address           string `gorm:"size:34;uniqueIndex" json:"address"`
+	Fee               int64  `json:"fee"`
+	EnergyTotal       int64  `json:"energy_total"`
+	EnergyFee         int64  `json:"energy_fee"`
+	EnergyUsage       int64  `json:"energy_usage"`
+	EnergyOriginUsage int64  `json:"energy_origin_usage"`
+	NetUsage          int64  `json:"net_usage"`
+	NetFee            int64  `json:"net_fee"`
+	TXTotal           int64  `json:"tx_total"`
 }
 
 func NewTokenStatistic(address string, tx *Transaction) *TokenStatistic {
@@ -204,31 +204,31 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 
 type ExchangeStatistic struct {
 	ID                  uint   `gorm:"primaryKey" json:"-"`
-	Date                string `gorm:"index;size:6"`
-	Name                string
+	Date                string `gorm:"index;size:6" json:"date"`
+	Name                string `json:"name,omitempty"`
 	Address             string `gorm:"size:34" json:"address,omitempty"`
-	TotalFee            int64  `gorm:"-:all"`
-	ChargeTxCount       int64
-	ChargeFee           int64
-	ChargeNetFee        int64
-	ChargeNetUsage      int64
-	ChargeEnergyTotal   int64
-	ChargeEnergyFee     int64
-	ChargeEnergyUsage   int64
-	CollectTxCount      int64
-	CollectFee          int64
-	CollectNetFee       int64
-	CollectNetUsage     int64
-	CollectEnergyTotal  int64
-	CollectEnergyFee    int64
-	CollectEnergyUsage  int64
-	WithdrawTxCount     int64
-	WithdrawFee         int64
-	WithdrawNetFee      int64
-	WithdrawNetUsage    int64
-	WithdrawEnergyTotal int64
-	WithdrawEnergyFee   int64
-	WithdrawEnergyUsage int64
+	TotalFee            int64  `gorm:"-:all" json:"total_fee"`
+	ChargeTxCount       int64  `json:"charge_tx_count"`
+	ChargeFee           int64  `json:"charge_fee"`
+	ChargeNetFee        int64  `json:"charge_net_fee"`
+	ChargeNetUsage      int64  `json:"charge_net_usage"`
+	ChargeEnergyTotal   int64  `json:"charge_energy_total"`
+	ChargeEnergyFee     int64  `json:"charge_energy_fee"`
+	ChargeEnergyUsage   int64  `json:"charge_energy_usage"`
+	CollectTxCount      int64  `json:"collect_tx_count"`
+	CollectFee          int64  `json:"collect_fee"`
+	CollectNetFee       int64  `json:"collect_net_fee"`
+	CollectNetUsage     int64  `json:"collect_net_usage"`
+	CollectEnergyTotal  int64  `json:"collect_energy_total"`
+	CollectEnergyFee    int64  `json:"collect_energy_fee"`
+	CollectEnergyUsage  int64  `json:"collect_energy_usage"`
+	WithdrawTxCount     int64  `json:"withdraw_tx_count"`
+	WithdrawFee         int64  `json:"withdraw_fee"`
+	WithdrawNetFee      int64  `json:"withdraw_net_fee"`
+	WithdrawNetUsage    int64  `json:"withdraw_net_usage"`
+	WithdrawEnergyTotal int64  `json:"withdraw_energy_total"`
+	WithdrawEnergyFee   int64  `json:"withdraw_energy_fee"`
+	WithdrawEnergyUsage int64  `json:"withdraw_energy_usage"`
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {

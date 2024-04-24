@@ -221,6 +221,7 @@ func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[str
 
 func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user string, days int) models.UserStatistic {
 	var userStatistic models.UserStatistic
+	userStatistic.Address = user
 
 	for i := 0; i < days; i++ {
 		dayStatistic := models.UserStatistic{}

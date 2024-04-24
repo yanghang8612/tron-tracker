@@ -456,8 +456,18 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		}
 	}
 
+	// Count the rest users
+	if len(users) > 0 {
+		for i := 0; i < 7; i++ {
+			date := lastMonday.AddDate(0, 0, i).Format("060102")
+			fee, energy := db.GetFeeAndEnergyByDateAndUsers(date, users)
+			totalFee += fee
+			totalEnergy += energy
+		}
+	}
+
 	statsResultFile.WriteString(strconv.FormatInt(totalFee, 10) + "\n")
-	statsResultFile.WriteString(strconv.FormatInt(totalEnergy, 10))
+	statsResultFile.WriteString(strconv.FormatInt(totalEnergy, 10) + "\n")
 }
 
 func (db *RawDB) Run() {

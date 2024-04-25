@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
@@ -27,8 +28,10 @@ func New(db *database.RawDB) *Tracker {
 	return &Tracker{
 		db: db,
 
-		reporter: utils.NewReporter(1000, 60*time.Second, "Tracker report, tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]"),
-		quitCh:   make(chan struct{}),
+		reporter: utils.NewReporter(1000, 60*time.Second, 0, func(rs utils.ReporterState) string {
+			return fmt.Sprintf("Tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+		}),
+		quitCh: make(chan struct{}),
 
 		logger: zap.S().Named("[tracker]"),
 	}
@@ -72,8 +75,14 @@ func (t *Tracker) doTrackBlock() {
 		return
 	}
 
-	if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
-		t.logger.Info(reportContent)
+	if time.Now().Unix()-block.BlockHeader.RawData.Timestamp < 10 {
+		// Catch up with the latest block
+
+	} else if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
+		nowBlock, _ := net.GetNowBlock()
+		nowBlockNumber := nowBlock.BlockHeader.RawData.Number
+		trackedBlockNumber := block.BlockHeader.RawData.Number
+		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, nowBlockNumber, trackedBlockNumber, nowBlockNumber-trackedBlockNumber)
 	}
 
 	txInfoList, err := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)

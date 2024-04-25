@@ -18,7 +18,7 @@ const (
 
 var client = resty.New()
 
-func GetNowBlocks() (*types.Block, error) {
+func GetNowBlock() (*types.Block, error) {
 	url := BaseUrl + GetNowBlockPath
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)

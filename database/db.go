@@ -65,6 +65,7 @@ type RawDB struct {
 	curDate string
 	flushCh chan *dbCache
 	cache   *dbCache
+	statsCh chan struct{}
 
 	loopWG sync.WaitGroup
 	quitCh chan struct{}
@@ -478,7 +479,7 @@ func (db *RawDB) Run() {
 			db.loopWG.Done()
 			return
 		case cache := <-db.flushCh:
-			db.persist(cache)
+			db.flushToDB(cache)
 		}
 	}
 }
@@ -492,26 +493,34 @@ func (db *RawDB) updateExchanges() {
 		el := net.GetExchanges()
 		if len(el.Exchanges) == 0 {
 			db.logger.Infof("No exchange found, retry %d times", i+1)
-			continue
-		}
+		} else {
+			if len(db.el.Exchanges) == len(el.Exchanges) {
+				db.logger.Info("Update exchange list successfully, exchange list is not changed")
+			} else {
+				db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
+			}
 
-		db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
-		db.el = el
-		db.elUpdatedAt = time.Now()
+			db.el = el
+			db.elUpdatedAt = time.Now()
+			break
+		}
 	}
 }
 
-func (db *RawDB) persist(cache *dbCache) {
+func (db *RawDB) flushToDB(cache *dbCache) {
 	if len(cache.fromStats) == 0 && len(cache.toStats) == 0 && len(cache.chargers) == 0 {
 		return
 	}
 
-	db.logger.Infof("Start persisting cache for date [%s]", cache.date)
+	db.logger.Infof("Start flushing cache to DB for date [%s]", cache.date)
+
+	// Flush user from statistics
+	db.logger.Info("Start flushing from_stats")
 
 	fromStatsDBName := "from_stats_" + cache.date
 	db.createTableIfNotExist(fromStatsDBName, models.UserStatistic{})
 
-	reporter := utils.NewReporter(0, 60*time.Second, "Saved [%d] from statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter := utils.NewReporter(0, 60*time.Second, len(cache.fromStats), makeReporterFunc("from_stats"))
 
 	fromStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
@@ -526,12 +535,15 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 	db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
 
-	db.logger.Info(reporter.Finish("Complete saving from statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Flushing from_stats"))
+
+	// Flush user to statistics
+	db.logger.Info("Start flushing to_stats")
 
 	toStatsDBName := "to_stats_" + cache.date
 	db.createTableIfNotExist(toStatsDBName, models.UserStatistic{})
 
-	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] to statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, len(cache.toStats), makeReporterFunc("to_stats"))
 
 	toStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.toStats {
@@ -546,12 +558,15 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 	db.db.Table(toStatsDBName).Create(&toStatsToPersist)
 
-	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Flushing to_stats"))
+
+	// Flush token statistics
+	db.logger.Info("Start flushing token_stats")
 
 	tokenStatsDBName := "token_stats_" + cache.date
 	db.createTableIfNotExist(tokenStatsDBName, models.TokenStatistic{})
 
-	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] token statistic in [%.2fs], speed [%.2frecords/sec]")
+	reporter = utils.NewReporter(0, 60*time.Second, len(cache.tokenStats), makeReporterFunc("token_stats"))
 
 	tokenStatsToPersist := make([]*models.TokenStatistic, 0)
 	for _, stats := range cache.tokenStats {
@@ -566,9 +581,12 @@ func (db *RawDB) persist(cache *dbCache) {
 	}
 	db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
 
-	db.logger.Info(reporter.Finish("Complete saving to statistic for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Flushing token_stats"))
 
-	reporter = utils.NewReporter(0, 60*time.Second, "Saved [%d] charger in [%.2fs], speed [%.2frecords/sec]")
+	// Flush chargers
+	db.logger.Info("Start flushing chargers")
+
+	reporter = utils.NewReporter(0, 60*time.Second, len(cache.chargers), makeReporterFunc("charger"))
 
 	for _, charger := range cache.chargers {
 		if charger.IsFake {
@@ -588,9 +606,10 @@ func (db *RawDB) persist(cache *dbCache) {
 		}
 	}
 
-	db.logger.Info(reporter.Finish("Complete saving charger for date " + cache.date + ", total count [%d], cost [%.2fs], avg speed [%.2frecords/sec]"))
+	db.logger.Info(reporter.Finish("Flushing chargers"))
 
-	db.logger.Info("Start updating exchange statistic")
+	// Do exchange statistic
+	db.logger.Info("Start doing exchange statistic")
 
 	exchangeStats := make(map[string]*models.ExchangeStatistic)
 	for _, exchange := range db.el.Exchanges {
@@ -653,6 +672,7 @@ func (db *RawDB) persist(cache *dbCache) {
 		}
 	}
 
+	// Flush exchange statistics
 	for _, statistic := range exchangeStats {
 		db.db.Create(statistic)
 	}
@@ -676,4 +696,12 @@ func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
 
 func generateDate(ts int64) string {
 	return time.Unix(ts, 0).In(time.FixedZone("UTC", 0)).Format("060102")
+}
+
+func makeReporterFunc(name string) func(utils.ReporterState) string {
+	return func(rs utils.ReporterState) string {
+		return fmt.Sprintf("Saved [%d] [%s] in [%.2fs], speed [%.2frecords/sec], left [%d/%d] records to save [%.2f%%]",
+			rs.CountInc, name, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime,
+			rs.CurrentCount, rs.FinishCount, float64(rs.CurrentCount*100)/float64(rs.FinishCount))
+	}
 }

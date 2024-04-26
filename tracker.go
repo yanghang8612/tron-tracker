@@ -82,7 +82,7 @@ func (t *Tracker) doTrackBlock() {
 		nowBlock, _ := net.GetNowBlock()
 		nowBlockNumber := nowBlock.BlockHeader.RawData.Number
 		trackedBlockNumber := block.BlockHeader.RawData.Number
-		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, nowBlockNumber, trackedBlockNumber, nowBlockNumber-trackedBlockNumber)
+		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber)
 	}
 
 	txInfoList, err := net.GetTransactionInfoList(t.db.GetLastTrackedBlockNum() + 1)

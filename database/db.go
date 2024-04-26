@@ -33,19 +33,21 @@ type Config struct {
 }
 
 type dbCache struct {
-	date       string
-	fromStats  map[string]*models.UserStatistic
-	toStats    map[string]*models.UserStatistic
-	tokenStats map[string]*models.TokenStatistic
-	chargers   map[string]*models.Charger
+	date           string
+	fromStats      map[string]*models.UserStatistic
+	toStats        map[string]*models.UserStatistic
+	tokenStats     map[string]*models.TokenStatistic
+	userTokenStats map[string]*models.UserTokenStatistic
+	chargers       map[string]*models.Charger
 }
 
 func newCache() *dbCache {
 	return &dbCache{
-		fromStats:  make(map[string]*models.UserStatistic),
-		toStats:    make(map[string]*models.UserStatistic),
-		tokenStats: make(map[string]*models.TokenStatistic),
-		chargers:   make(map[string]*models.Charger),
+		fromStats:      make(map[string]*models.UserStatistic),
+		toStats:        make(map[string]*models.UserStatistic),
+		tokenStats:     make(map[string]*models.TokenStatistic),
+		userTokenStats: make(map[string]*models.UserTokenStatistic),
+		chargers:       make(map[string]*models.Charger),
 	}
 }
 
@@ -339,15 +341,16 @@ func (db *RawDB) SaveTransfers(transfers []*models.TRC20Transfer) {
 	db.db.Table(dbName).Create(transfers)
 }
 
-func (db *RawDB) UpdateUserStatistic(tx *models.Transaction) {
+func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 	db.updateUserStatistic(tx.FromAddr, tx, db.cache.fromStats)
+	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
 	db.updateUserStatistic("total", tx, db.cache.fromStats)
 
 	if len(tx.Name) > 0 && tx.Name != "_" {
 		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
 	}
 
-	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
+	db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
 }
 
 func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
@@ -365,6 +368,24 @@ func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats
 	} else {
 		stats[name] = models.NewTokenStatistic(name, tx)
 	}
+}
+
+func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
+	if _, ok := stats[tx.FromAddr]; !ok {
+		stats[tx.FromAddr] = &models.UserTokenStatistic{
+			User:  tx.FromAddr,
+			Token: tx.Name,
+		}
+	}
+	stats[tx.FromAddr].AddFrom(tx)
+
+	if _, ok := stats[tx.ToAddr]; !ok {
+		stats[tx.ToAddr] = &models.UserTokenStatistic{
+			User:  tx.ToAddr,
+			Token: tx.Name,
+		}
+	}
+	stats[tx.ToAddr].AddTo(tx)
 }
 
 func (db *RawDB) SaveCharger(from, to, token, txHash string) {
@@ -583,6 +604,29 @@ func (db *RawDB) flushToDB(cache *dbCache) {
 
 	db.logger.Info(reporter.Finish("Flushing token_stats"))
 
+	// Flush user token statistics
+	db.logger.Info("Start flushing user_token_stats")
+
+	userTokenStatsDBName := "user_token_stats_" + cache.date
+	db.createTableIfNotExist(userTokenStatsDBName, models.UserTokenStatistic{})
+
+	reporter = utils.NewReporter(0, 60*time.Second, len(cache.userTokenStats), makeReporterFunc("user_token_stats"))
+
+	userTokenStatsToPersist := make([]*models.UserTokenStatistic, 0)
+	for _, stats := range cache.userTokenStats {
+		userTokenStatsToPersist = append(userTokenStatsToPersist, stats)
+		if len(userTokenStatsToPersist) == 200 {
+			db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
+			userTokenStatsToPersist = make([]*models.UserTokenStatistic, 0)
+		}
+		if shouldReport, reportContent := reporter.Add(1); shouldReport {
+			db.logger.Info(reportContent)
+		}
+	}
+	db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
+
+	db.logger.Info(reporter.Finish("Flushing user_token_stats"))
+
 	// Flush chargers
 	db.logger.Info("Start flushing chargers")
 
@@ -611,70 +655,129 @@ func (db *RawDB) flushToDB(cache *dbCache) {
 	// Do exchange statistic
 	db.logger.Info("Start doing exchange statistic")
 
-	exchangeStats := make(map[string]*models.ExchangeStatistic)
-	for _, exchange := range db.el.Exchanges {
-		exchangeStats[exchange.Address] = &models.ExchangeStatistic{
-			Date:    cache.date,
-			Name:    exchange.Name,
-			Address: exchange.Address,
-		}
+	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
+	for _, stats := range cache.userTokenStats {
+		if _, ok := db.vt[stats.Token]; ok {
+			if db.el.Contains(stats.User) {
+				exchange := db.el.Get(stats.User)
 
-		// 归集统计
-		if collectStat, ok := cache.toStats[exchange.Address]; ok {
-			exchangeStats[exchange.Address].CollectTxCount += collectStat.TRXTotal - collectStat.SmallTRXTotal + collectStat.USDTTotal - collectStat.SmallUSDTTotal
-			exchangeStats[exchange.Address].CollectFee += collectStat.Fee
-			exchangeStats[exchange.Address].CollectNetFee += collectStat.NetFee
-			exchangeStats[exchange.Address].CollectNetUsage += collectStat.NetUsage
-			exchangeStats[exchange.Address].CollectEnergyTotal += collectStat.EnergyTotal
-			exchangeStats[exchange.Address].CollectEnergyFee += collectStat.EnergyFee
-			exchangeStats[exchange.Address].CollectEnergyUsage += collectStat.EnergyUsage + collectStat.EnergyOriginUsage
-		}
+				if _, ok := exchangeStats[exchange.Address]; !ok {
+					exchangeStats[exchange.Address] = make(map[string]*models.ExchangeStatistic)
+					exchangeStats[exchange.Address]["_"] = &models.ExchangeStatistic{
+						Date:    cache.date,
+						Name:    exchange.Name,
+						Address: exchange.Address,
+						Token:   "_",
+					}
+				}
 
-		// 提币统计
-		if withdrawStat, ok := cache.fromStats[exchange.Address]; ok {
-			exchangeStats[exchange.Address].WithdrawTxCount += withdrawStat.TRXTotal - withdrawStat.SmallTRXTotal + withdrawStat.USDTTotal - withdrawStat.SmallUSDTTotal
-			exchangeStats[exchange.Address].WithdrawFee += withdrawStat.Fee
-			exchangeStats[exchange.Address].WithdrawNetFee += withdrawStat.NetFee
-			exchangeStats[exchange.Address].WithdrawNetUsage += withdrawStat.NetUsage
-			exchangeStats[exchange.Address].WithdrawEnergyTotal += withdrawStat.EnergyTotal
-			exchangeStats[exchange.Address].WithdrawEnergyFee += withdrawStat.EnergyFee
-			exchangeStats[exchange.Address].WithdrawEnergyUsage += withdrawStat.EnergyUsage + withdrawStat.EnergyOriginUsage
-		}
-	}
+				exchangeStats[exchange.Address]["_"].CollectTxCount += stats.ToTXCount
+				exchangeStats[exchange.Address]["_"].CollectFee += stats.ToFee
+				exchangeStats[exchange.Address]["_"].CollectNetFee += stats.ToNetFee
+				exchangeStats[exchange.Address]["_"].CollectNetUsage += stats.ToNetUsage
+				exchangeStats[exchange.Address]["_"].CollectEnergyTotal += stats.ToEnergyTotal
+				exchangeStats[exchange.Address]["_"].CollectEnergyFee += stats.ToEnergyFee
+				exchangeStats[exchange.Address]["_"].CollectEnergyUsage += stats.ToEnergyUsage
 
-	for _, toStat := range cache.toStats {
-		charger, ok := cache.chargers[toStat.Address]
-		if ok && charger.IsFake {
-			db.logger.Infof("Skip fake charger [%s] for exchange - [%s](%s)", charger.Address, charger.ExchangeAddress, charger.ExchangeName)
-			continue
-		}
+				exchangeStats[exchange.Address]["_"].WithdrawTxCount += stats.FromTXCount
+				exchangeStats[exchange.Address]["_"].WithdrawFee += stats.FromFee
+				exchangeStats[exchange.Address]["_"].WithdrawNetFee += stats.FromNetFee
+				exchangeStats[exchange.Address]["_"].WithdrawNetUsage += stats.FromNetUsage
+				exchangeStats[exchange.Address]["_"].WithdrawEnergyTotal += stats.FromEnergyTotal
+				exchangeStats[exchange.Address]["_"].WithdrawEnergyFee += stats.FromEnergyFee
+				exchangeStats[exchange.Address]["_"].WithdrawEnergyUsage += stats.FromEnergyUsage
 
-		if !ok {
-			charger = &models.Charger{}
-			result := db.db.Where("address = ?", toStat.Address).First(charger)
-			ok = !errors.Is(result.Error, gorm.ErrRecordNotFound)
-		}
+				if _, ok := exchangeStats[exchange.Address][stats.Token]; !ok {
+					exchangeStats[exchange.Address][stats.Token] = &models.ExchangeStatistic{
+						Date:    cache.date,
+						Name:    exchange.Name,
+						Address: exchange.Address,
+						Token:   stats.Token,
+					}
+				}
 
-		if ok {
-			if db.el.Contains(charger.Address) {
-				db.db.Delete(charger)
-				db.logger.Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)", charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
-				continue
+				exchangeStats[exchange.Address][stats.Token].CollectTxCount += stats.ToTXCount
+				exchangeStats[exchange.Address][stats.Token].CollectFee += stats.ToFee
+				exchangeStats[exchange.Address][stats.Token].CollectNetFee += stats.ToNetFee
+				exchangeStats[exchange.Address][stats.Token].CollectNetUsage += stats.ToNetUsage
+				exchangeStats[exchange.Address][stats.Token].CollectEnergyTotal += stats.ToEnergyTotal
+				exchangeStats[exchange.Address][stats.Token].CollectEnergyFee += stats.ToEnergyFee
+				exchangeStats[exchange.Address][stats.Token].CollectEnergyUsage += stats.ToEnergyUsage
+
+				exchangeStats[exchange.Address][stats.Token].WithdrawTxCount += stats.FromTXCount
+				exchangeStats[exchange.Address][stats.Token].WithdrawFee += stats.FromFee
+				exchangeStats[exchange.Address][stats.Token].WithdrawNetFee += stats.FromNetFee
+				exchangeStats[exchange.Address][stats.Token].WithdrawNetUsage += stats.FromNetUsage
+				exchangeStats[exchange.Address][stats.Token].WithdrawEnergyTotal += stats.FromEnergyTotal
+				exchangeStats[exchange.Address][stats.Token].WithdrawEnergyFee += stats.FromEnergyFee
+				exchangeStats[exchange.Address][stats.Token].WithdrawEnergyUsage += stats.FromEnergyUsage
+			} else {
+				charger, ok := cache.chargers[stats.User]
+				if ok && charger.IsFake {
+					db.logger.Infof("Skip fake charger [%s] for exchange - [%s](%s)",
+						charger.Address, charger.ExchangeAddress, charger.ExchangeName)
+					continue
+				}
+
+				if !ok {
+					charger = &models.Charger{}
+					result := db.db.Where("address = ?", stats.User).First(charger)
+					ok = !errors.Is(result.Error, gorm.ErrRecordNotFound)
+				}
+
+				if ok {
+					if db.el.Contains(charger.Address) {
+						db.db.Delete(charger)
+						db.logger.Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)",
+							charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
+						continue
+					}
+
+					if _, ok := exchangeStats[charger.ExchangeAddress]; !ok {
+						exchangeStats[charger.ExchangeAddress] = make(map[string]*models.ExchangeStatistic)
+						exchangeStats[charger.ExchangeAddress]["_"] = &models.ExchangeStatistic{
+							Date:    cache.date,
+							Name:    charger.ExchangeName,
+							Address: charger.ExchangeAddress,
+							Token:   "_",
+						}
+					}
+
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeTxCount += stats.ToTXCount
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeFee += stats.ToFee
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeNetFee += stats.ToNetFee
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeNetUsage += stats.ToNetUsage
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeEnergyTotal += stats.ToEnergyTotal
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeEnergyFee += stats.ToEnergyFee
+					exchangeStats[charger.ExchangeAddress]["_"].ChargeEnergyUsage += stats.ToEnergyUsage
+
+					if _, ok := exchangeStats[charger.ExchangeAddress][stats.Token]; !ok {
+						exchangeStats[charger.ExchangeAddress][stats.Token] = &models.ExchangeStatistic{
+							Date:    cache.date,
+							Name:    charger.ExchangeName,
+							Address: charger.ExchangeAddress,
+							Token:   stats.Token,
+						}
+					}
+
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeTxCount += stats.ToTXCount
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeFee += stats.ToFee
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeNetFee += stats.ToNetFee
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeNetUsage += stats.ToNetUsage
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeEnergyTotal += stats.ToEnergyTotal
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeEnergyFee += stats.ToEnergyFee
+					exchangeStats[charger.ExchangeAddress][stats.Token].ChargeEnergyUsage += stats.ToEnergyUsage
+				}
 			}
 
-			exchangeStats[charger.ExchangeAddress].ChargeTxCount += toStat.TRXTotal - toStat.SmallTRXTotal + toStat.USDTTotal - toStat.SmallUSDTTotal
-			exchangeStats[charger.ExchangeAddress].ChargeFee += toStat.Fee
-			exchangeStats[charger.ExchangeAddress].ChargeNetFee += toStat.NetFee
-			exchangeStats[charger.ExchangeAddress].ChargeNetUsage += toStat.NetUsage
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyTotal += toStat.EnergyTotal
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyFee += toStat.EnergyFee
-			exchangeStats[charger.ExchangeAddress].ChargeEnergyUsage += toStat.EnergyUsage + toStat.EnergyOriginUsage
 		}
 	}
 
 	// Flush exchange statistics
-	for _, statistic := range exchangeStats {
-		db.db.Create(statistic)
+	for _, tokenStats := range exchangeStats {
+		for _, stats := range tokenStats {
+			db.db.Create(stats)
+		}
 	}
 
 	db.logger.Info("Complete updating exchange statistic")

@@ -33,6 +33,7 @@
     "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5", # sTRX
     "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR", # WTRX
     "TThzxNRLrW2Brp9DcTQU8i4Wd9udCWEdZ3", # stUSDT
+    "TGkxzkDKyMeq2T7edKnyjZoFypyzjkkssq", # wstUSDT
   ]
 [defi]
   sunswap_v1 = [

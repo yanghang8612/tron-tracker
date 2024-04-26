@@ -111,7 +111,7 @@ func (t *Tracker) doTrackBlock() {
 		txToDB.Result = txInfoList[idx].Receipt.Result
 		txToDB.SigCount = uint8(len(tx.Signature))
 		if txToDB.Type == 1 {
-			txToDB.Name = "_"
+			txToDB.Name = "TRX"
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
@@ -169,7 +169,7 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.Amount.Neg()
 		}
 		transactions = append(transactions, txToDB)
-		t.db.UpdateUserStatistic(txToDB)
+		t.db.UpdateStatistics(txToDB)
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {

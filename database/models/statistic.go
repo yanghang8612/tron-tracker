@@ -40,7 +40,7 @@ func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
 	switch tx.Type {
 	case 1:
 		stats.TRXTotal = 1
-		if tx.Amount.Int64() < 100000 {
+		if tx.Amount.Int64() < 500000 {
 			stats.SmallTRXTotal = 1
 		}
 	case 2:
@@ -143,6 +143,74 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	}
 }
 
+type UserTokenStatistic struct {
+	ID                    uint   `gorm:"primaryKey" json:"-"`
+	User                  string `gorm:"size:34;index" json:"address"`
+	Token                 string `gorm:"size:34;index" json:"token"`
+	FromTXCount           int64  `gorm:"index" json:"from_tx_count"`
+	FromFee               int64  `gorm:"index" json:"from_fee"`
+	FromEnergyTotal       int64  `json:"from_energy_total"`
+	FromEnergyFee         int64  `json:"from_energy_fee"`
+	FromEnergyUsage       int64  `json:"from_energy_usage"`
+	FromEnergyOriginUsage int64  `json:"from_energy_origin_usage"`
+	FromNetUsage          int64  `json:"from_net_usage"`
+	FromNetFee            int64  `json:"from_net_fee"`
+	ToTXCount             int64  `gorm:"index" json:"to_tx_count"`
+	ToFee                 int64  `gorm:"index" json:"to_fee"`
+	ToEnergyTotal         int64  `json:"to_energy_total"`
+	ToEnergyFee           int64  `json:"to_energy_fee"`
+	ToEnergyUsage         int64  `json:"to_energy_usage"`
+	ToEnergyOriginUsage   int64  `json:"to_energy_origin_usage"`
+	ToNetUsage            int64  `json:"to_net_usage"`
+	ToNetFee              int64  `json:"to_net_fee"`
+}
+
+func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.FromTXCount += other.FromTXCount
+	o.FromFee += other.FromFee
+	o.FromEnergyTotal += other.FromEnergyTotal
+	o.FromEnergyFee += other.FromEnergyFee
+	o.FromEnergyUsage += other.FromEnergyUsage
+	o.FromEnergyOriginUsage += other.FromEnergyOriginUsage
+	o.FromNetUsage += other.FromNetUsage
+	o.FromNetFee += other.FromNetFee
+
+	o.ToTXCount += other.ToTXCount
+	o.ToFee += other.ToFee
+	o.ToEnergyTotal += other.ToEnergyTotal
+	o.ToEnergyFee += other.ToEnergyFee
+	o.ToEnergyUsage += other.ToEnergyUsage
+	o.ToEnergyOriginUsage += other.ToEnergyOriginUsage
+	o.ToNetUsage += other.ToNetUsage
+	o.ToNetFee += other.ToNetFee
+}
+
+func (o *UserTokenStatistic) AddFrom(tx *Transaction) {
+	o.FromTXCount++
+	o.FromFee += tx.Fee
+	o.FromEnergyTotal += tx.EnergyTotal
+	o.FromEnergyFee += tx.EnergyFee
+	o.FromEnergyUsage += tx.EnergyUsage
+	o.FromEnergyOriginUsage += tx.EnergyOriginUsage
+	o.FromNetUsage += tx.NetUsage
+	o.FromNetFee += tx.NetFee
+}
+
+func (o *UserTokenStatistic) AddTo(tx *Transaction) {
+	o.ToTXCount++
+	o.ToFee += tx.Fee
+	o.ToEnergyTotal += tx.EnergyTotal
+	o.ToEnergyFee += tx.EnergyFee
+	o.ToEnergyUsage += tx.EnergyUsage
+	o.ToEnergyOriginUsage += tx.EnergyOriginUsage
+	o.ToNetUsage += tx.NetUsage
+	o.ToNetFee += tx.NetFee
+}
+
 type TokenStatistic struct {
 	ID                uint   `gorm:"primaryKey" json:"-"`
 	Address           string `gorm:"size:34;uniqueIndex" json:"address"`
@@ -206,7 +274,8 @@ type ExchangeStatistic struct {
 	ID                  uint   `gorm:"primaryKey" json:"-"`
 	Date                string `gorm:"index;size:6" json:"date"`
 	Name                string `json:"name,omitempty"`
-	Address             string `gorm:"size:34" json:"address,omitempty"`
+	Address             string `gorm:"index;size:34" json:"address,omitempty"`
+	Token               string `gorm:"index;" json:"token,omitempty"`
 	TotalFee            int64  `gorm:"-:all" json:"total_fee"`
 	ChargeTxCount       int64  `json:"charge_tx_count"`
 	ChargeFee           int64  `json:"charge_fee"`

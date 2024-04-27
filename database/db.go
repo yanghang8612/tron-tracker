@@ -97,8 +97,8 @@ func New(config *Config) *RawDB {
 
 	var LastTrackedDateMeta models.Meta
 	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&LastTrackedDateMeta)
-	db.Migrator().DropTable("transaction_" + LastTrackedDateMeta.Val)
-	db.Migrator().DropTable("transfer_" + LastTrackedDateMeta.Val)
+	db.Migrator().DropTable("transactions_" + LastTrackedDateMeta.Val)
+	db.Migrator().DropTable("transfers_" + LastTrackedDateMeta.Val)
 
 	var LastTrackedBlockNumMeta models.Meta
 	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)

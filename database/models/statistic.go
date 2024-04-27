@@ -120,7 +120,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 		}
 	case 2:
 		o.TRC10Total++
-	case 3:
+	case 4:
 		o.VoteTotal++
 	case 11, 12, 54, 55, 59:
 		o.StakeTotal++

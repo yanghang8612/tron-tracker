@@ -259,7 +259,7 @@ func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatis
 
 func (db *RawDB) GetExchangeStatisticsByDate(date string) []models.ExchangeStatistic {
 	var exchangeStatistic []models.ExchangeStatistic
-	db.db.Where("date = ?", date).Find(&exchangeStatistic)
+	db.db.Where("date = ? and token = ?", date, "_").Find(&exchangeStatistic)
 	return exchangeStatistic
 }
 

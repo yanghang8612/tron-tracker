@@ -377,7 +377,7 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 			Token: tx.Name,
 		}
 	}
-	stats[tx.FromAddr].AddFrom(tx)
+	stats[tx.FromAddr+tx.Name].AddFrom(tx)
 
 	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
 		stats[tx.ToAddr+tx.Name] = &models.UserTokenStatistic{
@@ -385,7 +385,7 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 			Token: tx.Name,
 		}
 	}
-	stats[tx.ToAddr].AddTo(tx)
+	stats[tx.ToAddr+tx.Name].AddTo(tx)
 }
 
 func (db *RawDB) SaveCharger(from, to, token, txHash string) {

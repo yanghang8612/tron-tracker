@@ -257,9 +257,26 @@ func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatis
 	return tokenStatistic
 }
 
-func (db *RawDB) GetExchangeStatisticsByDate(date string) []models.ExchangeStatistic {
+func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, token string, days int) models.TokenStatistic {
+	var tokenStatistic models.TokenStatistic
+	tokenStatistic.Address = token
+
+	for i := 0; i < days; i++ {
+		dayStatistic := models.TokenStatistic{}
+		db.db.Table("token_stats_"+date.AddDate(0, 0, i).Format("060102")).Where("address = ?", token).Limit(1).Find(&dayStatistic)
+		tokenStatistic.Merge(&dayStatistic)
+	}
+
+	return tokenStatistic
+}
+
+func (db *RawDB) GetExchangeTotalStatisticsByDate(date string) []models.ExchangeStatistic {
+	return db.GetExchangeStatisticsByDateAndToken(date, "_")
+}
+
+func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []models.ExchangeStatistic {
 	var exchangeStatistic []models.ExchangeStatistic
-	db.db.Where("date = ? and token = ?", date, "_").Find(&exchangeStatistic)
+	db.db.Where("date = ? and token = ?", date, token).Find(&exchangeStatistic)
 	return exchangeStatistic
 }
 

@@ -69,6 +69,7 @@ func (s *Server) Start() {
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 	s.router.GET("/trx_statistics", s.trxStatistics)
 	s.router.GET("/user_statistics", s.userStatistics)
+	s.router.GET("/token_statistics", s.tokenStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -104,7 +105,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 	resultMap := make(map[string]*models.ExchangeStatistic)
 	totalFee, totalEnergyUsage := int64(0), int64(0)
 	for i := 0; i < days; i++ {
-		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
 			exchangeName := utils.TrimExchangeName(es.Name)
@@ -270,7 +271,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]int64 {
 	resultMap := make(map[string]int64)
 	for i := 0; i < 7; i++ {
-		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeName := utils.TrimExchangeName(es.Name)
 			resultMap[exchangeName] += fee
@@ -381,7 +382,7 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		totalFee += s.db.GetTotalStatisticsByDate(date).Fee
 		totalEnergy += s.db.GetTotalStatisticsByDate(date).EnergyTotal
 
-		for _, es := range s.db.GetExchangeStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
 			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeFee += fee
 			exchangeEnergy += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
@@ -543,6 +544,25 @@ func (s *Server) userStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(date, user, days))
+}
+
+func (s *Server) tokenStatistics(c *gin.Context) {
+	date, ok := prepareDateParam(c, "date")
+	if !ok {
+		return
+	}
+
+	token, ok := getStringParam(c, "token")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	c.JSON(200, s.db.GetTokenStatisticByDateAndTokenAndDays(date, token, days))
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

@@ -371,16 +371,16 @@ func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats
 }
 
 func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
-	if _, ok := stats[tx.FromAddr]; !ok {
-		stats[tx.FromAddr] = &models.UserTokenStatistic{
+	if _, ok := stats[tx.FromAddr+tx.Name]; !ok {
+		stats[tx.FromAddr+tx.Name] = &models.UserTokenStatistic{
 			User:  tx.FromAddr,
 			Token: tx.Name,
 		}
 	}
 	stats[tx.FromAddr].AddFrom(tx)
 
-	if _, ok := stats[tx.ToAddr]; !ok {
-		stats[tx.ToAddr] = &models.UserTokenStatistic{
+	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
+		stats[tx.ToAddr+tx.Name] = &models.UserTokenStatistic{
 			User:  tx.ToAddr,
 			Token: tx.Name,
 		}

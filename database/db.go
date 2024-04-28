@@ -108,8 +108,8 @@ func New(config *Config) *RawDB {
 	for _, token := range config.ValidTokens {
 		validTokens[token] = true
 	}
-	// TRX token symbol is "_"
-	validTokens["_"] = true
+	// TRX token symbol is "TRX"
+	validTokens["TRX"] = true
 
 	rawDB := &RawDB{
 		db:          db,

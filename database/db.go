@@ -350,7 +350,9 @@ func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
 	}
 
-	db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+	if len(tx.Name) > 0 {
+		db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+	}
 }
 
 func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {

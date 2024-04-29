@@ -1,33 +1,27 @@
 package main
 
 import (
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"syscall"
 	"time"
 
 	"github.com/robfig/cron/v3"
-	"go.uber.org/zap"
 	"tron-tracker/api"
 	"tron-tracker/database"
 	"tron-tracker/log"
 )
 
 func main() {
+	go func() {
+		http.ListenAndServe("0.0.0.0:8080", nil)
+	}()
+
 	cfg := loadConfig()
 
 	log.Init(&cfg.Log)
-
-	f, err := os.Create("cpuprofile")
-	if err != nil {
-		zap.S().Fatal(err)
-	}
-	defer f.Close()
-	if err := pprof.StartCPUProfile(f); err != nil {
-		zap.S().Fatal(err)
-	}
-	defer pprof.StopCPUProfile()
 
 	db := database.New(&cfg.DB)
 

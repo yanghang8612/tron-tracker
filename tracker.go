@@ -94,7 +94,6 @@ func (t *Tracker) doTrackBlock() {
 	}
 
 	transactions := make([]*models.Transaction, 0)
-	transfers := make([]*models.TRC20Transfer, 0)
 	t.db.SetLastTrackedBlock(block)
 	for idx, tx := range block.Transactions {
 		var txToDB = &models.Transaction{
@@ -173,23 +172,15 @@ func (t *Tracker) doTrackBlock() {
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
-				var transferToDB = &models.TRC20Transfer{
-					Hash:      tx.TxID,
-					Token:     utils.EncodeToBase58(log.Address),
-					FromAddr:  utils.EncodeToBase58(log.Topics[1][24:]),
-					ToAddr:    utils.EncodeToBase58(log.Topics[2][24:]),
-					Timestamp: block.BlockHeader.RawData.Timestamp,
-					Amount:    models.NewBigInt(utils.ConvertHexToBigInt(log.Data)),
-				}
-				transfers = append(transfers, transferToDB)
+				fromAddr := utils.EncodeToBase58(log.Topics[1][24:])
+				toAddr := utils.EncodeToBase58(log.Topics[2][24:])
 
 				// Filter zero value charger
-				if txToDB.FromAddr == transferToDB.FromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
-					t.db.SaveCharger(transferToDB.FromAddr, transferToDB.ToAddr, transferToDB.Token)
+				if txToDB.FromAddr == fromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
+					t.db.SaveCharger(fromAddr, toAddr, utils.EncodeToBase58(log.Address))
 				}
 			}
 		}
 	}
 	t.db.SaveTransactions(transactions)
-	t.db.SaveTransfers(transfers)
 }

@@ -359,16 +359,6 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 	db.db.Table(dbName).Create(transactions)
 }
 
-func (db *RawDB) SaveTransfers(transfers []*models.TRC20Transfer) {
-	if transfers == nil || len(transfers) == 0 {
-		return
-	}
-
-	dbName := "transfers_" + db.curDate
-	db.createTableIfNotExist(dbName, models.TRC20Transfer{})
-	db.db.Table(dbName).Create(transfers)
-}
-
 func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 	db.updateUserStatistic(tx.FromAddr, tx, db.cache.fromStats)
 	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)

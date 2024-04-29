@@ -27,13 +27,3 @@ type Transaction struct {
 func (tx *Transaction) SetAmount(amount int64) {
 	tx.Amount = NewBigInt(big.NewInt(amount))
 }
-
-type TRC20Transfer struct {
-	ID        uint   `gorm:"primaryKey"`
-	Hash      string `gorm:"size:64;index"`
-	Token     string `gorm:"size:34;index"`
-	FromAddr  string `gorm:"size:34;index"`
-	ToAddr    string `gorm:"size:34;index"`
-	Timestamp int64
-	Amount    BigInt
-}

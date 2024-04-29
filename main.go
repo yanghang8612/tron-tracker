@@ -3,28 +3,31 @@ package main
 import (
 	"os"
 	"os/signal"
+	"runtime/pprof"
 	"syscall"
 	"time"
 
 	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
 	"tron-tracker/api"
 	"tron-tracker/database"
 	"tron-tracker/log"
 )
 
 func main() {
-	// f, err := os.Create("cpuprofile")
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer f.Close()
-	// if err := pprof.StartCPUProfile(f); err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer pprof.StopCPUProfile()
 	cfg := loadConfig()
 
 	log.Init(&cfg.Log)
+
+	f, err := os.Create("cpuprofile")
+	if err != nil {
+		zap.S().Fatal(err)
+	}
+	defer f.Close()
+	if err := pprof.StartCPUProfile(f); err != nil {
+		zap.S().Fatal(err)
+	}
+	defer pprof.StopCPUProfile()
 
 	db := database.New(&cfg.DB)
 

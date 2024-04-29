@@ -61,6 +61,7 @@ type RawDB struct {
 	tableLock            sync.Mutex
 	statsLock            sync.Mutex
 	chargers             map[string]*models.Charger
+	chargersToSave       map[string]*models.Charger
 
 	curDate string
 	flushCh chan *dbCache
@@ -118,6 +119,8 @@ func New(config *Config) *RawDB {
 		lastTrackedDate:     LastTrackedDateMeta.Val,
 		lastTrackedBlockNum: uint(lastTrackedBlockNum),
 		isTableMigrated:     make(map[string]bool),
+		chargers:            make(map[string]*models.Charger),
+		chargersToSave:      make(map[string]*models.Charger),
 
 		flushCh: make(chan *dbCache),
 		cache:   newCache(),
@@ -132,8 +135,6 @@ func New(config *Config) *RawDB {
 }
 
 func (db *RawDB) loadChargers() {
-	db.chargers = make(map[string]*models.Charger)
-
 	if db.db.Migrator().HasTable(&models.Charger{}) {
 		chargers := make([]*models.Charger, 0)
 
@@ -209,6 +210,8 @@ func (db *RawDB) Start() {
 func (db *RawDB) Close() {
 	db.quitCh <- struct{}{}
 	db.loopWG.Wait()
+
+	db.flushChargerToDB()
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -421,19 +424,24 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 			ExchangeAddress: to,
 		}
 
-		db.db.Save(db.chargers[from])
+		db.chargersToSave[from] = db.chargers[from]
 	} else if ok && to != charger.ExchangeAddress && !charger.IsFake {
 		// If charger interact with other address which is not its exchange address
 		// Check if the other address is backup address or the same exchange
 		// Otherwise, this charger is not a real charger
 		if len(charger.BackupAddress) == 0 {
 			charger.BackupAddress = to
-			db.db.Save(charger)
+			db.chargersToSave[from] = charger
+			db.logger.Infof("Set charger [%s] backup address to [%s]", from, to)
 		} else if to != charger.BackupAddress && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
 			charger.IsFake = true
-			db.db.Save(charger)
+			db.chargersToSave[from] = charger
 			db.logger.Infof("Set charger [%s] as fake charger", from)
 		}
+	}
+
+	if len(db.chargersToSave) == 200 {
+		db.flushChargerToDB()
 	}
 }
 
@@ -497,7 +505,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		}
 
 		count += 1
-		if count%10000 == 0 {
+		if count%100_000 == 0 {
 			db.logger.Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
 		}
 	}
@@ -524,7 +532,7 @@ func (db *RawDB) Run() {
 			db.loopWG.Done()
 			return
 		case cache := <-db.flushCh:
-			db.flushToDB(cache)
+			db.flushCacheToDB(cache)
 		}
 	}
 }
@@ -552,7 +560,16 @@ func (db *RawDB) updateExchanges() {
 	}
 }
 
-func (db *RawDB) flushToDB(cache *dbCache) {
+func (db *RawDB) flushChargerToDB() {
+	chargers := make([]*models.Charger, 0)
+	for _, charger := range db.chargersToSave {
+		chargers = append(chargers, charger)
+	}
+	db.db.Save(chargers)
+	db.chargersToSave = make(map[string]*models.Charger)
+}
+
+func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	if len(cache.fromStats) == 0 && len(cache.toStats) == 0 {
 		return
 	}

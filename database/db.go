@@ -132,14 +132,16 @@ func New(config *Config) *RawDB {
 }
 
 func (db *RawDB) loadChargers() {
+	db.chargers = make(map[string]*models.Charger)
+
 	if db.db.Migrator().HasTable(&models.Charger{}) {
 		chargers := make([]*models.Charger, 0)
+
 		db.logger.Info("Start loading chargers from db")
 		result := db.db.Find(&chargers)
 		db.logger.Infof("Loaded [%d] chargers from db", result.RowsAffected)
 
 		db.logger.Info("Start building chargers map")
-		db.chargers = make(map[string]*models.Charger)
 		for i, charger := range chargers {
 			db.chargers[charger.Address] = charger
 			if i%100_000 == 0 {
@@ -147,6 +149,7 @@ func (db *RawDB) loadChargers() {
 			}
 		}
 		db.logger.Info("Complete building chargers map")
+
 		return
 	}
 

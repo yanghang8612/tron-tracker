@@ -432,7 +432,6 @@ func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 		}
 
 		db.db.Save(db.chargers[from])
-		db.logger.Infof("Save charger [%s] for exchange - [%s](%s), caused by tx - [%s]", from, db.el.Get(to).Name, to, txHash)
 	} else if ok && !charger.IsFake {
 		// If charger interact with other address which is not its exchange address
 		// Check if the other address is backup address or the same exchange
@@ -440,11 +439,10 @@ func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 		if len(charger.BackupAddress) == 0 {
 			charger.BackupAddress = to
 			db.db.Save(charger)
-			db.logger.Infof("Set charger [%s] backup address as [%s], caused by tx - [%s]", from, to, txHash)
 		} else if charger.BackupAddress != to && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
 			charger.IsFake = true
 			db.db.Save(charger)
-			db.logger.Infof("Set charger [%s] as fake charger, caused by tx - [%s]", from, txHash)
+			db.logger.Infof("Set charger [%s] faked, exchange [%s], backup [%s], to [%s]", from, charger.ExchangeAddress, charger.BackupAddress, to)
 		}
 	}
 }

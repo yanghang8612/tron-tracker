@@ -37,7 +37,7 @@ func main() {
 	tracker := New(db)
 	tracker.Start()
 
-	apiSrv := api.New(db, &cfg.DeFi)
+	apiSrv := api.New(db, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
 	watchOSSignal(tracker, apiSrv)

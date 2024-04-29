@@ -418,7 +418,7 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 	stats[tx.ToAddr+tx.Name].AddTo(tx)
 }
 
-func (db *RawDB) SaveCharger(from, to, token, txHash string) {
+func (db *RawDB) SaveCharger(from, to, token string) {
 	// Filter invalid token charger
 	if !db.vt[token] {
 		return
@@ -432,17 +432,17 @@ func (db *RawDB) SaveCharger(from, to, token, txHash string) {
 		}
 
 		db.db.Save(db.chargers[from])
-	} else if ok && !charger.IsFake {
+	} else if ok && to != charger.ExchangeAddress && !charger.IsFake {
 		// If charger interact with other address which is not its exchange address
 		// Check if the other address is backup address or the same exchange
 		// Otherwise, this charger is not a real charger
 		if len(charger.BackupAddress) == 0 {
 			charger.BackupAddress = to
 			db.db.Save(charger)
-		} else if charger.BackupAddress != to && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
+		} else if to != charger.BackupAddress && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
 			charger.IsFake = true
 			db.db.Save(charger)
-			db.logger.Infof("Set charger [%s] faked, exchange [%s], backup [%s], to [%s]", from, charger.ExchangeAddress, charger.BackupAddress, to)
+			db.logger.Infof("Set charger [%s] as fake charger", from)
 		}
 	}
 }

@@ -276,7 +276,7 @@ type ExchangeStatistic struct {
 	Name                string `json:"name,omitempty"`
 	Address             string `gorm:"index;size:34" json:"address,omitempty"`
 	Token               string `gorm:"index;" json:"token,omitempty"`
-	TotalFee            int64  `gorm:"-:all" json:"total_fee"`
+	TotalFee            int64  `json:"total_fee"`
 	ChargeTxCount       int64  `json:"charge_tx_count"`
 	ChargeFee           int64  `json:"charge_fee"`
 	ChargeNetFee        int64  `json:"charge_net_fee"`
@@ -327,4 +327,37 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.WithdrawEnergyTotal += other.WithdrawEnergyTotal
 	o.WithdrawEnergyFee += other.WithdrawEnergyFee
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
+}
+
+func (o *ExchangeStatistic) AddCharge(stats *UserTokenStatistic) {
+	o.TotalFee += stats.ToFee
+	o.ChargeTxCount += stats.ToTXCount
+	o.ChargeFee += stats.ToFee
+	o.ChargeNetFee += stats.ToNetFee
+	o.ChargeNetUsage += stats.ToNetUsage
+	o.ChargeEnergyTotal += stats.ToEnergyTotal
+	o.ChargeEnergyFee += stats.ToEnergyFee
+	o.ChargeEnergyUsage += stats.ToEnergyUsage
+}
+
+func (o *ExchangeStatistic) AddCollect(stats *UserTokenStatistic) {
+	o.TotalFee += stats.ToFee
+	o.CollectTxCount += stats.ToTXCount
+	o.CollectFee += stats.ToFee
+	o.CollectNetFee += stats.ToNetFee
+	o.CollectNetUsage += stats.ToNetUsage
+	o.CollectEnergyTotal += stats.ToEnergyTotal
+	o.CollectEnergyFee += stats.ToEnergyFee
+	o.CollectEnergyUsage += stats.ToEnergyUsage
+}
+
+func (o *ExchangeStatistic) AddWithdraw(stats *UserTokenStatistic) {
+	o.TotalFee += stats.FromFee
+	o.WithdrawTxCount += stats.FromTXCount
+	o.WithdrawFee += stats.FromFee
+	o.WithdrawNetFee += stats.FromNetFee
+	o.WithdrawNetUsage += stats.FromNetUsage
+	o.WithdrawEnergyTotal += stats.FromEnergyTotal
+	o.WithdrawEnergyFee += stats.FromEnergyFee
+	o.WithdrawEnergyUsage += stats.FromEnergyUsage
 }

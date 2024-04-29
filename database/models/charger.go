@@ -2,10 +2,9 @@ package models
 
 type Charger struct {
 	ID              uint   `gorm:"primaryKey"`
-	Created         int64  `gorm:"autoCreateTime"`
-	Address         string `gorm:"size:34;index"`
+	Address         string `gorm:"size:34;uniqueIndex"`
 	ExchangeName    string
-	ExchangeAddress string `gorm:"size:34"`
+	ExchangeAddress string `gorm:"size:34;index"`
 	BackupAddress   string `gorm:"size:34"`
-	IsFake          bool   `gorm:"-:all"`
+	IsFake          bool
 }

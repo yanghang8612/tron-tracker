@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	Log  log.Config      `toml:"log"`
-	DB   database.Config `toml:"database"`
-	DeFi api.DeFiConfig  `toml:"defi"`
+	Server api.ServerConfig `toml:"server"`
+	Log    log.Config       `toml:"log"`
+	DB     database.Config  `toml:"database"`
+	DeFi   api.DeFiConfig   `toml:"defi"`
 }
 
 func loadConfig() *Config {

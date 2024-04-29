@@ -21,6 +21,10 @@ import (
 	"tron-tracker/utils"
 )
 
+type ServerConfig struct {
+	Port int `toml:"port"`
+}
+
 type DeFiConfig struct {
 	SunSwapV1  []string `toml:"sunswap_v1"`
 	SunSwapV2  []string `toml:"sunswap_v2"`
@@ -33,16 +37,17 @@ type Server struct {
 	router *gin.Engine
 	srv    *http.Server
 
-	db     *database.RawDB
-	config *DeFiConfig
+	db           *database.RawDB
+	serverConfig *ServerConfig
+	defiConfig   *DeFiConfig
 
 	logger *zap.SugaredLogger
 }
 
-func New(db *database.RawDB, config *DeFiConfig) *Server {
+func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig) *Server {
 	router := gin.Default()
 	srv := &http.Server{
-		Addr:    ":8080",
+		Addr:    ":" + strconv.Itoa(serverConfig.Port),
 		Handler: router,
 	}
 
@@ -50,8 +55,9 @@ func New(db *database.RawDB, config *DeFiConfig) *Server {
 		router: router,
 		srv:    srv,
 
-		db:     db,
-		config: config,
+		db:           db,
+		serverConfig: serverConfig,
+		defiConfig:   deficonfig,
 
 		logger: zap.S().Named("[api]"),
 	}
@@ -76,6 +82,8 @@ func (s *Server) Start() {
 			panic(err)
 		}
 	}()
+
+	s.logger.Infof("API server started at %d", s.serverConfig.Port)
 }
 
 func (s *Server) Stop() {
@@ -389,31 +397,31 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 			exchangeEnergy += fee / 420
 		}
 
-		for _, addr := range s.config.SunSwapV1 {
+		for _, addr := range s.defiConfig.SunSwapV1 {
 			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
 			sunswapV1Fee += tokenStats.Fee
 			sunswapV1Energy += tokenStats.EnergyTotal
 		}
 
-		for _, addr := range s.config.SunSwapV2 {
+		for _, addr := range s.defiConfig.SunSwapV2 {
 			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
 			sunswapV2Fee += tokenStats.Fee
 			sunswapV2Energy += tokenStats.EnergyTotal
 		}
 
-		for _, addr := range s.config.JustLend {
+		for _, addr := range s.defiConfig.JustLend {
 			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
 			justlendFee += tokenStats.Fee
 			justlendEnergy += tokenStats.EnergyTotal
 		}
 
-		for _, addr := range s.config.BTTC {
+		for _, addr := range s.defiConfig.BTTC {
 			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
 			bttcFee += tokenStats.Fee
 			bttcEnergy += tokenStats.EnergyTotal
 		}
 
-		for _, addr := range s.config.USDTCasino {
+		for _, addr := range s.defiConfig.USDTCasino {
 			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
 			usdtcasinoFee += tokenStats.Fee
 			usdtcasinoEnergy += tokenStats.EnergyTotal

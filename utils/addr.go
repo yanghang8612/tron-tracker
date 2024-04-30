@@ -20,7 +20,7 @@ func TrimExchangeName(name string) string {
 	if strings.Contains(name, "Bitpie") {
 		return "Bitpie"
 	}
-	return regexp.MustCompile(`-hot|-Hot|\s\d+$`).ReplaceAllString(name, ``)
+	return regexp.MustCompile(`-hot|-Hot|\s+\d+$`).ReplaceAllString(name, ``)
 }
 
 func IsSameExchange(name1 string, name2 string) bool {

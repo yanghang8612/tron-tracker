@@ -435,11 +435,11 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		if len(charger.BackupAddress) == 0 {
 			charger.BackupAddress = to
 			db.chargersToSave[from] = charger
-			db.logger.Infof("Set charger [%s] backup address to [%s]", from, to)
 		} else if to != charger.BackupAddress && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
 			charger.IsFake = true
 			db.chargersToSave[from] = charger
-			db.logger.Infof("Set charger [%s] as fake charger", from)
+			db.logger.Infof("Set charger [%s] as fake charger, exchange [%s](%s), backup [%s], to [%s], [%s] VS [%s]",
+				from, charger.ExchangeAddress, charger.ExchangeName, charger.BackupAddress, to, utils.TrimExchangeName(charger.ExchangeName), utils.TrimExchangeName(db.el.Get(to).Name))
 		}
 	}
 

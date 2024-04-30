@@ -728,7 +728,6 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 					exchangeStats[charger.ExchangeAddress][stats.Token].AddCharge(stats)
 				}
-				db.chargersLock.Unlock()
 			}
 		}
 

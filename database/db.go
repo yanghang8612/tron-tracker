@@ -146,7 +146,7 @@ func (db *RawDB) loadChargers() {
 		db.logger.Info("Start building chargers map")
 		for i, charger := range chargers {
 			db.chargers[charger.Address] = charger
-			if i%100_000 == 0 {
+			if i%1_000_000 == 0 {
 				db.logger.Infof("Built [%d] chargers map", i)
 			}
 		}
@@ -176,9 +176,8 @@ func (db *RawDB) loadChargers() {
 		line := scanner.Text()
 		cols := strings.Split(line, ",")
 		chargeToSave = append(chargeToSave, &models.Charger{
-			Address:         cols[0],
-			ExchangeName:    cols[1],
-			ExchangeAddress: cols[2],
+			Address:      cols[0],
+			ExchangeName: utils.TrimExchangeName(cols[1]),
 		})
 		if len(chargeToSave) == 1000 {
 			db.db.Create(&chargeToSave)
@@ -188,7 +187,7 @@ func (db *RawDB) loadChargers() {
 			chargeToSave = make([]*models.Charger, 0)
 		}
 		count++
-		if count%100_000 == 0 {
+		if count%1_000_000 == 0 {
 			db.logger.Infof("Loaded [%d] chargers", count)
 		}
 	}
@@ -295,8 +294,8 @@ func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, token st
 	return tokenStatistic
 }
 
-func (db *RawDB) GetExchangeTotalStatisticsByDate(date string) []models.ExchangeStatistic {
-	return db.GetExchangeStatisticsByDateAndToken(date, "_")
+func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []models.ExchangeStatistic {
+	return db.GetExchangeStatisticsByDateAndToken(date.Format("060102"), "_")
 }
 
 func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []models.ExchangeStatistic {
@@ -421,25 +420,28 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 	if charger, ok := db.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
 		db.chargersLock.Lock()
 		db.chargers[from] = &models.Charger{
-			Address:         from,
-			ExchangeName:    db.el.Get(to).Name,
-			ExchangeAddress: to,
+			Address:      from,
+			ExchangeName: db.el.Get(to).Name,
 		}
 		db.chargersLock.Unlock()
 
 		db.chargersToSave[from] = db.chargers[from]
-	} else if ok && to != charger.ExchangeAddress && !charger.IsFake {
-		// If charger interact with other address which is not its exchange address
-		// Check if the other address is backup address or the same exchange
-		// Otherwise, this charger is not a real charger
-		if len(charger.BackupAddress) == 0 {
-			charger.BackupAddress = to
-			db.chargersToSave[from] = charger
-		} else if to != charger.BackupAddress && !utils.IsSameExchange(charger.ExchangeName, db.el.Get(to).Name) {
-			charger.IsFake = true
-			db.chargersToSave[from] = charger
-			db.logger.Infof("Set charger [%s] as fake charger, exchange [%s](%s), backup [%s], to [%s], [%s] VS [%s]",
-				from, charger.ExchangeAddress, charger.ExchangeName, charger.BackupAddress, to, utils.TrimExchangeName(charger.ExchangeName), utils.TrimExchangeName(db.el.Get(to).Name))
+	} else if ok && !charger.IsFake {
+		if db.el.Contains(to) {
+			// Charger interact with other exchange address, so it is a fake charger
+			if db.el.Get(to).Name != charger.ExchangeName {
+				charger.IsFake = true
+				db.chargersToSave[from] = charger
+			}
+		} else {
+			// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
+			if len(charger.BackupAddress) == 0 {
+				charger.BackupAddress = to
+				db.chargersToSave[from] = charger
+			} else if to != charger.BackupAddress {
+				charger.IsFake = true
+				db.chargersToSave[from] = charger
+			}
 		}
 	}
 
@@ -664,30 +666,28 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 			if db.el.Contains(stats.User) {
 				exchange := db.el.Get(stats.User)
 
-				if _, ok := exchangeStats[exchange.Address]; !ok {
-					exchangeStats[exchange.Address] = make(map[string]*models.ExchangeStatistic)
-					exchangeStats[exchange.Address]["_"] = &models.ExchangeStatistic{
-						Date:    cache.date,
-						Name:    exchange.Name,
-						Address: exchange.Address,
-						Token:   "_",
+				if _, ok := exchangeStats[exchange.Name]; !ok {
+					exchangeStats[exchange.Name] = make(map[string]*models.ExchangeStatistic)
+					exchangeStats[exchange.Name]["_"] = &models.ExchangeStatistic{
+						Date:  cache.date,
+						Name:  exchange.Name,
+						Token: "_",
 					}
 				}
 
-				exchangeStats[exchange.Address]["_"].AddCollect(stats)
-				exchangeStats[exchange.Address]["_"].AddWithdraw(stats)
+				exchangeStats[exchange.Name]["_"].AddCollect(stats)
+				exchangeStats[exchange.Name]["_"].AddWithdraw(stats)
 
-				if _, ok := exchangeStats[exchange.Address][stats.Token]; !ok {
-					exchangeStats[exchange.Address][stats.Token] = &models.ExchangeStatistic{
-						Date:    cache.date,
-						Name:    exchange.Name,
-						Address: exchange.Address,
-						Token:   stats.Token,
+				if _, ok := exchangeStats[exchange.Name][stats.Token]; !ok {
+					exchangeStats[exchange.Name][stats.Token] = &models.ExchangeStatistic{
+						Date:  cache.date,
+						Name:  exchange.Name,
+						Token: stats.Token,
 					}
 				}
 
-				exchangeStats[exchange.Address][stats.Token].AddCollect(stats)
-				exchangeStats[exchange.Address][stats.Token].AddWithdraw(stats)
+				exchangeStats[exchange.Name][stats.Token].AddCollect(stats)
+				exchangeStats[exchange.Name][stats.Token].AddWithdraw(stats)
 			} else {
 				db.chargersLock.RLock()
 				charger, ok := db.chargers[stats.User]
@@ -699,34 +699,30 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 					if db.el.Contains(charger.Address) {
 						charger.IsFake = true
-						db.db.Delete(charger)
-						db.logger.Infof("Delete existed exchange charger [%s](%s) related to [%s](%s)",
-							charger.Address, db.el.Get(charger.Address).Name, charger.ExchangeAddress, charger.ExchangeName)
+						db.db.Save(charger)
 						continue
 					}
 
-					if _, ok := exchangeStats[charger.ExchangeAddress]; !ok {
-						exchangeStats[charger.ExchangeAddress] = make(map[string]*models.ExchangeStatistic)
-						exchangeStats[charger.ExchangeAddress]["_"] = &models.ExchangeStatistic{
-							Date:    cache.date,
-							Name:    charger.ExchangeName,
-							Address: charger.ExchangeAddress,
-							Token:   "_",
+					if _, ok := exchangeStats[charger.ExchangeName]; !ok {
+						exchangeStats[charger.ExchangeName] = make(map[string]*models.ExchangeStatistic)
+						exchangeStats[charger.ExchangeName]["_"] = &models.ExchangeStatistic{
+							Date:  cache.date,
+							Name:  charger.ExchangeName,
+							Token: "_",
 						}
 					}
 
-					exchangeStats[charger.ExchangeAddress]["_"].AddCharge(stats)
+					exchangeStats[charger.ExchangeName]["_"].AddCharge(stats)
 
-					if _, ok := exchangeStats[charger.ExchangeAddress][stats.Token]; !ok {
-						exchangeStats[charger.ExchangeAddress][stats.Token] = &models.ExchangeStatistic{
-							Date:    cache.date,
-							Name:    charger.ExchangeName,
-							Address: charger.ExchangeAddress,
-							Token:   stats.Token,
+					if _, ok := exchangeStats[charger.ExchangeName][stats.Token]; !ok {
+						exchangeStats[charger.ExchangeName][stats.Token] = &models.ExchangeStatistic{
+							Date:  cache.date,
+							Name:  charger.ExchangeName,
+							Token: stats.Token,
 						}
 					}
 
-					exchangeStats[charger.ExchangeAddress][stats.Token].AddCharge(stats)
+					exchangeStats[charger.ExchangeName][stats.Token].AddCharge(stats)
 				}
 			}
 		}

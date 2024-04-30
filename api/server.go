@@ -111,32 +111,31 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 	}
 
 	resultMap := make(map[string]*models.ExchangeStatistic)
-	totalFee, totalEnergyUsage := int64(0), int64(0)
+	totalEnergy, totalFee, totalEnergyUsage := int64(0), int64(0), int64(0)
+	dateRangeStr := startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
 	for i := 0; i < days; i++ {
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+		queryDate := startDate.AddDate(0, 0, i)
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(queryDate) {
+			totalEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-			exchangeName := utils.TrimExchangeName(es.Name)
-			if _, ok := resultMap[exchangeName]; !ok {
-				resultMap[exchangeName] = &models.ExchangeStatistic{}
-				resultMap[exchangeName].Date = startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
-				resultMap[exchangeName].Name = exchangeName
+			if _, ok := resultMap[es.Name]; !ok {
+				resultMap[es.Name] = &models.ExchangeStatistic{
+					Date: dateRangeStr,
+					Name: es.Name,
+				}
 			}
-			resultMap[exchangeName].Merge(&es)
+			resultMap[es.Name].Merge(&es)
 		}
 	}
 
 	resultArray := make([]*models.ExchangeStatistic, 0)
-	for _, es := range resultMap {
-		es.TotalFee = es.ChargeFee + es.CollectFee + es.WithdrawFee
-		resultArray = append(resultArray, es)
-	}
-
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].TotalFee > resultArray[j].TotalFee
 	})
 
 	c.JSON(200, gin.H{
+		"total_energy":              totalEnergy,
 		"total_fee":                 totalFee,
 		"total_energy_usage":        totalEnergyUsage,
 		"exchanges_total_statistic": resultArray,
@@ -279,11 +278,10 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]int64 {
 	resultMap := make(map[string]int64)
 	for i := 0; i < 7; i++ {
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
-			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
-			exchangeName := utils.TrimExchangeName(es.Name)
-			resultMap[exchangeName] += fee
-			resultMap["total_fee"] += fee
+		queryDate := startDate.AddDate(0, 0, i)
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(queryDate) {
+			resultMap[es.Name] += es.TotalFee
+			resultMap["total_fee"] += es.TotalFee
 		}
 	}
 
@@ -390,7 +388,7 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		totalFee += s.db.GetTotalStatisticsByDate(date).Fee
 		totalEnergy += s.db.GetTotalStatisticsByDate(date).EnergyTotal
 
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102")) {
+		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i)) {
 			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeFee += fee
 			exchangeEnergy += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage

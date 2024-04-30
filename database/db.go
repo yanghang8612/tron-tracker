@@ -61,7 +61,7 @@ type RawDB struct {
 	tableLock            sync.Mutex
 	statsLock            sync.Mutex
 	chargers             map[string]*models.Charger
-	chargersLock         sync.Mutex
+	chargersLock         sync.RWMutex
 	chargersToSave       map[string]*models.Charger
 
 	curDate string
@@ -420,13 +420,12 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 
 	if charger, ok := db.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
 		db.chargersLock.Lock()
-		defer db.chargersLock.Unlock()
-
 		db.chargers[from] = &models.Charger{
 			Address:         from,
 			ExchangeName:    db.el.Get(to).Name,
 			ExchangeAddress: to,
 		}
+		db.chargersLock.Unlock()
 
 		db.chargersToSave[from] = db.chargers[from]
 	} else if ok && to != charger.ExchangeAddress && !charger.IsFake {
@@ -690,9 +689,10 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 				exchangeStats[exchange.Address][stats.Token].AddCollect(stats)
 				exchangeStats[exchange.Address][stats.Token].AddWithdraw(stats)
 			} else {
-				db.chargersLock.Lock()
-				if charger, ok := db.chargers[stats.User]; ok {
-					db.chargersLock.Unlock()
+				db.chargersLock.RLock()
+				charger, ok := db.chargers[stats.User]
+				db.chargersLock.RUnlock()
+				if ok {
 					if charger.IsFake {
 						continue
 					}
@@ -728,6 +728,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 					exchangeStats[charger.ExchangeAddress][stats.Token].AddCharge(stats)
 				}
+				db.chargersLock.Unlock()
 			}
 		}
 

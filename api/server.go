@@ -158,7 +158,6 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	}
 
 	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
-	dateRangeStr := startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
 	for i := 0; i < days; i++ {
 		queryDate := startDate.AddDate(0, 0, i)
 		for _, es := range s.db.GetExchangeTokenStatisticsByDate(queryDate) {
@@ -166,16 +165,12 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
 			}
 
-			if es.Token == "total" {
+			if es.Token == "_" {
 				continue
 			}
 
 			if _, ok := resultMap[es.Name][es.Token]; !ok {
-				resultMap[es.Name][es.Token] = &models.ExchangeStatistic{
-					Date:  dateRangeStr,
-					Name:  es.Name,
-					Token: es.Token,
-				}
+				resultMap[es.Name][es.Token] = &models.ExchangeStatistic{}
 			}
 			resultMap[es.Name][es.Token].Merge(&es)
 		}

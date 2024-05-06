@@ -301,21 +301,25 @@ func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatis
 	return tokenStat
 }
 
-func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, token string, days int) models.TokenStatistic {
-	result := models.TokenStatistic{
-		Address: token,
-	}
+func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, days int) map[string]*models.TokenStatistic {
+	resultMap := make(map[string]*models.TokenStatistic)
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
-		var dayStat models.TokenStatistic
-		db.db.Table("token_stats_"+queryDate).Where("address = ?", token).Limit(1).Find(&dayStat)
+		var dayStats []*models.TokenStatistic
+		db.db.Table("token_stats_" + queryDate).Find(&dayStats)
 
-		result.Merge(&dayStat)
+		for _, dayStat := range dayStats {
+			if _, ok := resultMap[dayStat.Address]; !ok {
+				resultMap[dayStat.Address] = dayStat
+			} else {
+				resultMap[dayStat.Address].Merge(dayStat)
+			}
+		}
 	}
 
-	return result
+	return resultMap
 }
 
 func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []models.ExchangeStatistic {
@@ -397,11 +401,8 @@ func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
 	db.updateUserStatistic("total", tx, db.cache.fromStats)
 
-	if len(tx.Name) > 0 && tx.Name != "_" {
-		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
-	}
-
 	if len(tx.Name) > 0 {
+		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
 		db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
 	}
 }

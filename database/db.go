@@ -480,53 +480,78 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	scanner := bufio.NewScanner(weeklyUsersFile)
 
 	db.logger.Info("Start count TronLink user fee for week " + thisMonday)
-	count := 0
-	var (
-		totalFee    int64
-		totalEnergy int64
-	)
+
 	lastMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, -6)
 	db.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
 
-	users := make([]string, 0)
+	lineCount := 0
+	users := make(map[string]bool)
 	for scanner.Scan() {
-		user := scanner.Text()
-
-		// If user is exchange address, skip it
-		if db.el.Contains(user) {
-			continue
-		}
-
-		users = append(users, user)
-
-		if len(users) == 100 {
-			for i := 0; i < 7; i++ {
-				date := lastMonday.AddDate(0, 0, i).Format("060102")
-				fee, energy := db.GetFeeAndEnergyByDateAndUsers(date, users)
-				totalFee += fee
-				totalEnergy += energy
-			}
-			users = make([]string, 0)
-		}
-
-		count += 1
-		if count%100_000 == 0 {
-			db.logger.Infof("Counted [%d] user fee, current total fee [%d]", count, totalFee)
-		}
+		users[scanner.Text()] = true
+		lineCount += 1
 	}
+	db.logger.Infof("Total users: %d, read [%d] lines from file", len(users), lineCount)
 
-	// Count the rest users
-	if len(users) > 0 {
-		for i := 0; i < 7; i++ {
-			date := lastMonday.AddDate(0, 0, i).Format("060102")
-			fee, energy := db.GetFeeAndEnergyByDateAndUsers(date, users)
-			totalFee += fee
-			totalEnergy += energy
-		}
+	var (
+		totalFee       int64
+		totalEnergy    int64
+		withdrawFee    int64
+		withdrawEnergy int64
+		collectFee     int64
+		collectEnergy  int64
+		chargeFee      int64
+		chargeEnergy   int64
+	)
+	for i := 0; i < 7; i++ {
+		queryDate := lastMonday.AddDate(0, 0, i).Format("060102")
+		db.logger.Infof("Start querying transactions for date: %s", queryDate)
+
+		txCount := 0
+		results := make([]models.Transaction, 0)
+		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(tx *gorm.DB, batch int) error {
+			for _, result := range results {
+				user := result.FromAddr
+				if _, ok := users[user]; !ok {
+					continue
+				}
+
+				if db.el.Contains(user) {
+					withdrawFee += result.Fee
+					withdrawEnergy += result.EnergyTotal
+				} else if _, ok := db.chargers[user]; ok {
+					collectFee += result.Fee
+					collectEnergy += result.EnergyTotal
+				} else if _, ok := db.chargers[result.ToAddr]; ok {
+					chargeFee += result.Fee
+					chargeEnergy += result.EnergyTotal
+				} else {
+					totalFee += result.Fee
+					totalEnergy += result.EnergyTotal
+				}
+			}
+			txCount += 100
+
+			if txCount%100_000 == 0 {
+				db.logger.Infof("Queried rows: %d", txCount)
+			}
+
+			return nil
+		})
+		db.logger.Infof("Finish querying transactions for date: %s, query rows: %d, error: %v", queryDate, result.RowsAffected, result.Error)
+		db.logger.Infof("Total fee: %d, total energy: %d", totalFee, totalEnergy)
+		db.logger.Infof("Withdraw fee: %d, withdraw energy: %d", withdrawFee, withdrawEnergy)
+		db.logger.Infof("Collect fee: %d, collect energy: %d", collectFee, collectEnergy)
+		db.logger.Infof("Charge fee: %d, charge energy: %d", chargeFee, chargeEnergy)
 	}
 
 	statsResultFile.WriteString(strconv.FormatInt(totalFee, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(totalEnergy, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(withdrawFee, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(withdrawEnergy, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(collectFee, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(collectEnergy, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(chargeFee, 10) + "\n")
+	statsResultFile.WriteString(strconv.FormatInt(chargeEnergy, 10) + "\n")
 }
 
 func (db *RawDB) Run() {
@@ -543,7 +568,7 @@ func (db *RawDB) Run() {
 }
 
 func (db *RawDB) updateExchanges() {
-	if time.Now().Sub(db.elUpdatedAt) < 10*time.Minute {
+	if time.Now().Sub(db.elUpdatedAt) < 1*time.Hour {
 		return
 	}
 

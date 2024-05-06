@@ -217,6 +217,10 @@ func (db *RawDB) Close() {
 	_ = underDB.Close()
 }
 
+func (db *RawDB) Report() {
+	db.logger.Infof("Status report, chargers size [%d]", len(db.chargers))
+}
+
 func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
 }

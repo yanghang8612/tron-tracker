@@ -25,17 +25,21 @@ func main() {
 
 	db := database.New(&cfg.DB)
 
-	c := cron.New(cron.WithSeconds())
-	_, _ = c.AddFunc("0 */5 0-12 * * 1", func() {
-		db.DoTronLinkWeeklyStatistics(time.Now(), false)
-	})
-	c.Start()
-
 	tracker := New(db)
 	tracker.Start()
 
 	apiSrv := api.New(db, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
+
+	c := cron.New(cron.WithSeconds())
+	_, _ = c.AddFunc("0 */5 0-12 * * 1", func() {
+		db.DoTronLinkWeeklyStatistics(time.Now(), false)
+	})
+	_, _ = c.AddFunc("0 */10 * * * *", func() {
+		tracker.Report()
+		db.Report()
+	})
+	c.Start()
 
 	watchOSSignal(tracker, apiSrv)
 }

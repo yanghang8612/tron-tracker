@@ -17,9 +17,10 @@ import (
 type Tracker struct {
 	db *database.RawDB
 
-	reporter *utils.Reporter
-	loopWG   sync.WaitGroup
-	quitCh   chan struct{}
+	isCatching bool
+	reporter   *utils.Reporter
+	loopWG     sync.WaitGroup
+	quitCh     chan struct{}
 
 	logger *zap.SugaredLogger
 }
@@ -28,6 +29,7 @@ func New(db *database.RawDB) *Tracker {
 	return &Tracker{
 		db: db,
 
+		isCatching: true,
 		reporter: utils.NewReporter(1000, 60*time.Second, 0, func(rs utils.ReporterState) string {
 			return fmt.Sprintf("Tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
@@ -49,6 +51,14 @@ func (t *Tracker) Start() {
 func (t *Tracker) Stop() {
 	close(t.quitCh)
 	t.loopWG.Wait()
+}
+
+func (t *Tracker) Report() {
+	if !t.isCatching {
+		t.logger.Infof("Status report, latest tracked block [%d](%s)",
+			t.db.GetLastTrackedBlockNum(),
+			time.Unix(t.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"))
+	}
 }
 
 func (t *Tracker) loop() {
@@ -77,7 +87,10 @@ func (t *Tracker) doTrackBlock() {
 
 	if time.Now().Unix()-block.BlockHeader.RawData.Timestamp < 10 {
 		// Catch up with the latest block
-
+		if t.isCatching {
+			t.isCatching = false
+			t.logger.Infof("Catching up with the latest block [%d]", block.BlockHeader.RawData.Number)
+		}
 	} else if shouldReport, reportContent := t.reporter.Add(1); shouldReport {
 		nowBlock, _ := net.GetNowBlock()
 		nowBlockNumber := nowBlock.BlockHeader.RawData.Number

@@ -2,7 +2,7 @@ package models
 
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey" json:"-"`
-	Address           string `gorm:"size:34;uniqueIndex" json:"address"`
+	Address           string `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
 	Fee               int64  `json:"fee"`
 	EnergyTotal       int64  `json:"energy_total"`
 	EnergyFee         int64  `json:"energy_fee"`

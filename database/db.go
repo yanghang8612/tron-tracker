@@ -308,6 +308,12 @@ func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []model
 	return exchangeStatistic
 }
 
+func (db *RawDB) GetExchangeTokenStatisticsByDate(date time.Time) []models.ExchangeStatistic {
+	var exchangeStatistic []models.ExchangeStatistic
+	db.db.Where("date = ?", date.Format("060102")).Find(&exchangeStatistic)
+	return exchangeStatistic
+}
+
 func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint, uint, uint) {
 	USDT := "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 	var chargeFee uint

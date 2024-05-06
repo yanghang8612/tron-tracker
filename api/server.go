@@ -66,6 +66,7 @@ func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig)
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
+	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
 	s.router.GET("/special_statistics", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
 	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
@@ -143,6 +144,44 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 		"total_energy_usage":        totalEnergyUsage,
 		"exchanges_total_statistic": resultArray,
 	})
+}
+
+func (s *Server) exchangesTokenStatistic(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
+	dateRangeStr := startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
+	for i := 0; i < days; i++ {
+		queryDate := startDate.AddDate(0, 0, i)
+		for _, es := range s.db.GetExchangeTokenStatisticsByDate(queryDate) {
+			if _, ok := resultMap[es.Name]; !ok {
+				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
+			}
+
+			if es.Token == "total" {
+				continue
+			}
+
+			if _, ok := resultMap[es.Name][es.Token]; !ok {
+				resultMap[es.Name][es.Token] = &models.ExchangeStatistic{
+					Date:  dateRangeStr,
+					Name:  es.Name,
+					Token: es.Token,
+				}
+			}
+			resultMap[es.Name][es.Token].Merge(&es)
+		}
+	}
+
+	c.JSON(200, resultMap)
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {

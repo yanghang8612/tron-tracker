@@ -130,6 +130,9 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 	}
 
 	resultArray := make([]*models.ExchangeStatistic, 0)
+	for _, es := range resultMap {
+		resultArray = append(resultArray, es)
+	}
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].TotalFee > resultArray[j].TotalFee
 	})

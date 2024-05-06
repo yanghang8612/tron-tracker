@@ -531,7 +531,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 			}
 			txCount += 100
 
-			if txCount%100_000 == 0 {
+			if txCount%1_000_000 == 0 {
 				db.logger.Infof("Queried rows: %d", txCount)
 			}
 

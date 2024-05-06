@@ -593,7 +593,7 @@ func (s *Server) userStatistics(c *gin.Context) {
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {
-	date, ok := prepareDateParam(c, "date")
+	startDate, ok := prepareDateParam(c, "start_date")
 	if !ok {
 		return
 	}
@@ -603,9 +603,18 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		return
 	}
 
+	n, ok := getIntParam(c, "n")
+	if !ok {
+		return
+	}
+
 	resultArray := make([]*models.TokenStatistic, 0)
-	for _, ts := range s.db.GetTokenStatisticByDateAndTokenAndDays(date, days) {
+	for _, ts := range s.db.GetTokenStatisticByDateAndTokenAndDays(startDate, days) {
 		resultArray = append(resultArray, ts)
+
+		if len(resultArray) >= n {
+			break
+		}
 	}
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].Fee > resultArray[j].Fee

@@ -22,13 +22,13 @@ import (
 )
 
 type Config struct {
-	Host        string   `toml:"host"`
-	DB          string   `toml:"db"`
-	User        string   `toml:"user"`
-	Password    string   `toml:"password"`
-	StartDate   string   `toml:"start_date"`
-	StartNum    int      `toml:"start_num"`
-	ValidTokens []string `toml:"valid_tokens"`
+	Host        string     `toml:"host"`
+	DB          string     `toml:"db"`
+	User        string     `toml:"user"`
+	Password    string     `toml:"password"`
+	StartDate   string     `toml:"start_date"`
+	StartNum    int        `toml:"start_num"`
+	ValidTokens [][]string `toml:"valid_tokens"`
 }
 
 type dbCache struct {
@@ -52,7 +52,7 @@ type RawDB struct {
 	db          *gorm.DB
 	el          *types.ExchangeList
 	elUpdatedAt time.Time
-	vt          map[string]bool
+	vt          map[string]string
 
 	lastTrackedDate      string
 	lastTrackedBlockNum  uint
@@ -104,12 +104,12 @@ func New(config *Config) *RawDB {
 	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)
 	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
 
-	validTokens := make(map[string]bool)
+	validTokens := make(map[string]string)
 	for _, token := range config.ValidTokens {
-		validTokens[token] = true
+		validTokens[token[0]] = token[1]
 	}
 	// TRX token symbol is "TRX"
-	validTokens["TRX"] = true
+	validTokens["TRX"] = "TRX"
 
 	rawDB := &RawDB{
 		db:          db,
@@ -227,6 +227,10 @@ func (db *RawDB) GetLastTrackedBlockNum() uint {
 
 func (db *RawDB) GetLastTrackedBlockTime() int64 {
 	return db.lastTrackedBlockTime
+}
+
+func (db *RawDB) GetTokenName(addr string) string {
+	return db.vt[addr]
 }
 
 func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
@@ -423,7 +427,7 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 
 func (db *RawDB) SaveCharger(from, to, token string) {
 	// Filter invalid token charger
-	if !db.vt[token] {
+	if _, ok := db.vt[token]; !ok {
 		return
 	}
 

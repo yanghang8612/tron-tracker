@@ -165,14 +165,17 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
 			}
 
+			// Skip total statistics
 			if es.Token == "_" {
 				continue
 			}
 
-			if _, ok := resultMap[es.Name][es.Token]; !ok {
-				resultMap[es.Name][es.Token] = &models.ExchangeStatistic{}
+			tokenName := s.db.GetTokenName(es.Token)
+
+			if _, ok := resultMap[es.Name][tokenName]; !ok {
+				resultMap[es.Name][tokenName] = &models.ExchangeStatistic{}
 			}
-			resultMap[es.Name][es.Token].Merge(&es)
+			resultMap[es.Name][tokenName].Merge(&es)
 		}
 	}
 

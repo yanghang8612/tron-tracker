@@ -12,30 +12,30 @@
   start_date = "231102"
   start_num = 56084338
   valid_tokens = [
-    "TUPM7K8REVzD2UdV4R5fe5M8XbnR2DdoJ6", # HTX
-    "TKfjV9RNKJJCqPvBtK8L7Knykh7DNWvnYt", # WBTT
-    "TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9", # BTC
-    "TXpw8XeWYeTUd4quDskoUqeQPowRh4jY65", # WBTC
-    "TRFe3hT5oYhjSZ6f3ji5FJ7YCfrkWnHRvh", # ETH
-    "THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF", # ETHOLD
-    "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", # USDT
-    "TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", # USDD
-    "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", # USDC
-    "TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7", # WIN
-    "TMwFHYXLJaRUPeW6421aqXL4ZEzPRFGkGT", # USDJ
-    "TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4", # TUSD
-    "TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9", # JST
-    "TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S", # SUN
-    "TKkeiboTkxXKJpbmVFbv4a8ov5rAfRDMf9", # SUNOLD
-    "TFczxzPhnThNSqr5by8tvxsdCFRRz6cPNq", # NFT
-    "TDyvndWuvX5xTBwHPYJi7J3Yq8pq8yh62h", # HT
-    "THbVQp8kMjStKNnf2iCY6NEzThKMK5aBHg", # DOGE
-    "TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4", # BTT
-    "TMz2SWatiAtZVVcH2ebpsbVtYwUPT9EdjH", # BUSD
-    "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5", # sTRX
-    "TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR", # WTRX
-    "TThzxNRLrW2Brp9DcTQU8i4Wd9udCWEdZ3", # stUSDT
-    "TGkxzkDKyMeq2T7edKnyjZoFypyzjkkssq", # wstUSDT
+    ["TUPM7K8REVzD2UdV4R5fe5M8XbnR2DdoJ6", "HTX"],
+    ["TKfjV9RNKJJCqPvBtK8L7Knykh7DNWvnYt", "WBTT"],
+    ["TN3W4H6rK2ce4vX9YnFQHwKENnHjoxb3m9", "BTC"],
+    ["TXpw8XeWYeTUd4quDskoUqeQPowRh4jY65", "WBTC"],
+    ["TRFe3hT5oYhjSZ6f3ji5FJ7YCfrkWnHRvh", "ETH"],
+    ["THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF", "ETHOLD"],
+    ["TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDT"],
+    ["TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", "USDD"],
+    ["TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "USDC"],
+    ["TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7", "WIN"],
+    ["TMwFHYXLJaRUPeW6421aqXL4ZEzPRFGkGT", "USDJ"],
+    ["TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4", "TUSD"],
+    ["TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9", "JST"],
+    ["TSSMHYeV2uE9qYH95DqyoCuNCzEL1NvU3S", "SUN"],
+    ["TKkeiboTkxXKJpbmVFbv4a8ov5rAfRDMf9", "SUNOLD"],
+    ["TFczxzPhnThNSqr5by8tvxsdCFRRz6cPNq", "NFT"],
+    ["TDyvndWuvX5xTBwHPYJi7J3Yq8pq8yh62h", "HT"],
+    ["THbVQp8kMjStKNnf2iCY6NEzThKMK5aBHg", "DOGE"],
+    ["TAFjULxiVgT4qWk6UZwjqwZXTSaGaqnVp4", "BTT"],
+    ["TMz2SWatiAtZVVcH2ebpsbVtYwUPT9EdjH", "BUSD"],
+    ["TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5", "sTRX"],
+    ["TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR", "WTRX"],
+    ["TThzxNRLrW2Brp9DcTQU8i4Wd9udCWEdZ3", "stUSDT"],
+    ["TGkxzkDKyMeq2T7edKnyjZoFypyzjkkssq", "wstUSDT"],
   ]
 [defi]
   sunswap_v1 = [

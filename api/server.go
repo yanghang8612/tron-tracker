@@ -611,16 +611,12 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 	resultArray := make([]*models.TokenStatistic, 0)
 	for _, ts := range s.db.GetTokenStatisticByDateAndTokenAndDays(startDate, days) {
 		resultArray = append(resultArray, ts)
-
-		if len(resultArray) >= n {
-			break
-		}
 	}
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].Fee > resultArray[j].Fee
 	})
 
-	c.JSON(200, resultArray)
+	c.JSON(200, resultArray[:n])
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

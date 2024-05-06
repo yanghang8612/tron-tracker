@@ -234,37 +234,49 @@ func (db *RawDB) GetTokenName(addr string) string {
 }
 
 func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
-	userStatisticMap := make(map[string]*models.UserStatistic)
+	resultMap := make(map[string]*models.UserStatistic)
 
 	for i := 0; i < days; i++ {
-		dayStatistics := make([]*models.UserStatistic, 0)
-		db.db.Table("from_stats_" + date.AddDate(0, 0, i).Format("060102")).Find(&dayStatistics)
+		queryDate := date.AddDate(0, 0, i).Format("060102")
 
-		for _, stats := range dayStatistics {
-			user := stats.Address
+		db.logger.Infof("Start querying from_stats for date [%s]", queryDate)
 
-			if _, ok := userStatisticMap[user]; !ok {
-				userStatisticMap[user] = stats
-			} else {
-				userStatisticMap[user].Merge(stats)
+		dayStats := make([]*models.UserStatistic, 0)
+		result := db.db.Table("from_stats_"+queryDate).FindInBatches(&dayStats, 100, func(_ *gorm.DB, _ int) error {
+			for _, dayStat := range dayStats {
+				user := dayStat.Address
+
+				if _, ok := resultMap[user]; !ok {
+					resultMap[user] = dayStat
+				} else {
+					resultMap[user].Merge(dayStat)
+				}
 			}
-		}
+
+			return nil
+		})
+
+		db.logger.Infof("Finish querying from_stats for date [%s], query rows: %d, error: %v", queryDate, result.RowsAffected, result.Error)
 	}
 
-	return userStatisticMap
+	return resultMap
 }
 
 func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user string, days int) models.UserStatistic {
-	var userStatistic models.UserStatistic
-	userStatistic.Address = user
-
-	for i := 0; i < days; i++ {
-		dayStatistic := models.UserStatistic{}
-		db.db.Table("from_stats_"+date.AddDate(0, 0, i).Format("060102")).Where("address = ?", user).Limit(1).Find(&dayStatistic)
-		userStatistic.Merge(&dayStatistic)
+	result := models.UserStatistic{
+		Address: user,
 	}
 
-	return userStatistic
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStat models.UserStatistic
+		db.db.Table("from_stats_"+queryDate).Where("address = ?", user).Limit(1).Find(&dayStat)
+
+		result.Merge(&dayStat)
+	}
+
+	return result
 }
 
 func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int64, int64) {
@@ -278,28 +290,32 @@ func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int
 }
 
 func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
-	var totalStatistic models.UserStatistic
-	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(&totalStatistic)
-	return totalStatistic
+	var totalStat models.UserStatistic
+	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(&totalStat)
+	return totalStat
 }
 
 func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatistic {
-	var tokenStatistic models.TokenStatistic
-	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStatistic)
-	return tokenStatistic
+	var tokenStat models.TokenStatistic
+	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStat)
+	return tokenStat
 }
 
 func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, token string, days int) models.TokenStatistic {
-	var tokenStatistic models.TokenStatistic
-	tokenStatistic.Address = token
-
-	for i := 0; i < days; i++ {
-		dayStatistic := models.TokenStatistic{}
-		db.db.Table("token_stats_"+date.AddDate(0, 0, i).Format("060102")).Where("address = ?", token).Limit(1).Find(&dayStatistic)
-		tokenStatistic.Merge(&dayStatistic)
+	result := models.TokenStatistic{
+		Address: token,
 	}
 
-	return tokenStatistic
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStat models.TokenStatistic
+		db.db.Table("token_stats_"+queryDate).Where("address = ?", token).Limit(1).Find(&dayStat)
+
+		result.Merge(&dayStat)
+	}
+
+	return result
 }
 
 func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []models.ExchangeStatistic {
@@ -307,15 +323,15 @@ func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []models.Excha
 }
 
 func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []models.ExchangeStatistic {
-	var exchangeStatistic []models.ExchangeStatistic
-	db.db.Where("date = ? and token = ?", date, token).Find(&exchangeStatistic)
-	return exchangeStatistic
+	var results []models.ExchangeStatistic
+	db.db.Where("date = ? and token = ?", date, token).Find(&results)
+	return results
 }
 
 func (db *RawDB) GetExchangeTokenStatisticsByDate(date time.Time) []models.ExchangeStatistic {
-	var exchangeStatistic []models.ExchangeStatistic
-	db.db.Where("date = ?", date.Format("060102")).Find(&exchangeStatistic)
-	return exchangeStatistic
+	var results []models.ExchangeStatistic
+	db.db.Where("date = ?", date.Format("060102")).Find(&results)
+	return results
 }
 
 func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint, uint, uint) {
@@ -521,8 +537,8 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		db.logger.Infof("Start querying transactions for date: %s", queryDate)
 
 		txCount := 0
-		results := make([]models.Transaction, 0)
-		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(tx *gorm.DB, batch int) error {
+		results := make([]*models.Transaction, 0)
+		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
 			for _, result := range results {
 				user := result.FromAddr
 				if _, ok := users[user]; !ok {

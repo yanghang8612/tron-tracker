@@ -24,54 +24,6 @@ type UserStatistic struct {
 	MultiSigTotal     int64  `json:"multi_sig_total"`
 }
 
-func NewUserStatistic(address string, tx *Transaction) *UserStatistic {
-	var stats = &UserStatistic{
-		Address:           address,
-		Fee:               tx.Fee,
-		EnergyTotal:       tx.EnergyTotal,
-		EnergyFee:         tx.EnergyFee,
-		EnergyUsage:       tx.EnergyUsage,
-		EnergyOriginUsage: tx.EnergyOriginUsage,
-		NetUsage:          tx.NetUsage,
-		NetFee:            tx.NetFee,
-		TXTotal:           1,
-	}
-
-	switch tx.Type {
-	case 1:
-		stats.TRXTotal = 1
-		if tx.Amount.Int64() < 500000 {
-			stats.SmallTRXTotal = 1
-		}
-	case 2:
-		stats.TRC10Total = 1
-	case 3:
-		stats.VoteTotal = 1
-	case 11, 12, 54, 55, 59:
-		stats.StakeTotal = 1
-	case 30, 31:
-		stats.SCTotal = 1
-		if len(tx.ToAddr) > 0 {
-			stats.TRC20Total = 1
-			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
-				stats.USDTTotal = 1
-				if tx.Amount.Int64() < 500000 {
-					stats.SmallUSDTTotal = 1
-				}
-			}
-		}
-
-	case 57, 58:
-		stats.DelegateTotal = 1
-	}
-
-	if tx.SigCount > 1 {
-		stats.MultiSigTotal = 1
-	}
-
-	return stats
-}
-
 func (o *UserStatistic) Merge(other *UserStatistic) {
 	if other == nil {
 		return
@@ -138,6 +90,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	case 57, 58:
 		o.DelegateTotal++
 	}
+
 	if tx.SigCount > 1 {
 		o.MultiSigTotal++
 	}
@@ -224,22 +177,6 @@ type TokenStatistic struct {
 	TXTotal           int64  `json:"tx_total"`
 }
 
-func NewTokenStatistic(address string, tx *Transaction) *TokenStatistic {
-	var stats = &TokenStatistic{
-		Address:           address,
-		Fee:               tx.Fee,
-		EnergyTotal:       tx.EnergyTotal,
-		EnergyFee:         tx.EnergyFee,
-		EnergyUsage:       tx.EnergyUsage,
-		EnergyOriginUsage: tx.EnergyOriginUsage,
-		NetUsage:          tx.NetUsage,
-		NetFee:            tx.NetFee,
-		TXTotal:           1,
-	}
-
-	return stats
-}
-
 func (o *TokenStatistic) Merge(other *TokenStatistic) {
 	if other == nil {
 		return
@@ -272,7 +209,7 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 
 type ExchangeStatistic struct {
 	ID                  uint   `gorm:"primaryKey" json:"-"`
-	Date                string `gorm:"index;size:6" json:"date,omitempty"`
+	Date                string `gorm:"size:6;index" json:"date,omitempty"`
 	Name                string `json:"name,omitempty"`
 	Token               string `gorm:"index;" json:"token,omitempty"`
 	TotalFee            int64  `json:"total_fee"`
@@ -328,35 +265,78 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
 }
 
-func (o *ExchangeStatistic) AddCharge(stats *UserTokenStatistic) {
-	o.TotalFee += stats.ToFee
-	o.ChargeTxCount += stats.ToTXCount
-	o.ChargeFee += stats.ToFee
-	o.ChargeNetFee += stats.ToNetFee
-	o.ChargeNetUsage += stats.ToNetUsage
-	o.ChargeEnergyTotal += stats.ToEnergyTotal
-	o.ChargeEnergyFee += stats.ToEnergyFee
-	o.ChargeEnergyUsage += stats.ToEnergyUsage
+func (o *ExchangeStatistic) AddCharge(stat *UserTokenStatistic) {
+	o.TotalFee += stat.ToFee
+	o.ChargeTxCount += stat.ToTXCount
+	o.ChargeFee += stat.ToFee
+	o.ChargeNetFee += stat.ToNetFee
+	o.ChargeNetUsage += stat.ToNetUsage
+	o.ChargeEnergyTotal += stat.ToEnergyTotal
+	o.ChargeEnergyFee += stat.ToEnergyFee
+	o.ChargeEnergyUsage += stat.ToEnergyUsage
 }
 
-func (o *ExchangeStatistic) AddCollect(stats *UserTokenStatistic) {
-	o.TotalFee += stats.ToFee
-	o.CollectTxCount += stats.ToTXCount
-	o.CollectFee += stats.ToFee
-	o.CollectNetFee += stats.ToNetFee
-	o.CollectNetUsage += stats.ToNetUsage
-	o.CollectEnergyTotal += stats.ToEnergyTotal
-	o.CollectEnergyFee += stats.ToEnergyFee
-	o.CollectEnergyUsage += stats.ToEnergyUsage
+func (o *ExchangeStatistic) AddCollect(stat *UserTokenStatistic) {
+	o.TotalFee += stat.ToFee
+	o.CollectTxCount += stat.ToTXCount
+	o.CollectFee += stat.ToFee
+	o.CollectNetFee += stat.ToNetFee
+	o.CollectNetUsage += stat.ToNetUsage
+	o.CollectEnergyTotal += stat.ToEnergyTotal
+	o.CollectEnergyFee += stat.ToEnergyFee
+	o.CollectEnergyUsage += stat.ToEnergyUsage
 }
 
-func (o *ExchangeStatistic) AddWithdraw(stats *UserTokenStatistic) {
-	o.TotalFee += stats.FromFee
-	o.WithdrawTxCount += stats.FromTXCount
-	o.WithdrawFee += stats.FromFee
-	o.WithdrawNetFee += stats.FromNetFee
-	o.WithdrawNetUsage += stats.FromNetUsage
-	o.WithdrawEnergyTotal += stats.FromEnergyTotal
-	o.WithdrawEnergyFee += stats.FromEnergyFee
-	o.WithdrawEnergyUsage += stats.FromEnergyUsage
+func (o *ExchangeStatistic) AddWithdraw(stat *UserTokenStatistic) {
+	o.TotalFee += stat.FromFee
+	o.WithdrawTxCount += stat.FromTXCount
+	o.WithdrawFee += stat.FromFee
+	o.WithdrawNetFee += stat.FromNetFee
+	o.WithdrawNetUsage += stat.FromNetUsage
+	o.WithdrawEnergyTotal += stat.FromEnergyTotal
+	o.WithdrawEnergyFee += stat.FromEnergyFee
+	o.WithdrawEnergyUsage += stat.FromEnergyUsage
+}
+
+type FungibleTokenStatistic struct {
+	ID            uint            `gorm:"primaryKey" json:"-"`
+	Date          string          `gorm:"size:6;index" json:"date,omitempty"`
+	Address       string          `gorm:"index" json:"address"`
+	Type          string          `json:"type"`
+	Count         int64           `json:"count"`
+	AmountSum     BigInt          `json:"amount_sum"`
+	UniqueFrom    int64           `json:"unique_from"`
+	UniqueFromMap map[string]bool `gorm:"-" json:"-"`
+	UniqueTo      int64           `json:"unique_to"`
+	UniqueToMap   map[string]bool `gorm:"-" json:"-"`
+}
+
+func NewFungibleTokenStatistic(address, token string, tx *Transaction) *FungibleTokenStatistic {
+	var stat = &FungibleTokenStatistic{
+		Address: address,
+		Type:    token,
+		Count:   1,
+	}
+	stat.AmountSum.Add(tx.Amount)
+	stat.UniqueFrom = 1
+	stat.UniqueFromMap = make(map[string]bool)
+	stat.UniqueFromMap[tx.FromAddr] = true
+	stat.UniqueTo = 1
+	stat.UniqueToMap = make(map[string]bool)
+	stat.UniqueToMap[tx.ToAddr] = true
+
+	return stat
+}
+
+func (o *FungibleTokenStatistic) Add(tx *Transaction) {
+	o.Count++
+	o.AmountSum.Add(tx.Amount)
+	if _, ok := o.UniqueFromMap[tx.FromAddr]; !ok {
+		o.UniqueFrom++
+		o.UniqueFromMap[tx.FromAddr] = true
+	}
+	if _, ok := o.UniqueToMap[tx.ToAddr]; !ok {
+		o.UniqueTo++
+		o.UniqueToMap[tx.ToAddr] = true
+	}
 }

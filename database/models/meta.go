@@ -5,8 +5,9 @@ import (
 )
 
 const (
-	LastTrackedDateKey     = "last_tracked_date"
-	LastTrackedBlockNumKey = "last_tracked_block_num"
+	TrackingDateKey          = "tracking_date"
+	CountedDateKey           = "counted_date"
+	TrackingStartBlockNumKey = "tracking_start_block_num"
 )
 
 type Meta struct {

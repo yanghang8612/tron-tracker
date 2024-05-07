@@ -30,3 +30,11 @@ func (b BigInt) Int64() int64 {
 func (b BigInt) Neg() {
 	b.val.Neg(b.val)
 }
+
+func (b BigInt) Add(other BigInt) {
+	b.val.Add(b.val, other.val)
+}
+
+func (b BigInt) String() string {
+	return b.val.String()
+}

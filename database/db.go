@@ -54,7 +54,6 @@ type RawDB struct {
 	elUpdatedAt time.Time
 	vt          map[string]string
 
-	lastTrackedDate      string
 	lastTrackedBlockNum  uint
 	lastTrackedBlockTime int64
 	isTableMigrated      map[string]bool
@@ -64,10 +63,11 @@ type RawDB struct {
 	chargersLock         sync.RWMutex
 	chargersToSave       map[string]*models.Charger
 
-	curDate string
-	flushCh chan *dbCache
-	cache   *dbCache
-	statsCh chan struct{}
+	trackingDate string
+	flushCh      chan *dbCache
+	cache        *dbCache
+	countedDate  string
+	statsCh      chan string
 
 	loopWG sync.WaitGroup
 	quitCh chan struct{}
@@ -95,14 +95,18 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
-	var LastTrackedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&LastTrackedDateMeta)
-	db.Migrator().DropTable("transactions_" + LastTrackedDateMeta.Val)
-	db.Migrator().DropTable("transfers_" + LastTrackedDateMeta.Val)
+	var trackingDateMeta models.Meta
+	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 
-	var LastTrackedBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&LastTrackedBlockNumMeta)
-	lastTrackedBlockNum, _ := strconv.Atoi(LastTrackedBlockNumMeta.Val)
+	var countedDateMeta models.Meta
+	db.Where(models.Meta{Key: models.CountedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
+
+	db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
+	db.Migrator().DropTable("transfers_" + trackingDateMeta.Val)
+
+	var trackingStartBlockNumMeta models.Meta
+	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
+	trackingStartBlockNum, _ := strconv.Atoi(trackingStartBlockNumMeta.Val)
 
 	validTokens := make(map[string]string)
 	for _, token := range config.ValidTokens {
@@ -117,14 +121,15 @@ func New(config *Config) *RawDB {
 		elUpdatedAt: time.Now(),
 		vt:          validTokens,
 
-		lastTrackedDate:     LastTrackedDateMeta.Val,
-		lastTrackedBlockNum: uint(lastTrackedBlockNum),
+		lastTrackedBlockNum: uint(trackingStartBlockNum),
 		isTableMigrated:     make(map[string]bool),
 		chargers:            make(map[string]*models.Charger),
 		chargersToSave:      make(map[string]*models.Charger),
 
-		flushCh: make(chan *dbCache),
-		cache:   newCache(),
+		flushCh:     make(chan *dbCache),
+		cache:       newCache(),
+		countedDate: countedDateMeta.Val,
+		statsCh:     make(chan string),
 
 		quitCh: make(chan struct{}),
 		logger: zap.S().Named("[db]"),
@@ -203,8 +208,9 @@ func (db *RawDB) loadChargers() {
 }
 
 func (db *RawDB) Start() {
-	db.loopWG.Add(1)
-	go db.Run()
+	db.loopWG.Add(2)
+	go db.cacheFlushLoop()
+	go db.countLoop()
 }
 
 func (db *RawDB) Close() {
@@ -370,20 +376,44 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.updateExchanges()
 
-	nextDate := generateDate(block.BlockHeader.RawData.Timestamp)
-	if db.curDate == "" {
-		db.curDate = nextDate
-	} else if db.curDate != nextDate {
-		db.curDate = nextDate
+	trackingDate := generateDate(block.BlockHeader.RawData.Timestamp)
+	if db.trackingDate == "" {
+		db.trackingDate = trackingDate
+	} else if db.trackingDate != trackingDate {
 		db.flushCh <- db.cache
+
+		db.trackingDate = trackingDate
 		db.cache = newCache()
 
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.LastTrackedDateKey}).Update("val", nextDate)
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.LastTrackedBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).Update("val", trackingDate)
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
 	}
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
+}
+
+func (db *RawDB) updateExchanges() {
+	if time.Now().Sub(db.elUpdatedAt) < 1*time.Hour {
+		return
+	}
+
+	for i := 0; i < 3; i++ {
+		el := net.GetExchanges()
+		if len(el.Exchanges) == 0 {
+			db.logger.Infof("No exchange found, retry %d times", i+1)
+		} else {
+			if len(db.el.Exchanges) == len(el.Exchanges) {
+				db.logger.Info("Update exchange list successfully, exchange list is not changed")
+			} else {
+				db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
+			}
+
+			db.el = el
+			db.elUpdatedAt = time.Now()
+			break
+		}
+	}
 }
 
 func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
@@ -391,7 +421,7 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 		return
 	}
 
-	dbName := "transactions_" + db.curDate
+	dbName := "transactions_" + db.trackingDate
 	db.createTableIfNotExist(dbName, models.Transaction{})
 	db.db.Table(dbName).Create(transactions)
 }
@@ -409,19 +439,21 @@ func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 
 func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
 	db.cache.date = generateDate(tx.Timestamp)
-	if stat, ok := stats[user]; ok {
-		stat.Add(tx)
-	} else {
-		stats[user] = models.NewUserStatistic(user, tx)
+	if _, ok := stats[user]; !ok {
+		stats[user] = &models.UserStatistic{
+			Address: user,
+		}
 	}
+	stats[user].Add(tx)
 }
 
 func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats map[string]*models.TokenStatistic) {
-	if stat, ok := stats[name]; ok {
-		stat.Add(tx)
-	} else {
-		stats[name] = models.NewTokenStatistic(name, tx)
+	if _, ok := stats[name]; !ok {
+		stats[name] = &models.TokenStatistic{
+			Address: name,
+		}
 	}
+	stats[name].Add(tx)
 }
 
 func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
@@ -585,11 +617,11 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	statsResultFile.WriteString(strconv.FormatInt(chargeEnergy, 10) + "\n")
 }
 
-func (db *RawDB) Run() {
+func (db *RawDB) cacheFlushLoop() {
 	for {
 		select {
 		case <-db.quitCh:
-			db.logger.Info("rawdb closed")
+			db.logger.Info("cache flush loop ended")
 			db.loopWG.Done()
 			return
 		case cache := <-db.flushCh:
@@ -598,27 +630,60 @@ func (db *RawDB) Run() {
 	}
 }
 
-func (db *RawDB) updateExchanges() {
-	if time.Now().Sub(db.elUpdatedAt) < 1*time.Hour {
-		return
-	}
-
-	for i := 0; i < 3; i++ {
-		el := net.GetExchanges()
-		if len(el.Exchanges) == 0 {
-			db.logger.Infof("No exchange found, retry %d times", i+1)
-		} else {
-			if len(db.el.Exchanges) == len(el.Exchanges) {
-				db.logger.Info("Update exchange list successfully, exchange list is not changed")
+func (db *RawDB) countLoop() {
+	for {
+		select {
+		case <-db.quitCh:
+			db.logger.Info("count loop ended")
+			db.loopWG.Done()
+			return
+		default:
+			trackingDate, _ := time.Parse("060102", db.trackingDate)
+			countedDate, _ := time.Parse("060102", db.countedDate)
+			if trackingDate.Sub(countedDate).Hours() > 24 {
+				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
+				db.countForDate(dateToCount)
+				db.countedDate = dateToCount
 			} else {
-				db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
+				time.Sleep(1 * time.Second)
 			}
-
-			db.el = el
-			db.elUpdatedAt = time.Now()
-			break
 		}
 	}
+}
+
+func (db *RawDB) countForDate(date string) {
+	db.logger.Infof("Start counting TRX Transactions for date [%s]", date)
+
+	var (
+		txCount  = 0
+		results  = make([]*models.Transaction, 0)
+		TRXStats = make(map[string]*models.FungibleTokenStatistic)
+	)
+
+	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
+		for _, result := range results {
+			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+			if _, ok := TRXStats[typeName]; !ok {
+				TRXStats[typeName] = models.NewFungibleTokenStatistic("TRX", typeName, result)
+			} else {
+				TRXStats[typeName].Add(result)
+			}
+		}
+		txCount += 100
+
+		if txCount%1_000_000 == 0 {
+			db.logger.Infof("Queried rows [%d]", txCount)
+		}
+
+		return nil
+	})
+
+	for _, stats := range TRXStats {
+		db.db.Create(stats)
+	}
+
+	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
+	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d], error [%v]", date, result.RowsAffected, result.Error)
 }
 
 func (db *RawDB) flushChargerToDB() {

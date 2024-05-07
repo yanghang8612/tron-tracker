@@ -1,5 +1,7 @@
 package models
 
+import "math/big"
+
 type UserStatistic struct {
 	ID                uint   `gorm:"primaryKey" json:"-"`
 	Address           string `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
@@ -313,9 +315,10 @@ type FungibleTokenStatistic struct {
 
 func NewFungibleTokenStatistic(address, token string, tx *Transaction) *FungibleTokenStatistic {
 	var stat = &FungibleTokenStatistic{
-		Address: address,
-		Type:    token,
-		Count:   1,
+		Address:   address,
+		Type:      token,
+		Count:     1,
+		AmountSum: NewBigInt(big.NewInt(0)),
 	}
 	stat.AmountSum.Add(tx.Amount)
 	stat.UniqueFrom = 1

@@ -90,6 +90,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.FungibleTokenStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	dbErr = db.AutoMigrate(&models.Meta{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -214,7 +219,7 @@ func (db *RawDB) Start() {
 }
 
 func (db *RawDB) Close() {
-	db.quitCh <- struct{}{}
+	close(db.quitCh)
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()

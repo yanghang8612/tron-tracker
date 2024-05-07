@@ -313,8 +313,9 @@ type FungibleTokenStatistic struct {
 	UniqueToMap   map[string]bool `gorm:"-" json:"-"`
 }
 
-func NewFungibleTokenStatistic(address, token string, tx *Transaction) *FungibleTokenStatistic {
+func NewFungibleTokenStatistic(date, address, token string, tx *Transaction) *FungibleTokenStatistic {
 	var stat = &FungibleTokenStatistic{
+		Date:      date,
 		Address:   address,
 		Type:      token,
 		Count:     1,

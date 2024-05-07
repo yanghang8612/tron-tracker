@@ -669,7 +669,7 @@ func (db *RawDB) countForDate(date string) {
 		for _, result := range results {
 			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 			if _, ok := TRXStats[typeName]; !ok {
-				TRXStats[typeName] = models.NewFungibleTokenStatistic("TRX", typeName, result)
+				TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
 			} else {
 				TRXStats[typeName].Add(result)
 			}

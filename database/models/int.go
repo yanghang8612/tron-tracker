@@ -13,7 +13,7 @@ func NewBigInt(val *big.Int) BigInt {
 	return BigInt{val: val}
 }
 
-func (b BigInt) Scan(value interface{}) error {
+func (b *BigInt) Scan(value interface{}) error {
 	b.val = new(big.Int)
 	b.val, _ = b.val.SetString(string(value.([]byte)), 10)
 	return nil

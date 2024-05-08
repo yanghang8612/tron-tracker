@@ -608,15 +608,31 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		return
 	}
 
-	resultArray := make([]*models.TokenStatistic, 0)
+	var (
+		TRC10Stat   = &models.TokenStatistic{Address: "TRC10"}
+		NonUSDTStat = &models.TokenStatistic{Address: "Other Contract"}
+		resultArray = make([]*models.TokenStatistic, 0)
+	)
 	for _, ts := range s.db.GetTokenStatisticByDateAndTokenAndDays(startDate, days) {
+		switch len(ts.Address) {
+		case 7:
+			TRC10Stat.Merge(ts)
+		case 34:
+			if ts.Address != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+				NonUSDTStat.Merge(ts)
+			}
+		}
 		resultArray = append(resultArray, ts)
 	}
+
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].Fee > resultArray[j].Fee
 	})
 
-	c.JSON(200, resultArray[:n])
+	resultArray = resultArray[:n]
+	resultArray = append(resultArray, TRC10Stat, NonUSDTStat)
+
+	c.JSON(200, resultArray)
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

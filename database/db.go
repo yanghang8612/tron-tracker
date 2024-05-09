@@ -108,7 +108,7 @@ func New(config *Config) *RawDB {
 	db.Where(models.Meta{Key: models.CountedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
 
 	var countedWeekMeta models.Meta
-	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
+	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedWeekMeta)
 
 	db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
 	db.Migrator().DropTable("transfers_" + trackingDateMeta.Val)
@@ -698,7 +698,7 @@ func (db *RawDB) countForDate(date string) {
 	}
 
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
-	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d], error [%v]", date, result.RowsAffected, result.Error)
+	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {
@@ -743,6 +743,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 		db.db.Create(stats)
 	}
 
+	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedWeekKey}).Update("val", countingDate)
 	db.logger.Infof("Finish counting TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	return countingDate

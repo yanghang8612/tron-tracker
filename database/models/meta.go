@@ -7,6 +7,7 @@ import (
 const (
 	TrackingDateKey          = "tracking_date"
 	CountedDateKey           = "counted_date"
+	CountedWeekKey           = "counted_week"
 	TrackingStartBlockNumKey = "tracking_start_block_num"
 )
 

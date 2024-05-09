@@ -67,6 +67,7 @@ type RawDB struct {
 	flushCh      chan *dbCache
 	cache        *dbCache
 	countedDate  string
+	countedWeek  string
 	statsCh      chan string
 
 	loopWG sync.WaitGroup
@@ -106,6 +107,9 @@ func New(config *Config) *RawDB {
 	var countedDateMeta models.Meta
 	db.Where(models.Meta{Key: models.CountedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
 
+	var countedWeekMeta models.Meta
+	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
+
 	db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
 	db.Migrator().DropTable("transfers_" + trackingDateMeta.Val)
 
@@ -134,6 +138,7 @@ func New(config *Config) *RawDB {
 		flushCh:     make(chan *dbCache),
 		cache:       newCache(),
 		countedDate: countedDateMeta.Val,
+		countedWeek: countedWeekMeta.Val,
 		statsCh:     make(chan string),
 
 		quitCh: make(chan struct{}),
@@ -645,13 +650,18 @@ func (db *RawDB) countLoop() {
 		default:
 			trackingDate, _ := time.Parse("060102", db.trackingDate)
 			countedDate, _ := time.Parse("060102", db.countedDate)
+
 			if trackingDate.Sub(countedDate).Hours() > 24 {
 				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
 				db.countForDate(dateToCount)
 				db.countedDate = dateToCount
-			} else {
-				time.Sleep(1 * time.Second)
 			}
+
+			if generateWeek(db.trackingDate) != generateWeek(db.countedWeek) {
+				db.countedWeek = db.countForWeek(db.countedWeek)
+			}
+
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -676,8 +686,8 @@ func (db *RawDB) countForDate(date string) {
 		}
 		txCount += 100
 
-		if txCount%1_000_000 == 0 {
-			db.logger.Infof("Queried rows [%d]", txCount)
+		if txCount%500_000 == 0 {
+			db.logger.Infof("Counting TRX Transactions for date [%s], current counted txs [%d]", date, txCount)
 		}
 
 		return nil
@@ -689,6 +699,53 @@ func (db *RawDB) countForDate(date string) {
 
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
 	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d], error [%v]", date, result.RowsAffected, result.Error)
+}
+
+func (db *RawDB) countForWeek(startDate string) string {
+	week := generateWeek(startDate)
+	db.logger.Infof("Start counting TRX Transactions for week [%s], start date [%s]", week, startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		TRXStats     = make(map[string]*models.FungibleTokenStatistic)
+	)
+
+	for generateWeek(countingDate) != week {
+		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+			for _, result := range results {
+				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+				if _, ok := TRXStats[typeName]; !ok {
+					TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
+				} else {
+					TRXStats[typeName].Add(result)
+				}
+			}
+			txCount += tx.RowsAffected
+
+			if txCount%500_000 == 0 {
+				db.logger.Infof("Counting TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+			}
+
+			return nil
+		})
+
+		if result.Error != nil {
+			db.logger.Errorf("Counting TRX Transactions for week [%s], error [%v]", week, result.Error)
+		}
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	for _, stats := range TRXStats {
+		db.db.Create(stats)
+	}
+
+	db.logger.Infof("Finish counting TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+
+	return countingDate
 }
 
 func (db *RawDB) flushChargerToDB() {
@@ -899,6 +956,12 @@ func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
 
 func generateDate(ts int64) string {
 	return time.Unix(ts, 0).In(time.FixedZone("UTC", 0)).Format("060102")
+}
+
+func generateWeek(date string) string {
+	ts, _ := time.Parse("060102", date)
+	year, week := ts.ISOWeek()
+	return fmt.Sprintf("%d%2d", year, week)
 }
 
 func makeReporterFunc(name string) func(utils.ReporterState) string {

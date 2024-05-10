@@ -656,7 +656,7 @@ func (db *RawDB) countLoop() {
 				db.countForDate(dateToCount)
 				db.countedDate = dateToCount
 
-				if countedDate.Weekday() == time.Sunday {
+				if countedDate.Weekday() == time.Saturday {
 					db.countedWeek = db.countForWeek(db.countedWeek)
 				}
 			}
@@ -712,7 +712,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 		TRXStats     = make(map[string]*models.FungibleTokenStatistic)
 	)
 
-	for generateWeek(countingDate) != week {
+	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))

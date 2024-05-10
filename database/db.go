@@ -655,10 +655,10 @@ func (db *RawDB) countLoop() {
 				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
 				db.countForDate(dateToCount)
 				db.countedDate = dateToCount
-			}
 
-			if generateWeek(db.trackingDate) != generateWeek(db.countedWeek) {
-				db.countedWeek = db.countForWeek(db.countedWeek)
+				if countedDate.Weekday() == time.Sunday {
+					db.countedWeek = db.countForWeek(db.countedWeek)
+				}
 			}
 
 			time.Sleep(1 * time.Second)
@@ -670,12 +670,12 @@ func (db *RawDB) countForDate(date string) {
 	db.logger.Infof("Start counting TRX Transactions for date [%s]", date)
 
 	var (
-		txCount  = 0
+		txCount  = int64(0)
 		results  = make([]*models.Transaction, 0)
 		TRXStats = make(map[string]*models.FungibleTokenStatistic)
 	)
 
-	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
+	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 		for _, result := range results {
 			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 			if _, ok := TRXStats[typeName]; !ok {
@@ -684,7 +684,7 @@ func (db *RawDB) countForDate(date string) {
 				TRXStats[typeName].Add(result)
 			}
 		}
-		txCount += 100
+		txCount += tx.RowsAffected
 
 		if txCount%500_000 == 0 {
 			db.logger.Infof("Counting TRX Transactions for date [%s], current counted txs [%d]", date, txCount)

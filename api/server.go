@@ -629,7 +629,9 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		return resultArray[i].Fee > resultArray[j].Fee
 	})
 
-	resultArray = resultArray[:n]
+	if len(resultArray) > n {
+		resultArray = resultArray[:n]
+	}
 	resultArray = append(resultArray, TRC10Stat, NonUSDTStat)
 
 	c.JSON(200, resultArray)

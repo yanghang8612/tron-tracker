@@ -130,7 +130,7 @@ func New(config *Config) *RawDB {
 		elUpdatedAt: time.Now(),
 		vt:          validTokens,
 
-		lastTrackedBlockNum: uint(trackingStartBlockNum),
+		lastTrackedBlockNum: uint(trackingStartBlockNum - 1),
 		isTableMigrated:     make(map[string]bool),
 		chargers:            make(map[string]*models.Charger),
 		chargersToSave:      make(map[string]*models.Charger),
@@ -438,8 +438,11 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 
 func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 	db.updateUserStatistic(tx.FromAddr, tx, db.cache.fromStats)
-	db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
 	db.updateUserStatistic("total", tx, db.cache.fromStats)
+
+	if len(tx.ToAddr) > 0 {
+		db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
+	}
 
 	if len(tx.Name) > 0 {
 		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)

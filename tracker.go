@@ -128,8 +128,8 @@ func (t *Tracker) doTrackBlock() {
 
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 			txToDB.SetAmount(amount)
-			// The TRX charger should charge at least 50TRX
-			if amount > 50_000_000 {
+			// The TRX charger should charge at least 1 TRX
+			if amount > 1_000_000 {
 				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
 			}
 		} else if txToDB.Type == 2 {
@@ -152,6 +152,11 @@ func (t *Tracker) doTrackBlock() {
 				if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+				}
+
+				if txToDB.Method == "23b872dd" && len(data) == 8+64*3 {
+					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
+					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
 				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal
@@ -177,9 +182,12 @@ func (t *Tracker) doTrackBlock() {
 			}
 			txToDB.SetAmount(amount)
 		}
-		if resource, ok := tx.RawData.Contract[0].Parameter.Value["resource"]; ok && resource.(string) == "BANDWIDTH" {
-			txToDB.Amount.Neg()
+
+		// If the resource is ENERGY, add 100 to the type
+		if resource, ok := tx.RawData.Contract[0].Parameter.Value["resource"]; ok && resource.(string) == "ENERGY" {
+			txToDB.Type += 100
 		}
+
 		transactions = append(transactions, txToDB)
 		t.db.UpdateStatistics(txToDB)
 

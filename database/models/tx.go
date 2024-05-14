@@ -4,14 +4,14 @@ import "math/big"
 
 type Transaction struct {
 	ID                uint   `gorm:"primaryKey"`
-	Hash              string `gorm:"size:64;index"`
-	FromAddr          string `gorm:"size:34;index"`
-	ToAddr            string `gorm:"size:34;index"`
+	Hash              string `gorm:"size:64"`
+	FromAddr          string `gorm:"size:34;index:addr"`
+	ToAddr            string `gorm:"size:34;index:addr"`
 	Height            uint
 	Timestamp         int64
-	Type              uint8  `gorm:"index:idx_key"`
-	Name              string `gorm:"index:idx_key"`
-	Amount            BigInt
+	Type              uint8  `gorm:"index"`
+	Name              string `gorm:"index"`
+	Amount            BigInt `gorm:"index"`
 	Fee               int64
 	EnergyTotal       int64
 	EnergyFee         int64
@@ -21,7 +21,7 @@ type Transaction struct {
 	NetFee            int64
 	Result            string
 	SigCount          uint8
-	Method            string `gorm:"size:8"`
+	Method            string `gorm:"size:8:index"`
 }
 
 func (tx *Transaction) SetAmount(amount int64) {

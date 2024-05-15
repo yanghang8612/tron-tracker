@@ -668,6 +668,7 @@ func (db *RawDB) countLoop() {
 
 			if !isDone {
 				db.countPhishingForDate("240506")
+				isDone = true
 			}
 
 			time.Sleep(1 * time.Second)
@@ -690,13 +691,28 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		results      = make([]*models.Transaction, 0)
 		stats        = make(map[string][]map[string]int)
 		normals      = make(map[string]bool)
+		usdt         = make(map[string]bool)
+		small_usdt   = make(map[string]bool)
 	)
 
 	for generateWeek(countingDate) == week {
-		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		result := db.db.Table("transactions_"+countingDate).Where("type = ? OR name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr
+
+				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+					usdt[fromAddr] = true
+					usdt[toAddr] = true
+					normals[fromAddr] = true
+					normals[toAddr] = true
+					if len(result.Amount.String()) < 7 {
+						small_usdt[fromAddr] = true
+						small_usdt[toAddr] = true
+					}
+					continue
+				}
+
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 
 				if len(result.Amount.String()) >= 6 {
@@ -739,9 +755,19 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		fmt.Printf("%s %v", addr, stat)
-		if _, ok := normals[addr]; !ok {
+
+		if _, ok := normals[addr]; ok {
 			fmt.Printf(" [normal]")
 		}
+
+		if _, ok := usdt[addr]; ok {
+			if _, ok := small_usdt[addr]; ok {
+				fmt.Printf(" [has_small_usdt]")
+			} else {
+				fmt.Printf(" [has_usdt]")
+			}
+		}
+
 		if len(stat[0]) > 0 && len(stat[1]) == 0 {
 			fmt.Printf(" [only_from]")
 

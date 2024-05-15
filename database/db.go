@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -690,9 +691,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
 		stats        = make(map[string][]map[string]int)
+		tickers      = make(map[string]bool)
+		amounts      = make(map[string]int64)
 		normals      = make(map[string]bool)
 		usdt         = make(map[string]bool)
 		small_usdt   = make(map[string]bool)
+		rex          = regexp.MustCompile("^10*$")
 	)
 
 	for generateWeek(countingDate) == week {
@@ -714,6 +718,14 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+
+				if preAmount, ok := amounts[fromAddr]; ok {
+					diff := result.Amount.Int64() - preAmount
+					if rex.MatchString(strconv.Itoa(int(diff))) {
+						tickers[fromAddr] = true
+					}
+				}
+				amounts[fromAddr] = result.Amount.Int64()
 
 				if len(result.Amount.String()) >= 6 {
 					normals[fromAddr] = true
@@ -752,12 +764,21 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	}
 
 	db.logger.Infof("Finish counting Phishing TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+
+	var (
+		phishing1e1 = 0
+		phishing1e3 = 0
+	)
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		fmt.Printf("%s %v", addr, stat)
 
 		if _, ok := normals[addr]; ok {
 			fmt.Printf(" [normal]")
+		}
+
+		if _, ok := tickers[addr]; ok {
+			fmt.Printf(" [ticker]")
 		}
 
 		if _, ok := usdt[addr]; ok {
@@ -773,8 +794,17 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 
 			if len(stat[0]) == 1 {
 				for k, v := range stat[0] {
-					if k == "1e1" && v > 1 {
-						fmt.Printf(" [phishing] [1e1]")
+					if k == "1e1" {
+						if v == 1 {
+							fmt.Printf(" [collect]")
+						} else {
+							phishing1e1 += v
+							fmt.Printf(" [phishing] [1e1]")
+						}
+					}
+					if k == "1e3" {
+						phishing1e3 += v
+						fmt.Printf(" [phishing] [1e3]")
 					}
 				}
 			}
@@ -785,6 +815,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		}
 		fmt.Print("\n")
 	}
+	fmt.Printf("Phishing 1e1: %d, Phishing 1e3: %d\n", phishing1e1, phishing1e3)
 }
 
 func (db *RawDB) countForDate(date string) {

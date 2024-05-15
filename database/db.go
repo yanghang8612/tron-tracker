@@ -783,8 +783,6 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		}
 
 		if len(stat[0]) > 0 && len(stat[1]) == 0 {
-			fmt.Printf(" [only_from]")
-
 			if len(stat[0]) == 1 {
 				for k, v := range stat[0] {
 					if k == "1e1" && v > 1 {

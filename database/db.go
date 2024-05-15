@@ -794,14 +794,13 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					}
 				}
 			} else {
-				fmt.Printf("%s %v [only_from]", addr, stat)
+				fmt.Printf("%s %v [only_from]\n", addr, stat)
 			}
 		} else if len(stat[0]) == 0 && len(stat[1]) > 0 {
-			fmt.Printf("%s %v [only_to]", addr, stat)
+			fmt.Printf("%s %v [only_to]\n", addr, stat)
 		} else {
-			fmt.Printf("%s %v [both]", addr, stat)
+			fmt.Printf("%s %v [both]\n", addr, stat)
 		}
-		fmt.Print("\n")
 	}
 	fmt.Printf("Phishing: %v\n", phishing)
 	fmt.Printf("Collect: %v\n", collectSum)

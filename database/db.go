@@ -643,6 +643,8 @@ func (db *RawDB) cacheFlushLoop() {
 	}
 }
 
+var isDone bool
+
 func (db *RawDB) countLoop() {
 	for {
 		select {
@@ -664,8 +666,98 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
+			if !isDone {
+				db.countPhishingForDate("240506")
+			}
+
 			time.Sleep(1 * time.Second)
 		}
+	}
+}
+
+type TRXStatistic struct {
+	TypeName string
+	Count    int64
+}
+
+func (db *RawDB) countPhishingForDate(startDate string) {
+	week := generateWeek(startDate)
+	db.logger.Infof("Start counting Phishing TRX Transactions for week [%s], start date [%s]", week, startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		stats        = make(map[string][]map[string]int)
+		normals      = make(map[string]bool)
+	)
+
+	for generateWeek(countingDate) == week {
+		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+			for _, result := range results {
+				fromAddr := result.FromAddr
+				toAddr := result.ToAddr
+				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+
+				if len(result.Amount.String()) >= 6 {
+					normals[fromAddr] = true
+					normals[toAddr] = true
+				}
+
+				if _, ok := stats[fromAddr]; !ok {
+					stats[fromAddr] = make([]map[string]int, 2)
+					stats[fromAddr][0] = make(map[string]int)
+					stats[fromAddr][1] = make(map[string]int)
+				}
+				stats[fromAddr][0][typeName] += 1
+
+				if _, ok := stats[toAddr]; !ok {
+					stats[toAddr] = make([]map[string]int, 2)
+					stats[toAddr][0] = make(map[string]int)
+					stats[toAddr][1] = make(map[string]int)
+				}
+				stats[toAddr][1][typeName] += 1
+			}
+			txCount += tx.RowsAffected
+
+			if txCount%500_000 == 0 {
+				db.logger.Infof("Counting Phishing TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+			}
+
+			return nil
+		})
+
+		if result.Error != nil {
+			db.logger.Errorf("Counting Phishing TRX Transactions for week [%s], error [%v]", week, result.Error)
+		}
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	db.logger.Infof("Finish counting Phishing TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+	fmt.Printf("Stats size: %d\n", len(stats))
+	for addr, stat := range stats {
+		fmt.Printf("%s %v", addr, stat)
+		if _, ok := normals[addr]; !ok {
+			fmt.Printf(" [normal]")
+		}
+		if len(stat[0]) > 0 && len(stat[1]) == 0 {
+			fmt.Printf(" [only_from]")
+
+			if len(stat[0]) == 1 {
+				for k, v := range stat[0] {
+					if k == "1e1" && v > 1 {
+						fmt.Printf(" [phishing] [1e1]")
+					}
+				}
+			}
+		} else if len(stat[0]) == 0 && len(stat[1]) > 0 {
+			fmt.Printf(" [only_to]")
+		} else {
+			fmt.Printf(" [both]")
+		}
+		fmt.Print("\n")
 	}
 }
 

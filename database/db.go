@@ -787,6 +787,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
+			if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 3 {
+				fmt.Printf("%s %v [success]\n", addr, stat)
+			}
 			for k, v := range stat[0] {
 				normalSum[k] += v
 			}

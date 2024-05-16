@@ -722,11 +722,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr][1] = make(map[string]int)
 				}
 
+				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+
 				// Activate account transfer
 				if result.Fee >= 1_000_000 {
 					normals[fromAddr] = true
-					normals[toAddr] = true
-					stats[fromAddr][0]["1e0"] += 1
+					stats[fromAddr][0][typeName] += 1
 					stats[toAddr][1]["1e0"] += 1
 					continue
 				}
@@ -739,12 +740,18 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 				amounts[fromAddr] = result.Amount.Int64()
 
+				// Phishing injection
+				if amounts[fromAddr] == 6380 {
+					normals[fromAddr] = true
+					stats[fromAddr][0][typeName] += 1
+					stats[toAddr][1]["1e0"] += 2
+				}
+
 				if len(result.Amount.String()) >= 6 {
 					normals[fromAddr] = true
 					normals[toAddr] = true
 				}
 
-				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 				stats[fromAddr][0][typeName] += 1
 				stats[toAddr][1][typeName] += 1
 			}
@@ -802,10 +809,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 						phishingSum[k] += v
 					} else if k == "1e3" {
 						phishingSum[k] += v
+					} else {
+						fmt.Printf("%s %v [only_from] [single]\n", addr, stat)
 					}
 				}
 			} else if len(stat[0]) == 2 || len(stat[0]) == 3 {
-				if stat[0]["1e1"] > 0 && (stat[0]["1e2"] > 0 || stat[0]["1e3"] > 0) {
+				if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 7 {
 					for k, v := range stat[0] {
 						multiPhishingSum[k] += v
 					}
@@ -813,22 +822,28 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					fmt.Printf("%s %v [only_from] [multi]\n", addr, stat)
 				}
 			} else {
-				fmt.Printf("%s %v [only_from]\n", addr, stat)
+				fmt.Printf("%s %v [only_from] [multi]\n", addr, stat)
 			}
 		} else if len(stat[0]) == 0 && len(stat[1]) > 0 {
 			fmt.Printf("%s %v [only_to]\n", addr, stat)
 		} else {
 			if len(stat[0]) == 1 && len(stat[1]) == 1 {
-				if stat[1]["1e0"] == 1 {
+				if stat[1]["1e0"] == 1 || stat[1]["1e0"] == 2 {
 					if stat[0]["1e1"] > 0 {
 						phishingSum["1e1"] += stat[0]["1e1"]
 					} else if stat[0]["1e3"] > 0 {
 						phishingSum["1e3"] += stat[0]["1e3"]
 					} else {
-						fmt.Printf("%s %v [both] [activated]\n", addr, stat)
+						if stat[1]["1e0"] == 1 {
+							fmt.Printf("%s %v [both] [activated]\n", addr, stat)
+						} else {
+							fmt.Printf("%s %v [both] [injection]\n", addr, stat)
+						}
 					}
 				} else if stat[0]["1e1"] > 10 && stat[1]["1e1"] > 10 {
 					circleSum["1e1"] += stat[0]["1e1"]
+				} else if stat[0]["1e2"]+stat[1]["1e2"] > 10 {
+					circleSum["1e2"] += stat[0]["1e2"]
 				} else {
 					fmt.Printf("%s %v [both] [single]\n", addr, stat)
 				}

@@ -710,7 +710,26 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					continue
 				}
 
-				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+				if _, ok := stats[fromAddr]; !ok {
+					stats[fromAddr] = make([]map[string]int, 2)
+					stats[fromAddr][0] = make(map[string]int)
+					stats[fromAddr][1] = make(map[string]int)
+				}
+
+				if _, ok := stats[toAddr]; !ok {
+					stats[toAddr] = make([]map[string]int, 2)
+					stats[toAddr][0] = make(map[string]int)
+					stats[toAddr][1] = make(map[string]int)
+				}
+
+				// Activate account transfer
+				if result.Fee >= 1_000_000 {
+					normals[fromAddr] = true
+					normals[toAddr] = true
+					stats[fromAddr][0]["1e0"] += 1
+					stats[toAddr][1]["1e0"] += 1
+					continue
+				}
 
 				if preAmount, ok := amounts[fromAddr]; ok {
 					diff := result.Amount.Int64() - preAmount
@@ -725,18 +744,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					normals[toAddr] = true
 				}
 
-				if _, ok := stats[fromAddr]; !ok {
-					stats[fromAddr] = make([]map[string]int, 2)
-					stats[fromAddr][0] = make(map[string]int)
-					stats[fromAddr][1] = make(map[string]int)
-				}
+				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 				stats[fromAddr][0][typeName] += 1
-
-				if _, ok := stats[toAddr]; !ok {
-					stats[toAddr] = make([]map[string]int, 2)
-					stats[toAddr][0] = make(map[string]int)
-					stats[toAddr][1] = make(map[string]int)
-				}
 				stats[toAddr][1][typeName] += 1
 			}
 			txCount += tx.RowsAffected
@@ -761,10 +770,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	db.logger.Infof("Finish counting Phishing TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	var (
-		phishing   = make(map[string]int)
-		collectSum = make(map[string]int)
-		normalSum  = make(map[string]int)
-		tickerSum  = make(map[string]int)
+		phishingSum      = make(map[string]int)
+		multiPhishingSum = make(map[string]int)
+		circleSum        = make(map[string]int)
+		collectSum       = make(map[string]int)
+		normalSum        = make(map[string]int)
+		tickerSum        = make(map[string]int)
 	)
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
@@ -785,13 +796,21 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		if len(stat[0]) > 0 && len(stat[1]) == 0 {
 			if len(stat[0]) == 1 {
 				for k, v := range stat[0] {
-					if k == "1e1" && v > 1 {
-						phishing[k] += v
-					} else if k == "1e3" {
-						phishing[k] += v
-					} else {
+					if v == 1 {
 						collectSum[k] += v
+					} else if k == "1e1" {
+						phishingSum[k] += v
+					} else if k == "1e3" {
+						phishingSum[k] += v
 					}
+				}
+			} else if len(stat[0]) == 2 || len(stat[0]) == 3 {
+				if stat[0]["1e1"] > 0 && (stat[0]["1e2"] > 0 || stat[0]["1e3"] > 0) {
+					for k, v := range stat[0] {
+						multiPhishingSum[k] += v
+					}
+				} else {
+					fmt.Printf("%s %v [only_from] [multi]\n", addr, stat)
 				}
 			} else {
 				fmt.Printf("%s %v [only_from]\n", addr, stat)
@@ -799,11 +818,29 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		} else if len(stat[0]) == 0 && len(stat[1]) > 0 {
 			fmt.Printf("%s %v [only_to]\n", addr, stat)
 		} else {
-			fmt.Printf("%s %v [both]\n", addr, stat)
+			if len(stat[0]) == 1 && len(stat[1]) == 1 {
+				if stat[1]["1e0"] == 1 {
+					if stat[0]["1e1"] > 0 {
+						phishingSum["1e1"] += stat[0]["1e1"]
+					} else if stat[0]["1e3"] > 0 {
+						phishingSum["1e3"] += stat[0]["1e3"]
+					} else {
+						fmt.Printf("%s %v [both] [activated]\n", addr, stat)
+					}
+				} else if stat[0]["1e1"] > 10 && stat[1]["1e1"] > 10 {
+					circleSum["1e1"] += stat[0]["1e1"]
+				} else {
+					fmt.Printf("%s %v [both] [single]\n", addr, stat)
+				}
+			} else {
+				fmt.Printf("%s %v [both]\n", addr, stat)
+			}
 		}
 	}
-	fmt.Printf("Phishing: %v\n", phishing)
-	fmt.Printf("Collect: %v\n", collectSum)
+	fmt.Printf("PhishingSum: %v\n", phishingSum)
+	fmt.Printf("MultiPhishingSum: %v\n", multiPhishingSum)
+	fmt.Printf("CircleSum: %v\n", circleSum)
+	fmt.Printf("CollectSum: %v\n", collectSum)
 	fmt.Printf("NormalSum: %v\n", normalSum)
 	fmt.Printf("TickerSum: %v\n", tickerSum)
 }

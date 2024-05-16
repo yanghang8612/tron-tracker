@@ -706,7 +706,6 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 
 				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 					normals[fromAddr] = true
-					normals[toAddr] = true
 					continue
 				}
 
@@ -745,11 +744,11 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					normals[fromAddr] = true
 					stats[fromAddr][0][typeName] += 1
 					stats[toAddr][1]["1e0"] += 2
+					continue
 				}
 
 				if len(result.Amount.String()) >= 6 {
 					normals[fromAddr] = true
-					normals[toAddr] = true
 				}
 
 				stats[fromAddr][0][typeName] += 1
@@ -787,7 +786,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
-			if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 3 {
+			if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 7 {
 				fmt.Printf("%s %v [success]\n", addr, stat)
 			}
 			for k, v := range stat[0] {

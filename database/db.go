@@ -743,27 +743,28 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 				stats[fromAddr].toMap[toAddr] = true
 
-				amount := result.Amount.String()
-				amountType := fmt.Sprintf("1e%d", len(amount))
+				amountStr := result.Amount.String()
+				amountType := fmt.Sprintf("1e%d", len(amountStr))
 
 				if _, ok := stats[toAddr]; !ok {
 					stats[toAddr] = newTRXStatistic()
 				}
-				stats[toAddr].amountMap[amount] += 1
+				stats[toAddr].amountMap[amountStr] += 1
 
-				if result.Fee == 0 && len(amount) <= 3 {
+				if result.Fee == 0 && len(amountStr) <= 3 {
 					stats[toAddr].phisherMap[fromAddr] = true
 				}
 
-				if _, ok := stats[toAddr].phisherMap[fromAddr]; ok && (result.Fee > 0 || len(amount) > 3) {
+				if _, ok := stats[toAddr].phisherMap[fromAddr]; ok && (result.Fee > 0 || len(amountStr) > 3) {
 					stats[toAddr].fakerMap[fromAddr] = true
 				}
 
-				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amount) >= 6 && !stats[toAddr].isCharger() {
+				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amountStr) >= 6 && !stats[toAddr].isCharger() {
 					if _, ok := stats[fromAddr].fakerMap[toAddr]; !ok {
-						phishSum += result.Amount.Int64()
-						phisherMap[toAddr] += result.Amount.Int64()
-						fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, result.Hash, amount)
+						amount := result.Amount.Int64()
+						phishSum += amount
+						phisherMap[toAddr] += amount
+						fmt.Printf("Phishing: %s %s %s %.1f TRX\n", fromAddr, toAddr, result.Hash, float64(amount)/1_000_000)
 					}
 				}
 

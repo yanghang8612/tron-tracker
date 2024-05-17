@@ -698,7 +698,7 @@ func (ts *TRXStatistic) getSmallCount() int {
 }
 
 func (ts *TRXStatistic) isCharger() bool {
-	return len(ts.toMap) == 0
+	return len(ts.toMap) == 1
 }
 
 func (ts *TRXStatistic) toString() string {
@@ -727,11 +727,6 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr
 
-				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
-					normals[fromAddr] = true
-					continue
-				}
-
 				if _, ok := stats[fromAddr]; !ok {
 					stats[fromAddr] = newTRXStatistic()
 				}
@@ -741,6 +736,11 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr] = newTRXStatistic()
 				}
 				stats[toAddr].amountMap[result.Amount.String()] += 1
+
+				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+					normals[fromAddr] = true
+					continue
+				}
 
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 
@@ -804,6 +804,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		collectSum       = make(map[string]int)
 		normalSum        = make(map[string]int)
 		tickerSum        = make(map[string]int)
+		onlyTo           = 0
 	)
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
@@ -849,10 +850,11 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				fmt.Printf("%s %s [only_from] [multi]\n", addr, stat.toString())
 			}
 		} else if len(stat.fromStats) == 0 && len(stat.toStats) > 0 {
-			fmt.Printf("%s %s [only_to]\n", addr, stat.toString())
+			onlyTo += 1
+			// fmt.Printf("%s %s [only_to]\n", addr, stat.toString())
 		} else {
-			if len(stat.fromStats) == 1 && len(stat.fromStats) == 1 {
-				if stat.fromStats["1e0"] == 1 || stat.fromStats["1e0"] == 2 {
+			if len(stat.fromStats) == 1 && len(stat.toStats) == 1 {
+				if stat.toStats["1e0"] == 1 || stat.toStats["1e0"] == 2 {
 					if stat.fromStats["1e1"] > 0 {
 						phishingSum["1e1"] += stat.fromStats["1e1"]
 					} else if stat.fromStats["1e3"] > 0 {
@@ -882,6 +884,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("CollectSum: %v\n", collectSum)
 	fmt.Printf("NormalSum: %v\n", normalSum)
 	fmt.Printf("TickerSum: %v\n", tickerSum)
+	fmt.Printf("OnlyTo: %d\n", onlyTo)
 }
 
 func (db *RawDB) countForDate(date string) {

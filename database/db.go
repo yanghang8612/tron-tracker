@@ -689,6 +689,7 @@ func newTRXStatistic() *TRXStatistic {
 		fromStats: make(map[string]int),
 		toStats:   make(map[string]int),
 		toMap:     make(map[string]bool),
+		amountMap: make(map[string]int),
 	}
 }
 

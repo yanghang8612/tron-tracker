@@ -678,10 +678,11 @@ func (db *RawDB) countLoop() {
 }
 
 type TRXStatistic struct {
-	fromStats map[string]int
-	toStats   map[string]int
-	toMap     map[string]bool
-	amountMap map[string]int
+	fromStats  map[string]int
+	toStats    map[string]int
+	toMap      map[string]bool
+	amountMap  map[string]int
+	phisherMap map[string]bool
 }
 
 func newTRXStatistic() *TRXStatistic {
@@ -737,17 +738,26 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 				stats[fromAddr].toMap[toAddr] = true
 
+				amount := result.Amount.String()
+				amountType := fmt.Sprintf("1e%d", len(amount))
+
 				if _, ok := stats[toAddr]; !ok {
 					stats[toAddr] = newTRXStatistic()
 				}
-				stats[toAddr].amountMap[result.Amount.String()] += 1
+				stats[toAddr].amountMap[amount] += 1
 
-				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+				if len(amount) <= 3 {
+					stats[toAddr].phisherMap[fromAddr] = true
+				}
+
+				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amounts) >= 6 {
+					fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, amount, result.Hash)
+				}
 
 				// Activate account transfer
 				if result.Fee >= 1_000_000 {
 					normals[fromAddr] = true
-					stats[fromAddr].fromStats[typeName] += 1
+					stats[fromAddr].fromStats[amountType] += 1
 					stats[fromAddr].fromStats["1e0"] += 1
 					stats[toAddr].toStats["1e0"] += 1
 					continue
@@ -764,7 +774,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				// Phishing injection
 				if amounts[fromAddr] == 6380 {
 					normals[fromAddr] = true
-					stats[fromAddr].fromStats[typeName] += 1
+					stats[fromAddr].fromStats[amountType] += 1
 					stats[toAddr].toStats["1e0"] = 2
 					continue
 				}
@@ -773,8 +783,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					normals[fromAddr] = true
 				}
 
-				stats[fromAddr].fromStats[typeName] += 1
-				stats[toAddr].toStats[typeName] += 1
+				stats[fromAddr].fromStats[amountType] += 1
+				stats[toAddr].toStats[amountType] += 1
 			}
 			txCount += tx.RowsAffected
 
@@ -809,7 +819,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
-			if stat.getSmallCount() >= 7 && stat.fromStats["1e0"] == 0 && !stat.isCharger() {
+			if stat.getSmallCount() >= 7 && stat.fromStats["1e0"] == 0 && !stat.isCharger() && len(stat.amountMap) <= 3 {
 				fmt.Printf("%s %s [success]\n", addr, stat.toString())
 			}
 			for k, v := range stat.fromStats {

@@ -716,6 +716,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	var (
 		countingDate = startDate
 		txCount      = int64(0)
+		phishSum     = int64(0)
+		phisherMap   = make(map[string]int64)
 		results      = make([]*models.Transaction, 0)
 		report       = make(map[int]bool)
 		stats        = make(map[string]*TRXStatistic)
@@ -759,7 +761,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 
 				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amount) >= 6 && !stats[toAddr].isCharger() {
 					if _, ok := stats[fromAddr].fakerMap[toAddr]; !ok {
-						fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, amount, result.Hash)
+						phishSum += result.Amount.Int64()
+						phisherMap[toAddr] += result.Amount.Int64()
+						fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, result.Hash, amount)
 					}
 				}
 
@@ -815,6 +819,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	}
 
 	db.logger.Infof("Finish counting Phishing TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+
+	fmt.Printf("PhishSum: %d\n", phishSum)
+	fmt.Println("PhisherMap:")
+	for k, v := range phisherMap {
+		fmt.Printf("%s %d\n", k, v)
+	}
 
 	var (
 		phishingSum      = make(map[string]int)

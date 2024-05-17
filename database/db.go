@@ -687,10 +687,11 @@ type TRXStatistic struct {
 
 func newTRXStatistic() *TRXStatistic {
 	return &TRXStatistic{
-		fromStats: make(map[string]int),
-		toStats:   make(map[string]int),
-		toMap:     make(map[string]bool),
-		amountMap: make(map[string]int),
+		fromStats:  make(map[string]int),
+		toStats:    make(map[string]int),
+		toMap:      make(map[string]bool),
+		amountMap:  make(map[string]int),
+		phisherMap: make(map[string]bool),
 	}
 }
 

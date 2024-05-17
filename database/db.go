@@ -678,8 +678,25 @@ func (db *RawDB) countLoop() {
 }
 
 type TRXStatistic struct {
-	TypeName string
-	Count    int64
+	fromStats map[string]int
+	toStats   map[string]int
+	toMap     map[string]bool
+}
+
+func newTRXStatistic() *TRXStatistic {
+	return &TRXStatistic{
+		fromStats: make(map[string]int),
+		toStats:   make(map[string]int),
+		toMap:     make(map[string]bool),
+	}
+}
+
+func (ts *TRXStatistic) getSmallCount() int {
+	return ts.fromStats["1e1"] + ts.fromStats["1e2"] + ts.fromStats["1e3"]
+}
+
+func (ts *TRXStatistic) isCharger() bool {
+	return len(ts.toMap) == 0
 }
 
 func (db *RawDB) countPhishingForDate(startDate string) {
@@ -691,7 +708,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
 		report       = make(map[int]bool)
-		stats        = make(map[string][]map[string]int)
+		stats        = make(map[string]*TRXStatistic)
 		tickers      = make(map[string]bool)
 		amounts      = make(map[string]int64)
 		normals      = make(map[string]bool)
@@ -710,15 +727,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 
 				if _, ok := stats[fromAddr]; !ok {
-					stats[fromAddr] = make([]map[string]int, 2)
-					stats[fromAddr][0] = make(map[string]int)
-					stats[fromAddr][1] = make(map[string]int)
+					stats[fromAddr] = newTRXStatistic()
 				}
+				stats[fromAddr].toMap[toAddr] = true
 
 				if _, ok := stats[toAddr]; !ok {
-					stats[toAddr] = make([]map[string]int, 2)
-					stats[toAddr][0] = make(map[string]int)
-					stats[toAddr][1] = make(map[string]int)
+					stats[toAddr] = newTRXStatistic()
 				}
 
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
@@ -726,9 +740,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				// Activate account transfer
 				if result.Fee >= 1_000_000 {
 					normals[fromAddr] = true
-					stats[fromAddr][0][typeName] += 1
-					stats[fromAddr][0]["1e0"] += 1
-					stats[toAddr][1]["1e0"] += 1
+					stats[fromAddr].fromStats[typeName] += 1
+					stats[fromAddr].fromStats["1e0"] += 1
+					stats[toAddr].toStats["1e0"] += 1
 					continue
 				}
 
@@ -743,8 +757,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				// Phishing injection
 				if amounts[fromAddr] == 6380 {
 					normals[fromAddr] = true
-					stats[fromAddr][0][typeName] += 1
-					stats[toAddr][1]["1e0"] += 2
+					stats[fromAddr].fromStats[typeName] += 1
+					stats[toAddr].toStats["1e0"] = 2
 					continue
 				}
 
@@ -752,8 +766,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					normals[fromAddr] = true
 				}
 
-				stats[fromAddr][0][typeName] += 1
-				stats[toAddr][1][typeName] += 1
+				stats[fromAddr].fromStats[typeName] += 1
+				stats[toAddr].toStats[typeName] += 1
 			}
 			txCount += tx.RowsAffected
 
@@ -787,25 +801,25 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("Stats size: %d\n", len(stats))
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
-			if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 7 && stat[0]["1e0"] == 0 {
+			if stat.getSmallCount() >= 7 && stat.fromStats["1e0"] == 0 && !stat.isCharger() {
 				fmt.Printf("%s %v [success]\n", addr, stat)
 			}
-			for k, v := range stat[0] {
+			for k, v := range stat.fromStats {
 				normalSum[k] += v
 			}
 			continue
 		}
 
 		if _, ok := tickers[addr]; ok {
-			for k, v := range stat[0] {
+			for k, v := range stat.fromStats {
 				tickerSum[k] += v
 			}
 			continue
 		}
 
-		if len(stat[0]) > 0 && len(stat[1]) == 0 {
-			if len(stat[0]) == 1 {
-				for k, v := range stat[0] {
+		if len(stat.fromStats) > 0 && len(stat.toStats) == 0 {
+			if len(stat.fromStats) == 1 {
+				for k, v := range stat.fromStats {
 					if v == 1 {
 						collectSum[k] += v
 					} else if k == "1e1" {
@@ -816,9 +830,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 						fmt.Printf("%s %v [only_from] [single]\n", addr, stat)
 					}
 				}
-			} else if len(stat[0]) == 2 || len(stat[0]) == 3 {
-				if stat[0]["1e1"]+stat[0]["1e2"]+stat[0]["1e3"] >= 7 {
-					for k, v := range stat[0] {
+			} else if len(stat.fromStats) == 2 || len(stat.fromStats) == 3 {
+				if stat.getSmallCount() >= 7 {
+					for k, v := range stat.fromStats {
 						multiPhishingSum[k] += v
 					}
 				} else {
@@ -827,26 +841,26 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 			} else {
 				fmt.Printf("%s %v [only_from] [multi]\n", addr, stat)
 			}
-		} else if len(stat[0]) == 0 && len(stat[1]) > 0 {
+		} else if len(stat.fromStats) == 0 && len(stat.toStats) > 0 {
 			fmt.Printf("%s %v [only_to]\n", addr, stat)
 		} else {
-			if len(stat[0]) == 1 && len(stat[1]) == 1 {
-				if stat[1]["1e0"] == 1 || stat[1]["1e0"] == 2 {
-					if stat[0]["1e1"] > 0 {
-						phishingSum["1e1"] += stat[0]["1e1"]
-					} else if stat[0]["1e3"] > 0 {
-						phishingSum["1e3"] += stat[0]["1e3"]
+			if len(stat.fromStats) == 1 && len(stat.fromStats) == 1 {
+				if stat.fromStats["1e0"] == 1 || stat.fromStats["1e0"] == 2 {
+					if stat.fromStats["1e1"] > 0 {
+						phishingSum["1e1"] += stat.fromStats["1e1"]
+					} else if stat.fromStats["1e3"] > 0 {
+						phishingSum["1e3"] += stat.fromStats["1e3"]
 					} else {
-						if stat[1]["1e0"] == 1 {
+						if stat.toStats["1e0"] == 1 {
 							fmt.Printf("%s %v [both] [activated]\n", addr, stat)
 						} else {
 							fmt.Printf("%s %v [both] [injection]\n", addr, stat)
 						}
 					}
-				} else if stat[0]["1e1"] > 10 && stat[1]["1e1"] > 10 {
-					circleSum["1e1"] += stat[0]["1e1"]
-				} else if stat[0]["1e2"]+stat[1]["1e2"] > 10 {
-					circleSum["1e2"] += stat[0]["1e2"]
+				} else if stat.fromStats["1e1"] > 10 && stat.toStats["1e1"] > 10 {
+					circleSum["1e1"] += stat.fromStats["1e1"]
+				} else if stat.fromStats["1e2"]+stat.toStats["1e2"] > 10 {
+					circleSum["1e2"] += stat.fromStats["1e2"]
 				} else {
 					fmt.Printf("%s %v [both] [single]\n", addr, stat)
 				}

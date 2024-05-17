@@ -146,7 +146,7 @@ func New(config *Config) *RawDB {
 		logger: zap.S().Named("[db]"),
 	}
 
-	rawDB.loadChargers()
+	// rawDB.loadChargers()
 
 	return rawDB
 }

@@ -753,7 +753,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr].phisherMap[fromAddr] = true
 				}
 
-				if _, ok := stats[toAddr].phisherMap[fromAddr]; ok && (result.Fee > 0 || len(amounts) > 3) {
+				if _, ok := stats[toAddr].phisherMap[fromAddr]; ok && (result.Fee > 0 || len(amount) > 3) {
 					stats[toAddr].fakerMap[fromAddr] = true
 				}
 

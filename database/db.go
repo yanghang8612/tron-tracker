@@ -702,7 +702,7 @@ func (ts *TRXStatistic) getSmallCount() int {
 }
 
 func (ts *TRXStatistic) isCharger() bool {
-	return len(ts.toMap) == 1
+	return len(ts.toMap) <= 2
 }
 
 func (ts *TRXStatistic) toString() string {

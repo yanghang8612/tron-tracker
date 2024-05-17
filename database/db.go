@@ -702,7 +702,7 @@ func (ts *TRXStatistic) getSmallCount() int {
 }
 
 func (ts *TRXStatistic) isCharger() bool {
-	return len(ts.toMap) <= 2
+	return len(ts.toMap) <= 1
 }
 
 func (ts *TRXStatistic) toString() string {
@@ -725,6 +725,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		tickers      = make(map[string]bool)
 		amounts      = make(map[string]int64)
 		normals      = make(map[string]bool)
+		usdt         = make(map[string]int64)
 		rex          = regexp.MustCompile("^10*$")
 	)
 
@@ -736,6 +737,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 
 				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 					normals[fromAddr] = true
+					usdt[fromAddr] += 1
 					continue
 				}
 
@@ -760,7 +762,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr].fakerMap[fromAddr] = true
 				}
 
-				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amountStr) >= 6 && !stats[toAddr].isCharger() {
+				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amountStr) >= 6 && !stats[toAddr].isCharger() && usdt[toAddr] < 2 {
 					if _, ok := stats[fromAddr].fakerMap[toAddr]; !ok {
 						amount := result.Amount.Int64()
 						phishSum += amount

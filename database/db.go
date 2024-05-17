@@ -758,7 +758,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				}
 
 				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amount) >= 6 && !stats[toAddr].isCharger() {
-					if _, ok := stats[toAddr].fakerMap[fromAddr]; !ok {
+					if _, ok := stats[fromAddr].fakerMap[toAddr]; !ok {
 						fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, amount, result.Hash)
 					}
 				}

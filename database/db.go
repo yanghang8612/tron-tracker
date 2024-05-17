@@ -727,7 +727,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				if result.Fee >= 1_000_000 {
 					normals[fromAddr] = true
 					stats[fromAddr][0][typeName] += 1
-					stats[fromAddr][1]["1e0"] += 1
+					stats[fromAddr][0]["1e0"] += 1
 					stats[toAddr][1]["1e0"] += 1
 					continue
 				}

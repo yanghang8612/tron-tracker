@@ -683,6 +683,7 @@ type TRXStatistic struct {
 	toMap      map[string]bool
 	amountMap  map[string]int
 	phisherMap map[string]bool
+	fakerMap   map[string]bool
 }
 
 func newTRXStatistic() *TRXStatistic {
@@ -692,6 +693,7 @@ func newTRXStatistic() *TRXStatistic {
 		toMap:      make(map[string]bool),
 		amountMap:  make(map[string]int),
 		phisherMap: make(map[string]bool),
+		fakerMap:   make(map[string]bool),
 	}
 }
 
@@ -751,8 +753,14 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr].phisherMap[fromAddr] = true
 				}
 
+				if _, ok := stats[toAddr].phisherMap[fromAddr]; ok && result.Fee > 0 || len(amounts) > 3 {
+					stats[toAddr].fakerMap[fromAddr] = true
+				}
+
 				if _, ok := stats[fromAddr].phisherMap[toAddr]; ok && len(amount) >= 6 && !stats[toAddr].isCharger() {
-					fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, amount, result.Hash)
+					if _, ok := stats[toAddr].fakerMap[fromAddr]; !ok {
+						fmt.Printf("Phishing: %s %s %s %s\n", fromAddr, toAddr, amount, result.Hash)
+					}
 				}
 
 				// Activate account transfer

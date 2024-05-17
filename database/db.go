@@ -718,6 +718,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 		txCount      = int64(0)
 		phishSum     = int64(0)
 		phisherMap   = make(map[string]int64)
+		victimsMap   = make(map[string]int64)
 		results      = make([]*models.Transaction, 0)
 		report       = make(map[int]bool)
 		stats        = make(map[string]*TRXStatistic)
@@ -764,6 +765,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 						amount := result.Amount.Int64()
 						phishSum += amount
 						phisherMap[toAddr] += amount
+						victimsMap[fromAddr] += amount
 						fmt.Printf("Phishing: %s %s %s %.1f TRX\n", fromAddr, toAddr, result.Hash, float64(amount)/1_000_000)
 					}
 				}
@@ -822,12 +824,18 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	db.logger.Infof("Finish counting Phishing TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	fmt.Printf("PhishSum: %d\n", phishSum)
-	fmt.Println("PhisherMap:")
+	fmt.Printf("PhisherMap: %d\n", len(phisherMap))
 	for k, v := range phisherMap {
+		fmt.Printf("%s %d\n", k, v)
+	}
+	fmt.Printf("VictimsMap: %d\n", len(victimsMap))
+	for k, v := range victimsMap {
 		fmt.Printf("%s %d\n", k, v)
 	}
 
 	var (
+		phishers         = make(map[string]bool)
+		victims          = make(map[string]bool)
 		phishingSum      = make(map[string]int)
 		multiPhishingSum = make(map[string]int)
 		circleSum        = make(map[string]int)
@@ -840,10 +848,14 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
 			if stat.getSmallCount() >= 7 && stat.fromStats["1e0"] == 0 && !stat.isCharger() && len(stat.amountMap) <= 3 {
+				for k, v := range stat.fromStats {
+					phishingSum[k] += v
+				}
 				fmt.Printf("%s %s [success]\n", addr, stat.toString())
-			}
-			for k, v := range stat.fromStats {
-				normalSum[k] += v
+			} else {
+				for k, v := range stat.fromStats {
+					normalSum[k] += v
+				}
 			}
 			continue
 		}
@@ -862,8 +874,16 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 						collectSum[k] += v
 					} else if k == "1e1" {
 						phishingSum[k] += v
+						phishers[addr] = true
+						for k := range stat.toMap {
+							victims[k] = true
+						}
 					} else if k == "1e3" {
 						phishingSum[k] += v
+						phishers[addr] = true
+						for k := range stat.toMap {
+							victims[k] = true
+						}
 					} else {
 						fmt.Printf("%s %s [only_from] [single]\n", addr, stat.toString())
 					}
@@ -872,6 +892,10 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				if stat.getSmallCount() >= 7 {
 					for k, v := range stat.fromStats {
 						multiPhishingSum[k] += v
+						phishers[addr] = true
+						for k := range stat.toMap {
+							victims[k] = true
+						}
 					}
 				} else {
 					fmt.Printf("%s %s [only_from] [multi]\n", addr, stat.toString())
@@ -887,8 +911,16 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				if stat.toStats["1e0"] == 1 || stat.toStats["1e0"] == 2 {
 					if stat.fromStats["1e1"] > 0 {
 						phishingSum["1e1"] += stat.fromStats["1e1"]
+						phishers[addr] = true
+						for k := range stat.toMap {
+							victims[k] = true
+						}
 					} else if stat.fromStats["1e3"] > 0 {
 						phishingSum["1e3"] += stat.fromStats["1e3"]
+						phishers[addr] = true
+						for k := range stat.toMap {
+							victims[k] = true
+						}
 					} else {
 						if stat.toStats["1e0"] == 1 {
 							fmt.Printf("%s %s [both] [activated]\n", addr, stat.toString())
@@ -910,6 +942,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	}
 	fmt.Printf("PhishingSum: %v\n", phishingSum)
 	fmt.Printf("MultiPhishingSum: %v\n", multiPhishingSum)
+	fmt.Printf("Phisher: %d\n", len(phishers))
+	fmt.Printf("Victim: %d\n", len(victims))
 	fmt.Printf("CircleSum: %v\n", circleSum)
 	fmt.Printf("CollectSum: %v\n", collectSum)
 	fmt.Printf("NormalSum: %v\n", normalSum)

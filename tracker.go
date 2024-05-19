@@ -71,7 +71,7 @@ func (t *Tracker) loop() {
 			t.loopWG.Done()
 			return
 		default:
-			// t.doTrackBlock()
+			t.doTrackBlock()
 		}
 	}
 }

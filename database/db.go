@@ -668,7 +668,7 @@ func (db *RawDB) countLoop() {
 			}
 
 			if !isDone {
-				db.countPhishingForDate("240506")
+				db.countPhishingForDate("240513")
 				isDone = true
 			}
 
@@ -979,12 +979,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				if _, ok := victims[toAddr]; ok {
 					dayVictimsMap[toAddr] = true
 				}
+			}
 
-				dailyCount += tx.RowsAffected
+			dailyCount += tx.RowsAffected
 
-				if dailyCount%1_000_000 == 0 {
-					db.logger.Infof("Recounting Phishing TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, recountingDate, txCount)
-				}
+			if dailyCount%1_000_000 == 0 {
+				db.logger.Infof("Recounting Phishing TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, recountingDate, dailyCount)
 			}
 			return nil
 		})

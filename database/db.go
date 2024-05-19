@@ -954,19 +954,26 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("OnlyTo: %d\n", onlyTo)
 
 	recountingDate := startDate
-	dayPhisherMap := make(map[string]bool)
-	dayVictimsMap := make(map[string]bool)
-	dayPhishSum := int64(0)
+
 	for generateWeek(recountingDate) == week {
+		dayFromMap := make(map[string]bool)
+		dayToMap := make(map[string]bool)
+		dayTotalCount := int64(0)
+		dayPhisherMap := make(map[string]bool)
+		dayVictimsMap := make(map[string]bool)
+		dayPhishCount := int64(0)
 		dailyCount := int64(0)
 		_ = db.db.Table("transactions_"+recountingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr
+				dayFromMap[fromAddr] = true
+				dayToMap[toAddr] = true
+				dayTotalCount += 1
 
 				if _, ok := phishers[fromAddr]; ok {
 					dayPhisherMap[fromAddr] = true
-					dayPhishSum += 1
+					dayPhishCount += 1
 				}
 
 				if _, ok := victims[toAddr]; ok {
@@ -982,7 +989,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 			return nil
 		})
 
-		fmt.Printf("Daily %s %d %d %d\n", recountingDate, len(dayPhisherMap), len(dayVictimsMap), dayPhishSum)
+		fmt.Printf("Daily %s %d %d %d %d %d %d\n", recountingDate, len(dayFromMap), len(dayPhisherMap), len(dayToMap), len(dayVictimsMap), dayTotalCount, dayPhishCount)
 
 		date, _ := time.Parse("060102", recountingDate)
 		recountingDate = date.AddDate(0, 0, 1).Format("060102")

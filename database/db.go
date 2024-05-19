@@ -735,24 +735,24 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr
 
+				if _, ok := stats[fromAddr]; !ok {
+					stats[fromAddr] = newTRXStatistic()
+				}
+				if _, ok := stats[toAddr]; !ok {
+					stats[toAddr] = newTRXStatistic()
+				}
+
+				stats[fromAddr].toMap[toAddr] = true
+
+				amountStr := result.Amount.String()
+				amountType := fmt.Sprintf("1e%d", len(amountStr))
+				stats[toAddr].amountMap[amountStr] += 1
+
 				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 					normals[fromAddr] = true
 					usdt[fromAddr] += 1
 					continue
 				}
-
-				if _, ok := stats[fromAddr]; !ok {
-					stats[fromAddr] = newTRXStatistic()
-				}
-				stats[fromAddr].toMap[toAddr] = true
-
-				amountStr := result.Amount.String()
-				amountType := fmt.Sprintf("1e%d", len(amountStr))
-
-				if _, ok := stats[toAddr]; !ok {
-					stats[toAddr] = newTRXStatistic()
-				}
-				stats[toAddr].amountMap[amountStr] += 1
 
 				if result.Fee == 0 && len(amountStr) <= 3 {
 					stats[toAddr].phisherMap[fromAddr] = true
@@ -768,7 +768,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 						phishSum += amount
 						phisherMap[toAddr] += amount
 						victimsMap[fromAddr] += amount
-						fmt.Printf("Phishing: %s %s %s %.1f TRX\n", fromAddr, toAddr, result.Hash, float64(amount)/1_000_000)
+						fmt.Printf("Phishing: %s %s %s %s %.1f TRX\n", countingDate, fromAddr, toAddr, result.Hash, float64(amount)/1_000_000)
 					}
 				}
 
@@ -776,8 +776,8 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				if result.Fee >= 1_000_000 {
 					normals[fromAddr] = true
 					stats[fromAddr].fromStats[amountType] += 1
-					stats[fromAddr].fromStats["1e0"] += 1
-					stats[toAddr].toStats["1e0"] += 1
+					stats[fromAddr].fromStats["1e0"] = 1
+					stats[toAddr].toStats["1e0"] = 1
 					continue
 				}
 
@@ -828,6 +828,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("PhishSum: %d\n", phishSum)
 	fmt.Printf("PhisherMap: %d\n", len(phisherMap))
 	for k, v := range phisherMap {
+		if usdt[k] > 1 && len(stats[k].amountMap) > 3 {
+			fmt.Printf("maybe ")
+		}
 		fmt.Printf("%s %d %s %d\n", k, v, stats[k].toString(), usdt[k])
 	}
 	fmt.Printf("VictimsMap: %d\n", len(victimsMap))
@@ -850,8 +853,12 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	for addr, stat := range stats {
 		if _, ok := normals[addr]; ok {
 			if stat.getSmallCount() >= 7 && stat.fromStats["1e0"] == 0 && !stat.isCharger() && len(stat.amountMap) <= 3 {
+				phishers[addr] = true
 				for k, v := range stat.fromStats {
 					phishingSum[k] += v
+				}
+				for k := range stat.toMap {
+					victims[k] = true
 				}
 				fmt.Printf("%s %s [success]\n", addr, stat.toString())
 			} else {
@@ -874,13 +881,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 				for k, v := range stat.fromStats {
 					if v == 1 {
 						collectSum[k] += v
-					} else if k == "1e1" {
-						phishingSum[k] += v
-						phishers[addr] = true
-						for k := range stat.toMap {
-							victims[k] = true
-						}
-					} else if k == "1e3" {
+					} else if k == "1e1" || k == "1e2" || k == "1e3" {
 						phishingSum[k] += v
 						phishers[addr] = true
 						for k := range stat.toMap {
@@ -951,6 +952,41 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("NormalSum: %v\n", normalSum)
 	fmt.Printf("TickerSum: %v\n", tickerSum)
 	fmt.Printf("OnlyTo: %d\n", onlyTo)
+
+	recountingDate := startDate
+	dayPhisherMap := make(map[string]bool)
+	dayVictimsMap := make(map[string]bool)
+	dayPhishSum := int64(0)
+	for generateWeek(recountingDate) == week {
+		txCount := int64(0)
+		_ = db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+			for _, result := range results {
+				fromAddr := result.FromAddr
+				toAddr := result.ToAddr
+
+				if _, ok := phishers[fromAddr]; ok {
+					dayPhisherMap[fromAddr] = true
+					dayPhishSum += 1
+				}
+
+				if _, ok := victims[toAddr]; ok {
+					dayVictimsMap[toAddr] = true
+				}
+
+				txCount += tx.RowsAffected
+
+				if txCount%1_000_000 == 0 {
+					db.logger.Infof("Recounting Phishing TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, recountingDate, txCount)
+				}
+			}
+			return nil
+		})
+
+		fmt.Printf("Daily %s %d %d %d\n", recountingDate, len(dayPhisherMap), len(dayVictimsMap), dayPhishSum)
+
+		date, _ := time.Parse("060102", recountingDate)
+		recountingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
 }
 
 func (db *RawDB) countForDate(date string) {

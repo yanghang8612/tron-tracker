@@ -958,7 +958,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	dayVictimsMap := make(map[string]bool)
 	dayPhishSum := int64(0)
 	for generateWeek(recountingDate) == week {
-		txCount := int64(0)
+		dailyCount := int64(0)
 		_ = db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				fromAddr := result.FromAddr
@@ -973,9 +973,9 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					dayVictimsMap[toAddr] = true
 				}
 
-				txCount += tx.RowsAffected
+				dailyCount += tx.RowsAffected
 
-				if txCount%1_000_000 == 0 {
+				if dailyCount%1_000_000 == 0 {
 					db.logger.Infof("Recounting Phishing TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, recountingDate, txCount)
 				}
 			}

@@ -130,7 +130,7 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.SetAmount(amount)
 			// The TRX charger should charge at least 1 TRX
 			if amount > 1_000_000 {
-				t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
+				// t.db.SaveCharger(txToDB.FromAddr, txToDB.ToAddr, txToDB.Name)
 			}
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
@@ -189,19 +189,19 @@ func (t *Tracker) doTrackBlock() {
 		}
 
 		transactions = append(transactions, txToDB)
-		t.db.UpdateStatistics(txToDB)
+		// t.db.UpdateStatistics(txToDB)
 
-		for _, log := range txInfoList[idx].Log {
-			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
-				fromAddr := utils.EncodeToBase58(log.Topics[1][24:])
-				toAddr := utils.EncodeToBase58(log.Topics[2][24:])
-
-				// Filter zero value charger
-				if txToDB.FromAddr == fromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
-					t.db.SaveCharger(fromAddr, toAddr, utils.EncodeToBase58(log.Address))
-				}
-			}
-		}
+		// for _, log := range txInfoList[idx].Log {
+		// 	if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
+		// 		fromAddr := utils.EncodeToBase58(log.Topics[1][24:])
+		// 		toAddr := utils.EncodeToBase58(log.Topics[2][24:])
+		//
+		// 		// Filter zero value charger
+		// 		if txToDB.FromAddr == fromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
+		// 			t.db.SaveCharger(fromAddr, toAddr, utils.EncodeToBase58(log.Address))
+		// 		}
+		// 	}
+		// }
 	}
 	t.db.SaveTransactions(transactions)
 }

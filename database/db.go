@@ -828,7 +828,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	fmt.Printf("PhishSum: %d\n", phishSum)
 	fmt.Printf("PhisherMap: %d\n", len(phisherMap))
 	for k, v := range phisherMap {
-		if usdt[k] > 1 && len(stats[k].amountMap) > 3 {
+		if usdt[k] > 0 || len(stats[k].amountMap) > 3 {
 			fmt.Printf("maybe ")
 		}
 		fmt.Printf("%s %d %s %d\n", k, v, stats[k].toString(), usdt[k])

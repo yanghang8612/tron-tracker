@@ -742,17 +742,17 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 					stats[toAddr] = newTRXStatistic()
 				}
 
-				stats[fromAddr].toMap[toAddr] = true
-
-				amountStr := result.Amount.String()
-				amountType := fmt.Sprintf("1e%d", len(amountStr))
-				stats[toAddr].amountMap[amountStr] += 1
-
 				if result.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 					normals[fromAddr] = true
 					usdt[fromAddr] += 1
 					continue
 				}
+
+				stats[fromAddr].toMap[toAddr] = true
+
+				amountStr := result.Amount.String()
+				amountType := fmt.Sprintf("1e%d", len(amountStr))
+				stats[toAddr].amountMap[amountStr] += 1
 
 				if result.Fee == 0 && len(amountStr) <= 3 {
 					stats[toAddr].phisherMap[fromAddr] = true

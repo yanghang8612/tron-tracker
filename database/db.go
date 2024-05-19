@@ -959,7 +959,7 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 	dayPhishSum := int64(0)
 	for generateWeek(recountingDate) == week {
 		dailyCount := int64(0)
-		_ = db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		_ = db.db.Table("transactions_"+recountingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr

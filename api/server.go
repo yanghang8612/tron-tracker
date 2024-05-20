@@ -147,6 +147,14 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 	})
 }
 
+type ExchangeTokenStatisticInResult struct {
+	Name           string `json:"name"`
+	Fee            int64  `json:"fee"`
+	FeePercent     string `json:"fee_percent"`
+	TxCount        int64  `json:"tx_count"`
+	TxCountPercent string `json:"tx_count_percent"`
+}
+
 func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	startDate, ok := prepareDateParam(c, "start_date")
 	if !ok {
@@ -180,7 +188,47 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 		}
 	}
 
-	c.JSON(200, resultMap)
+	token, ok := getStringParam(c, "token")
+
+	if !ok {
+		c.JSON(200, resultMap)
+		return
+	}
+
+	chargeResults := make([]*ExchangeTokenStatisticInResult, 0)
+	withdrawResults := make([]*ExchangeTokenStatisticInResult, 0)
+
+	for exchange, ets := range resultMap {
+		if es, ok := ets[token]; ok {
+			if es.ChargeTxCount > 0 {
+				chargeResults = append(chargeResults, &ExchangeTokenStatisticInResult{
+					Name:    exchange,
+					Fee:     es.ChargeFee,
+					TxCount: es.ChargeTxCount,
+				})
+			}
+
+			if es.WithdrawTxCount > 0 {
+				withdrawResults = append(withdrawResults, &ExchangeTokenStatisticInResult{
+					Name:    exchange,
+					Fee:     es.WithdrawFee,
+					TxCount: es.WithdrawTxCount,
+				})
+			}
+		}
+	}
+
+	result := strings.Builder{}
+	result.WriteString("charge: \n")
+	for _, res := range chargeResults {
+		result.WriteString(fmt.Sprintf("%s %d %d\n", res.Name, res.Fee, res.TxCount))
+	}
+	result.WriteString("withdraw: \n")
+	for _, res := range withdrawResults {
+		result.WriteString(fmt.Sprintf("%s %d %d\n", res.Name, res.Fee, res.TxCount))
+	}
+
+	c.String(200, result.String())
 }
 
 func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
@@ -217,14 +265,6 @@ func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
 	}
 
 	c.JSON(200, resultMap)
-}
-
-type ExchangeTokenStatisticInResult struct {
-	Name           string `json:"name"`
-	Fee            int64  `json:"fee"`
-	FeePercent     string `json:"fee_percent"`
-	TxCount        int64  `json:"tx_count"`
-	TxCountPercent string `json:"tx_count_percent"`
 }
 
 func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) map[string][]*ExchangeTokenStatisticInResult {

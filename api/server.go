@@ -221,11 +221,11 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	result := strings.Builder{}
 	result.WriteString("charge: \n")
 	for _, res := range chargeResults {
-		result.WriteString(fmt.Sprintf("%s %d %d\n", res.Name, res.Fee, res.TxCount))
+		result.WriteString(fmt.Sprintf("%s,%d,%d\n", res.Name, res.Fee, res.TxCount))
 	}
 	result.WriteString("withdraw: \n")
 	for _, res := range withdrawResults {
-		result.WriteString(fmt.Sprintf("%s %d %d\n", res.Name, res.Fee, res.TxCount))
+		result.WriteString(fmt.Sprintf("%s,%d,%d\n", res.Name, res.Fee, res.TxCount))
 	}
 
 	c.String(200, result.String())

@@ -67,6 +67,7 @@ func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
+	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
 	s.router.GET("/special_statistics", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
 	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
@@ -180,6 +181,106 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	}
 
 	c.JSON(200, resultMap)
+}
+
+func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	etsMap := make(map[string]map[string]*models.ExchangeStatistic)
+	for i := 0; i < 7; i++ {
+		queryDate := startDate.AddDate(0, 0, i)
+		for _, es := range s.db.GetExchangeTokenStatisticsByDate(queryDate) {
+			if _, ok := etsMap[es.Name]; !ok {
+				etsMap[es.Name] = make(map[string]*models.ExchangeStatistic)
+			}
+
+			// Skip total statistics
+			if es.Token == "_" {
+				continue
+			}
+
+			tokenName := s.db.GetTokenName(es.Token)
+
+			if _, ok := etsMap[es.Name][tokenName]; !ok {
+				etsMap[es.Name][tokenName] = &models.ExchangeStatistic{}
+			}
+			etsMap[es.Name][tokenName].Merge(&es)
+		}
+	}
+
+	resultMap := make(map[string]map[string][]*ExchangeTokenStatisticInResult)
+	for exchange, ets := range etsMap {
+		resultMap[exchange] = analyzeExchangeTokenStatistics(ets)
+	}
+
+	c.JSON(200, resultMap)
+}
+
+type ExchangeTokenStatisticInResult struct {
+	Name           string `json:"name"`
+	Fee            int64  `json:"fee"`
+	FeePercent     string `json:"fee_percent"`
+	TxCount        int64  `json:"tx_count"`
+	TxCountPercent string `json:"tx_count_percent"`
+}
+
+func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) map[string][]*ExchangeTokenStatisticInResult {
+	chargeResults := make([]*ExchangeTokenStatisticInResult, 0)
+	withdrawResults := make([]*ExchangeTokenStatisticInResult, 0)
+	chargeCount, withdrawCount := int64(0), int64(0)
+	chargeFee, withdrawFee := int64(0), int64(0)
+
+	for token, es := range ets {
+		if es.ChargeTxCount > 0 {
+			chargeCount += es.ChargeTxCount
+			chargeFee += es.ChargeFee
+			chargeResults = append(chargeResults, &ExchangeTokenStatisticInResult{
+				Name:           token,
+				Fee:            es.ChargeFee,
+				FeePercent:     "",
+				TxCount:        es.ChargeTxCount,
+				TxCountPercent: "",
+			})
+		}
+
+		if es.WithdrawTxCount > 0 {
+			withdrawCount += es.WithdrawTxCount
+			withdrawFee += es.WithdrawFee
+			withdrawResults = append(withdrawResults, &ExchangeTokenStatisticInResult{
+				Name:           token,
+				Fee:            es.WithdrawFee,
+				FeePercent:     "",
+				TxCount:        es.WithdrawTxCount,
+				TxCountPercent: "",
+			})
+		}
+	}
+
+	for _, res := range chargeResults {
+		res.FeePercent = utils.FormatOfPercent(chargeFee, res.Fee)
+		res.TxCountPercent = utils.FormatOfPercent(chargeCount, res.TxCount)
+	}
+
+	for _, res := range withdrawResults {
+		res.FeePercent = utils.FormatOfPercent(withdrawFee, res.Fee)
+		res.TxCountPercent = utils.FormatOfPercent(withdrawCount, res.TxCount)
+	}
+
+	sort.Slice(chargeResults, func(i, j int) bool {
+		return chargeResults[i].Fee > chargeResults[j].Fee
+	})
+
+	sort.Slice(withdrawResults, func(i, j int) bool {
+		return withdrawResults[i].Fee > withdrawResults[j].Fee
+	})
+
+	return map[string][]*ExchangeTokenStatisticInResult{
+		"charge":   chargeResults,
+		"withdraw": withdrawResults,
+	}
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {

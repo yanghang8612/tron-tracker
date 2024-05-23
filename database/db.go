@@ -667,10 +667,10 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
-			if !isDone {
-				db.countPhishingForDate("240513")
-				isDone = true
-			}
+			// if !isDone {
+			// 	db.countPhishingForDate("240513")
+			// 	isDone = true
+			// }
 
 			time.Sleep(1 * time.Second)
 		}

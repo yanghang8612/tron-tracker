@@ -1064,6 +1064,8 @@ func newUSDTStatistic() *USDTStatistic {
 	}
 }
 
+const FpSize = 3
+
 func (db *RawDB) countPhishingUSDTForDate(date string) {
 	db.logger.Infof("Start counting Phishing USDT Transactions for date [%s]", date)
 
@@ -1121,9 +1123,9 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 			}
 
 			USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
-			USDTStats[fromAddr].fingerPoints[toAddr[32:]] = toAddr
+			USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]] = toAddr
 			USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
-			USDTStats[toAddr].fingerPoints[fromAddr[32:]] = fromAddr
+			USDTStats[toAddr].fingerPoints[fromAddr[34-FpSize:]] = fromAddr
 		}
 
 		txCount += tx.RowsAffected
@@ -1138,7 +1140,7 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 }
 
 func isSimilarTransfer(addr string, stat *USDTStatistic) bool {
-	fingerPoint := addr[32:]
+	fingerPoint := addr[34-FpSize:]
 
 	if _, ok := stat.fingerPoints[fingerPoint]; !ok {
 		return false

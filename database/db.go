@@ -663,7 +663,7 @@ func (db *RawDB) countLoop() {
 
 			if trackingDate.Sub(countedDate).Hours() > 24 {
 				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
-				db.countForDate(dateToCount)
+				// db.countForDate(dateToCount)
 				db.countedDate = dateToCount
 
 				if countedDate.Weekday() == time.Saturday {
@@ -1275,41 +1275,41 @@ func (db *RawDB) countForWeek(startDate string) string {
 	var (
 		countingDate = startDate
 		txCount      = int64(0)
-		results      = make([]*models.Transaction, 0)
-		TRXStats     = make(map[string]*models.FungibleTokenStatistic)
-		USDTStats    = make(map[string]*models.FungibleTokenStatistic)
+		// results      = make([]*models.Transaction, 0)
+		TRXStats  = make(map[string]*models.FungibleTokenStatistic)
+		USDTStats = make(map[string]*models.FungibleTokenStatistic)
 	)
 
 	for generateWeek(countingDate) == week {
-		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
-			for _, result := range results {
-				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
-				if result.Name == "TRX" {
-					if _, ok := TRXStats[typeName]; !ok {
-						TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
-					} else {
-						TRXStats[typeName].Add(result)
-					}
-				} else if len(result.ToAddr) > 0 {
-					if _, ok := USDTStats[typeName]; !ok {
-						USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
-					} else {
-						USDTStats[typeName].Add(result)
-					}
-				}
-			}
-			txCount += tx.RowsAffected
-
-			if txCount%500_000 == 0 {
-				db.logger.Infof("Counting TRX&USDT Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
-			}
-
-			return nil
-		})
-
-		if result.Error != nil {
-			db.logger.Errorf("Counting TRX&USDT Transactions for week [%s], error [%v]", week, result.Error)
-		}
+		// result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		// 	for _, result := range results {
+		// 		typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+		// 		if result.Name == "TRX" {
+		// 			if _, ok := TRXStats[typeName]; !ok {
+		// 				TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
+		// 			} else {
+		// 				TRXStats[typeName].Add(result)
+		// 			}
+		// 		} else if len(result.ToAddr) > 0 {
+		// 			if _, ok := USDTStats[typeName]; !ok {
+		// 				USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
+		// 			} else {
+		// 				USDTStats[typeName].Add(result)
+		// 			}
+		// 		}
+		// 	}
+		// 	txCount += tx.RowsAffected
+		//
+		// 	if txCount%500_000 == 0 {
+		// 		db.logger.Infof("Counting TRX&USDT Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+		// 	}
+		//
+		// 	return nil
+		// })
+		//
+		// if result.Error != nil {
+		// 	db.logger.Errorf("Counting TRX&USDT Transactions for week [%s], error [%v]", week, result.Error)
+		// }
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")

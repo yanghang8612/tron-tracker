@@ -1110,7 +1110,8 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 				db.usdtPhishers[fromAddr] = true
 				db.usdtVictims[toAddr] = true
 				normalStat.Add(result)
-				db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s", date, fromAddr, toAddr, result.Hash, amountStr)
+				sm := USDTStats[toAddr].fingerPoints[fromAddr[34-FpSize:]]
+				db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s %s", date, fromAddr, toAddr, sm, result.Hash, amountStr)
 				continue
 			}
 

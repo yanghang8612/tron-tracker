@@ -1225,6 +1225,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 			txCount += tx.RowsAffected
 			phase := int(txCount / 500_000)
 			if _, ok := report[phase]; !ok {
+				report[phase] = true
 				db.logger.Infof("Counting Phishing USDT Transactions for date [%s], current counted txs [%d]", countingDate, txCount)
 			}
 

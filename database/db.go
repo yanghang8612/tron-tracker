@@ -1073,6 +1073,8 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 		txCount       = int64(0)
 		results       = make([]*models.Transaction, 0)
 		USDTStats     = make(map[string]*USDTStatistic)
+		zeroCount     = 0
+		zeroStat      = &models.TokenStatistic{}
 		phishingCount = 0
 		phishingStat  = &models.TokenStatistic{}
 	)
@@ -1087,13 +1089,17 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 			toAddr := result.ToAddr
 			amountStr := result.Amount.String()
 
-			// if result.Method == "23b872dd" && amountStr == "0" {
-			// 	zeroCount += 1
-			// 	db.usdtVictims[fromAddr] = true
-			// 	db.usdtPhishers[toAddr] = true
-			// 	zeroStat.Add(result)
-			// 	continue
-			// }
+			if result.Method == "23b872dd" && amountStr == "0" {
+				if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr]) {
+					zeroCount += 1
+					db.usdtVictims[fromAddr] = true
+					db.usdtPhishers[toAddr] = true
+					zeroStat.Add(result)
+					sm := USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]]
+					db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s %s", date, fromAddr, toAddr, sm, result.Hash, amountStr)
+				}
+				continue
+			}
 
 			if _, ok := USDTStats[fromAddr]; !ok {
 				USDTStats[fromAddr] = newUSDTStatistic()
@@ -1136,8 +1142,9 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 	})
 
 	db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", date, result.RowsAffected)
-	db.logger.Infof("Phishing Count: %d", phishingCount)
-	db.logger.Infof("Phishing Stat: %v", phishingStat)
+	db.logger.Infof("Zero count: %d, Phishing count: %d", zeroCount, phishingCount)
+	db.logger.Infof("Zero stat: %v", zeroStat)
+	db.logger.Infof("Phishing stat: %v", phishingStat)
 }
 
 func isPhishing(addr string, ts int64, stat *USDTStatistic) bool {

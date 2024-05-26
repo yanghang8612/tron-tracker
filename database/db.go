@@ -697,7 +697,7 @@ func (db *RawDB) countForDate(date string) {
 				} else {
 					TRXStats[typeName].Add(result)
 				}
-			} else {
+			} else if len(result.ToAddr) > 0 {
 				if _, ok := USDTStats[typeName]; !ok {
 					USDTStats[typeName] = models.NewFungibleTokenStatistic(date, "USDT", typeName, result)
 				} else {
@@ -1257,7 +1257,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 					} else {
 						TRXStats[typeName].Add(result)
 					}
-				} else {
+				} else if len(result.ToAddr) > 0 {
 					if _, ok := USDTStats[typeName]; !ok {
 						USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
 					} else {

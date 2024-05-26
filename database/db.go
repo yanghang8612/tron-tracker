@@ -1203,7 +1203,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 				_, vok := db.usdtVictims[fromAddr]
 				_, pok := db.usdtPhishers[toAddr]
 
-				if vok && pok && len(amountStr) >= 8 {
+				if vok && pok && len(amountStr) >= 8 && toAddr != USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]] {
 					daySuccessPhishCount += 1
 					daySuccessVictimsMap[fromAddr] = true
 					daySuccessPhisherMap[toAddr] = true

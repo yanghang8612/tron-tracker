@@ -1004,29 +1004,50 @@ func (db *RawDB) countTRXPhishingForWeek(startDate string) {
 
 	recountingDate := startDate
 
+	var (
+		weekFromMap    = make(map[string]bool)
+		weekToMap      = make(map[string]bool)
+		weekTotalCount = int64(0)
+		weekPhisherMap = make(map[string]bool)
+		weekVictimsMap = make(map[string]bool)
+		weekPhishCount = int64(0)
+	)
+
 	for generateWeek(recountingDate) == week {
-		dayFromMap := make(map[string]bool)
-		dayToMap := make(map[string]bool)
-		dayTotalCount := int64(0)
-		dayPhisherMap := make(map[string]bool)
-		dayVictimsMap := make(map[string]bool)
-		dayPhishCount := int64(0)
-		dailyCount := int64(0)
+		var (
+			dayFromMap    = make(map[string]bool)
+			dayToMap      = make(map[string]bool)
+			dayTotalCount = int64(0)
+			dayPhisherMap = make(map[string]bool)
+			dayVictimsMap = make(map[string]bool)
+			dayPhishCount = int64(0)
+			dailyCount    = int64(0)
+		)
 		_ = db.db.Table("transactions_"+recountingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				fromAddr := result.FromAddr
 				toAddr := result.ToAddr
+
 				dayFromMap[fromAddr] = true
 				dayToMap[toAddr] = true
 				dayTotalCount += 1
 
+				weekFromMap[fromAddr] = true
+				weekToMap[toAddr] = true
+				weekTotalCount += 1
+
 				if _, ok := phishers[fromAddr]; ok {
 					dayPhisherMap[fromAddr] = true
 					dayPhishCount += 1
+
+					weekPhisherMap[fromAddr] = true
+					weekPhishCount += 1
 				}
 
 				if _, ok := victims[toAddr]; ok {
 					dayVictimsMap[toAddr] = true
+
+					weekVictimsMap[toAddr] = true
 				}
 			}
 
@@ -1046,6 +1067,11 @@ func (db *RawDB) countTRXPhishingForWeek(startDate string) {
 		date, _ := time.Parse("060102", recountingDate)
 		recountingDate = date.AddDate(0, 0, 1).Format("060102")
 	}
+
+	fmt.Printf("TRXWeekly %s %d %d %s %d %d %s %d %d %s\n", recountingDate,
+		len(weekFromMap), len(weekPhisherMap), utils.FormatOfPercent(int64(len(weekFromMap)), int64(len(weekPhisherMap))),
+		len(weekToMap), len(weekVictimsMap), utils.FormatOfPercent(int64(len(weekToMap)), int64(len(weekVictimsMap))),
+		weekTotalCount, weekPhishCount, utils.FormatOfPercent(weekTotalCount, weekPhishCount))
 }
 
 type USDTStatistic struct {
@@ -1124,6 +1150,10 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 				dayToMap[toAddr] = true
 				dayTotalCount += 1
 
+				weekFromMap[fromAddr] = true
+				weekToMap[toAddr] = true
+				weekTotalCount += 1
+
 				if _, ok := USDTStats[fromAddr]; !ok {
 					USDTStats[fromAddr] = newUSDTStatistic()
 				}
@@ -1146,6 +1176,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 						db.usdtVictims[fromAddr] = true
 						db.usdtPhishers[toAddr] = true
+
+						db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s", countingDate, fromAddr, toAddr, result.Hash, amountStr)
 					}
 					continue
 				}
@@ -1163,6 +1195,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 					db.usdtPhishers[fromAddr] = true
 					db.usdtVictims[toAddr] = true
+
+					db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s", countingDate, fromAddr, toAddr, result.Hash, amountStr)
 					continue
 				}
 
@@ -1180,7 +1214,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekSuccessPhisherMap[toAddr] = true
 					weekSuccessAmount += result.Amount.Int64()
 
-					db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s", countingDate, fromAddr, toAddr, result.Hash, amountStr)
+					sm := USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]]
+					db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s %s", countingDate, fromAddr, toAddr, sm, result.Hash, amountStr)
 					continue
 				}
 
@@ -1212,7 +1247,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 	}
 
 	db.logger.Infof("Finish counting Phishing USDT Transactions for week [%s], total counted txs [%d]", week, txCount)
-	fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d %d\n", countingDate,
+	fmt.Printf("USDTWeekly %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d %d\n", countingDate,
 		len(weekFromMap), len(weekPhisherMap), utils.FormatOfPercent(int64(len(weekFromMap)), int64(len(weekPhisherMap))),
 		len(weekToMap), len(weekVictimsMap), utils.FormatOfPercent(int64(len(weekToMap)), int64(len(weekVictimsMap))),
 		weekTotalCount, weekPhishCount, utils.FormatOfPercent(weekTotalCount, weekPhishCount),

@@ -1138,7 +1138,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
-				if len(result.ToAddr) == 0 {
+				if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
 					continue
 				}
 

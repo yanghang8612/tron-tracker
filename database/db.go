@@ -1155,7 +1155,7 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic) bool {
 	outGap := ts - stat.transferOut[similarAddr]
 	inGap := ts - stat.transferIn[addr]
 
-	return addr != stat.fingerPoints[fingerPoint] && (outGap < 60*60 || inGap < 60*60)
+	return addr != stat.fingerPoints[fingerPoint] && (outGap < 30*60 || inGap < 30*60)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {

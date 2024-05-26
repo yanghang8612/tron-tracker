@@ -64,6 +64,9 @@ type RawDB struct {
 	chargersLock         sync.RWMutex
 	chargersToSave       map[string]*models.Charger
 
+	usdtPhishers map[string]bool
+	usdtVictims  map[string]bool
+
 	trackingDate string
 	flushCh      chan *dbCache
 	cache        *dbCache
@@ -135,6 +138,9 @@ func New(config *Config) *RawDB {
 		isTableMigrated:     make(map[string]bool),
 		chargers:            make(map[string]*models.Charger),
 		chargersToSave:      make(map[string]*models.Charger),
+
+		usdtPhishers: make(map[string]bool),
+		usdtVictims:  make(map[string]bool),
 
 		flushCh:     make(chan *dbCache),
 		cache:       newCache(),
@@ -667,10 +673,10 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
-			// if !isDone {
-			// 	db.countPhishingForDate("240513")
-			// 	isDone = true
-			// }
+			if !isDone {
+				db.countPhishingUSDTForDate("240408")
+				isDone = true
+			}
 
 			time.Sleep(1 * time.Second)
 		}
@@ -709,7 +715,7 @@ func (ts *TRXStatistic) toString() string {
 	return fmt.Sprintf("from: %v, to: %v, amount: %v", ts.fromStats, ts.toStats, ts.amountMap)
 }
 
-func (db *RawDB) countPhishingForDate(startDate string) {
+func (db *RawDB) countTRXPhishingForDate(startDate string) {
 	week := generateWeek(startDate)
 	db.logger.Infof("Start counting Phishing TRX Transactions for week [%s], start date [%s]", week, startDate)
 
@@ -997,27 +1003,36 @@ func (db *RawDB) countPhishingForDate(startDate string) {
 }
 
 func (db *RawDB) countForDate(date string) {
-	db.logger.Infof("Start counting TRX Transactions for date [%s]", date)
+	db.logger.Infof("Start counting TRX&USDT Transactions for date [%s]", date)
 
 	var (
-		txCount  = int64(0)
-		results  = make([]*models.Transaction, 0)
-		TRXStats = make(map[string]*models.FungibleTokenStatistic)
+		txCount   = int64(0)
+		results   = make([]*models.Transaction, 0)
+		TRXStats  = make(map[string]*models.FungibleTokenStatistic)
+		USDTStats = make(map[string]*models.FungibleTokenStatistic)
 	)
 
-	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+	result := db.db.Table("transactions_"+date).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 		for _, result := range results {
 			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
-			if _, ok := TRXStats[typeName]; !ok {
-				TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
+			if result.Name == "TRX" {
+				if _, ok := TRXStats[typeName]; !ok {
+					TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
+				} else {
+					TRXStats[typeName].Add(result)
+				}
 			} else {
-				TRXStats[typeName].Add(result)
+				if _, ok := USDTStats[typeName]; !ok {
+					USDTStats[typeName] = models.NewFungibleTokenStatistic(date, "USDT", typeName, result)
+				} else {
+					USDTStats[typeName].Add(result)
+				}
 			}
 		}
-		txCount += tx.RowsAffected
 
+		txCount += tx.RowsAffected
 		if txCount%500_000 == 0 {
-			db.logger.Infof("Counting TRX Transactions for date [%s], current counted txs [%d]", date, txCount)
+			db.logger.Infof("Counting TRX&USDT Transactions for date [%s], current counted txs [%d]", date, txCount)
 		}
 
 		return nil
@@ -1027,42 +1042,148 @@ func (db *RawDB) countForDate(date string) {
 		db.db.Create(stats)
 	}
 
+	for _, stats := range USDTStats {
+		db.db.Create(stats)
+	}
+
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
-	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)
+	db.logger.Infof("Finish counting TRX&USDT Transactions for date [%s], total counted txs [%d]", date, result.RowsAffected)
+}
+
+type USDTStatistic struct {
+	transferIn   map[string]int64
+	transferOut  map[string]int64
+	fingerPoints map[string]string
+}
+
+func newUSDTStatistic() *USDTStatistic {
+	return &USDTStatistic{
+		transferIn:   make(map[string]int64),
+		transferOut:  make(map[string]int64),
+		fingerPoints: make(map[string]string),
+	}
+}
+
+func (db *RawDB) countPhishingUSDTForDate(date string) {
+	db.logger.Infof("Start counting Phishing USDT Transactions for date [%s]", date)
+
+	var (
+		txCount     = int64(0)
+		results     = make([]*models.Transaction, 0)
+		USDTStats   = make(map[string]*USDTStatistic)
+		zeroCount   = 0
+		zeroStat    = &models.TokenStatistic{}
+		normalCount = 0
+		normalStat  = &models.TokenStatistic{}
+	)
+
+	result := db.db.Table("transactions_"+date).Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		for _, result := range results {
+			fromAddr := result.FromAddr
+			toAddr := result.ToAddr
+			amountStr := result.Amount.String()
+
+			if result.Method == "23b872dd" && amountStr == "0" {
+				zeroCount += 1
+				db.usdtVictims[fromAddr] = true
+				db.usdtPhishers[toAddr] = true
+				zeroStat.Add(result)
+				continue
+			}
+
+			if _, ok := USDTStats[fromAddr]; !ok {
+				USDTStats[fromAddr] = newUSDTStatistic()
+			}
+
+			if _, ok := USDTStats[toAddr]; !ok {
+				USDTStats[toAddr] = newUSDTStatistic()
+			}
+
+			if isSimilarTransfer(fromAddr, USDTStats[toAddr]) {
+				normalCount += 1
+				db.usdtPhishers[fromAddr] = true
+				db.usdtVictims[toAddr] = true
+				normalStat.Add(result)
+				db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s", date, fromAddr, toAddr, result.Hash, amountStr)
+				continue
+			}
+
+			_, vok := db.usdtVictims[fromAddr]
+			_, pok := db.usdtPhishers[toAddr]
+
+			if vok && pok {
+				db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s", date, fromAddr, toAddr, result.Hash, amountStr)
+				continue
+			}
+
+			USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
+			USDTStats[fromAddr].fingerPoints[toAddr[32:]] = toAddr
+			USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
+			USDTStats[toAddr].fingerPoints[fromAddr[32:]] = fromAddr
+		}
+
+		txCount += tx.RowsAffected
+		if txCount%500_000 == 0 {
+			db.logger.Infof("Counting Phishing USDT Transactions for date [%s], current counted txs [%d]", date, txCount)
+		}
+
+		return nil
+	})
+
+	db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", date, result.RowsAffected)
+}
+
+func isSimilarTransfer(addr string, stat *USDTStatistic) bool {
+	fingerPoint := addr[32:]
+
+	if _, ok := stat.fingerPoints[fingerPoint]; !ok {
+		return false
+	}
+
+	return addr != stat.fingerPoints[fingerPoint]
 }
 
 func (db *RawDB) countForWeek(startDate string) string {
 	week := generateWeek(startDate)
-	db.logger.Infof("Start counting TRX Transactions for week [%s], start date [%s]", week, startDate)
+	db.logger.Infof("Start counting TRX&USDT Transactions for week [%s], start date [%s]", week, startDate)
 
 	var (
 		countingDate = startDate
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
 		TRXStats     = make(map[string]*models.FungibleTokenStatistic)
+		USDTStats    = make(map[string]*models.FungibleTokenStatistic)
 	)
 
 	for generateWeek(countingDate) == week {
-		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
-				if _, ok := TRXStats[typeName]; !ok {
-					TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
+				if result.Name == "TRX" {
+					if _, ok := TRXStats[typeName]; !ok {
+						TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
+					} else {
+						TRXStats[typeName].Add(result)
+					}
 				} else {
-					TRXStats[typeName].Add(result)
+					if _, ok := USDTStats[typeName]; !ok {
+						USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
+					} else {
+						USDTStats[typeName].Add(result)
+					}
 				}
 			}
 			txCount += tx.RowsAffected
 
 			if txCount%500_000 == 0 {
-				db.logger.Infof("Counting TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+				db.logger.Infof("Counting TRX&USDT Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
 			}
 
 			return nil
 		})
 
 		if result.Error != nil {
-			db.logger.Errorf("Counting TRX Transactions for week [%s], error [%v]", week, result.Error)
+			db.logger.Errorf("Counting TRX&USDT Transactions for week [%s], error [%v]", week, result.Error)
 		}
 
 		date, _ := time.Parse("060102", countingDate)
@@ -1073,8 +1194,12 @@ func (db *RawDB) countForWeek(startDate string) string {
 		db.db.Create(stats)
 	}
 
+	for _, stats := range USDTStats {
+		db.db.Create(stats)
+	}
+
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedWeekKey}).Update("val", countingDate)
-	db.logger.Infof("Finish counting TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+	db.logger.Infof("Finish counting TRX&USDT Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	return countingDate
 }

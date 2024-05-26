@@ -1089,6 +1089,14 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 			toAddr := result.ToAddr
 			amountStr := result.Amount.String()
 
+			if _, ok := USDTStats[fromAddr]; !ok {
+				USDTStats[fromAddr] = newUSDTStatistic()
+			}
+
+			if _, ok := USDTStats[toAddr]; !ok {
+				USDTStats[toAddr] = newUSDTStatistic()
+			}
+
 			if result.Method == "23b872dd" && amountStr == "0" {
 				if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr]) {
 					zeroCount += 1
@@ -1099,14 +1107,6 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 					db.logger.Infof("Phishing USDT Transfer: %s %s %s %s %s %s", date, fromAddr, toAddr, sm, result.Hash, amountStr)
 				}
 				continue
-			}
-
-			if _, ok := USDTStats[fromAddr]; !ok {
-				USDTStats[fromAddr] = newUSDTStatistic()
-			}
-
-			if _, ok := USDTStats[toAddr]; !ok {
-				USDTStats[toAddr] = newUSDTStatistic()
 			}
 
 			if len(amountStr) < 8 && isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr]) {

@@ -1105,7 +1105,7 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 				USDTStats[toAddr] = newUSDTStatistic()
 			}
 
-			if isSimilarTransfer(fromAddr, USDTStats[toAddr]) {
+			if len(amountStr) < 8 && isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr]) {
 				normalCount += 1
 				db.usdtPhishers[fromAddr] = true
 				db.usdtVictims[toAddr] = true
@@ -1118,7 +1118,7 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 			_, vok := db.usdtVictims[fromAddr]
 			_, pok := db.usdtPhishers[toAddr]
 
-			if vok && pok {
+			if vok && pok && len(amountStr) >= 8 {
 				db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s", date, fromAddr, toAddr, result.Hash, amountStr)
 				continue
 			}
@@ -1138,16 +1138,24 @@ func (db *RawDB) countPhishingUSDTForDate(date string) {
 	})
 
 	db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", date, result.RowsAffected)
+	db.logger.Infof("Zero count: %d, Normal count: %d", zeroCount, normalCount)
+	db.logger.Infof("Zero stat: %v", zeroStat)
+	db.logger.Infof("Normal stat: %v", normalStat)
 }
 
-func isSimilarTransfer(addr string, stat *USDTStatistic) bool {
+func isPhishing(addr string, ts int64, stat *USDTStatistic) bool {
 	fingerPoint := addr[34-FpSize:]
 
 	if _, ok := stat.fingerPoints[fingerPoint]; !ok {
 		return false
 	}
 
-	return addr != stat.fingerPoints[fingerPoint]
+	similarAddr := stat.fingerPoints[fingerPoint]
+
+	outGap := ts - stat.transferOut[similarAddr]
+	inGap := ts - stat.transferIn[addr]
+
+	return addr != stat.fingerPoints[fingerPoint] && (outGap < 60*60 || inGap < 60*60)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {

@@ -1199,7 +1199,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 					in := USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]]
 					out := USDTStats[toAddr].outFingerPoints[fromAddr[34-FpSize:]]
-					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%s]",
+					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
 						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
 					continue
 				}

@@ -1179,7 +1179,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					continue
 				}
 
-				if len(amountStr) < 8 && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
+				if len(amountStr) <= 7 && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
 					isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], false)) {
 					dayPhishCount += 1
 					dayPhisherMap[fromAddr] = true
@@ -1192,7 +1192,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekStat.Add(result)
 
 					db.usdtPhishingRelations[toAddr+fromAddr] = true
-					db.logger.Infof("Phishing USDT Transfer: date-[%s] from-[%s] to-[%s] hash-[%s] amount-[%s]", countingDate, fromAddr, toAddr, result.Hash, amountStr)
+					// db.logger.Infof("Phishing USDT Transfer: date-[%s] from-[%s] to-[%s] hash-[%s] amount-[%s]", countingDate, fromAddr, toAddr, result.Hash, amountStr)
 					continue
 				}
 
@@ -1231,24 +1231,24 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 		})
 
 		db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", countingDate, result.RowsAffected)
-		fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d %d\n", countingDate,
+		fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d\n", countingDate,
 			len(dayFromMap), len(dayPhisherMap), utils.FormatOfPercent(int64(len(dayFromMap)), int64(len(dayPhisherMap))),
 			len(dayToMap), len(dayVictimsMap), utils.FormatOfPercent(int64(len(dayToMap)), int64(len(dayVictimsMap))),
 			dayTotalCount, dayPhishCount, utils.FormatOfPercent(dayTotalCount, dayPhishCount),
-			len(daySuccessPhisherMap), len(daySuccessVictimsMap), daySuccessPhishCount, daySuccessAmount,
-			dayStat.Fee, dayStat.EnergyTotal)
+			dayStat.Fee, dayStat.EnergyTotal-dayStat.EnergyFee/420,
+			daySuccessPhishCount, len(daySuccessVictimsMap), daySuccessAmount/1e6)
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 	}
 
 	db.logger.Infof("Finish counting Phishing USDT Transactions for week [%s], total counted txs [%d]", week, txCount)
-	fmt.Printf("USDTWeekly %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d %d\n", countingDate,
+	fmt.Printf("USDTWeekly %s %d %d %s %d %d %s %d %d %s %d %d %d %d %d\n", countingDate,
 		len(weekFromMap), len(weekPhisherMap), utils.FormatOfPercent(int64(len(weekFromMap)), int64(len(weekPhisherMap))),
 		len(weekToMap), len(weekVictimsMap), utils.FormatOfPercent(int64(len(weekToMap)), int64(len(weekVictimsMap))),
 		weekTotalCount, weekPhishCount, utils.FormatOfPercent(weekTotalCount, weekPhishCount),
-		len(weekSuccessPhisherMap), len(weekSuccessVictimsMap), weekSuccessPhishCount, weekSuccessAmount,
-		weekStat.Fee, weekStat.EnergyTotal)
+		weekStat.Fee, weekStat.EnergyTotal-weekStat.EnergyFee/420,
+		weekSuccessPhishCount, len(weekSuccessVictimsMap), weekSuccessAmount/1e6)
 }
 
 func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) bool {

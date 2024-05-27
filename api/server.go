@@ -219,14 +219,42 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	}
 
 	result := strings.Builder{}
-	result.WriteString("charge: \n")
+
+	result.WriteString("charge in fee: \n")
+	sort.Slice(chargeResults, func(i, j int) bool {
+		return chargeResults[i].Fee > chargeResults[j].Fee
+	})
 	for _, res := range chargeResults {
-		result.WriteString(fmt.Sprintf("%s,%d,%d\n", res.Name, res.Fee, res.TxCount))
+		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.Fee))
 	}
-	result.WriteString("withdraw: \n")
+	result.WriteString("\n")
+
+	result.WriteString("charge in tx count: \n")
+	sort.Slice(chargeResults, func(i, j int) bool {
+		return chargeResults[i].TxCount > chargeResults[j].TxCount
+	})
+	for _, res := range chargeResults {
+		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.TxCount))
+	}
+	result.WriteString("\n")
+
+	result.WriteString("withdraw in fee: \n")
+	sort.Slice(withdrawResults, func(i, j int) bool {
+		return withdrawResults[i].Fee > withdrawResults[j].Fee
+	})
 	for _, res := range withdrawResults {
-		result.WriteString(fmt.Sprintf("%s,%d,%d\n", res.Name, res.Fee, res.TxCount))
+		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.Fee))
 	}
+	result.WriteString("\n")
+
+	result.WriteString("withdraw in tx count: \n")
+	sort.Slice(withdrawResults, func(i, j int) bool {
+		return withdrawResults[i].TxCount > withdrawResults[j].TxCount
+	})
+	for _, res := range withdrawResults {
+		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.TxCount))
+	}
+	result.WriteString("\n")
 
 	c.String(200, result.String())
 }

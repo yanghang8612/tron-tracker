@@ -64,8 +64,7 @@ type RawDB struct {
 	chargersLock         sync.RWMutex
 	chargersToSave       map[string]*models.Charger
 
-	usdtPhishers map[string]bool
-	usdtVictims  map[string]bool
+	usdtPhishingRelations map[string]bool
 
 	trackingDate string
 	flushCh      chan *dbCache
@@ -139,8 +138,7 @@ func New(config *Config) *RawDB {
 		chargers:            make(map[string]*models.Charger),
 		chargersToSave:      make(map[string]*models.Charger),
 
-		usdtPhishers: make(map[string]bool),
-		usdtVictims:  make(map[string]bool),
+		usdtPhishingRelations: make(map[string]bool),
 
 		flushCh:     make(chan *dbCache),
 		cache:       newCache(),
@@ -667,7 +665,7 @@ func (db *RawDB) countLoop() {
 				db.countedDate = dateToCount
 
 				if countedDate.Weekday() == time.Saturday {
-					db.countTRXPhishingForWeek(db.countedWeek)
+					// db.countTRXPhishingForWeek(db.countedWeek)
 					db.countUSDTPhishingForWeek(db.countedWeek)
 					db.countedWeek = db.countForWeek(db.countedWeek)
 				}
@@ -1075,16 +1073,18 @@ func (db *RawDB) countTRXPhishingForWeek(startDate string) {
 }
 
 type USDTStatistic struct {
-	transferIn   map[string]int64
-	transferOut  map[string]int64
-	fingerPoints map[string]string
+	transferIn      map[string]int64
+	inFingerPoints  map[string]string
+	transferOut     map[string]int64
+	outFingerPoints map[string]string
 }
 
 func newUSDTStatistic() *USDTStatistic {
 	return &USDTStatistic{
-		transferIn:   make(map[string]int64),
-		transferOut:  make(map[string]int64),
-		fingerPoints: make(map[string]string),
+		transferIn:      make(map[string]int64),
+		inFingerPoints:  make(map[string]string),
+		transferOut:     make(map[string]int64),
+		outFingerPoints: make(map[string]string),
 	}
 }
 
@@ -1163,10 +1163,10 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 				}
 
 				if result.Method == "23b872dd" && amountStr == "0" {
-					if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr]) {
+					if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr], true) {
 						dayPhishCount += 1
-						dayVictimsMap[fromAddr] = true
 						dayPhisherMap[toAddr] = true
+						dayVictimsMap[fromAddr] = true
 						dayStat.Add(result)
 
 						weekPhishCount += 1
@@ -1174,33 +1174,29 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 						weekPhisherMap[toAddr] = true
 						weekStat.Add(result)
 
-						db.usdtVictims[fromAddr] = true
-						db.usdtPhishers[toAddr] = true
+						db.usdtPhishingRelations[fromAddr+toAddr] = true
 					}
 					continue
 				}
 
-				if len(amountStr) < 8 && isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr]) {
+				if len(amountStr) < 8 && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
+					isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], false)) {
 					dayPhishCount += 1
-					dayVictimsMap[fromAddr] = true
-					dayPhisherMap[toAddr] = true
+					dayPhisherMap[fromAddr] = true
+					dayVictimsMap[toAddr] = true
 					dayStat.Add(result)
 
 					weekPhishCount += 1
-					weekVictimsMap[fromAddr] = true
-					weekPhisherMap[toAddr] = true
+					weekPhisherMap[fromAddr] = true
+					weekVictimsMap[toAddr] = true
 					weekStat.Add(result)
 
-					db.usdtPhishers[fromAddr] = true
-					db.usdtVictims[toAddr] = true
-
+					db.usdtPhishingRelations[toAddr+fromAddr] = true
 					continue
+
 				}
 
-				_, vok := db.usdtVictims[fromAddr]
-				_, pok := db.usdtPhishers[toAddr]
-
-				if vok && pok && len(amountStr) >= 8 && toAddr != USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]] {
+				if _, ok := db.usdtPhishingRelations[fromAddr+toAddr]; ok {
 					daySuccessPhishCount += 1
 					daySuccessVictimsMap[fromAddr] = true
 					daySuccessPhisherMap[toAddr] = true
@@ -1211,15 +1207,14 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekSuccessPhisherMap[toAddr] = true
 					weekSuccessAmount += result.Amount.Int64()
 
-					sm := USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]]
-					db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s %s", countingDate, fromAddr, toAddr, sm, result.Hash, amountStr)
+					db.logger.Infof("Phishing success USDT Transfer: %s %s %s %s %s", countingDate, fromAddr, toAddr, result.Hash, amountStr)
 					continue
 				}
 
 				USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
-				USDTStats[fromAddr].fingerPoints[toAddr[34-FpSize:]] = toAddr
+				USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
 				USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
-				USDTStats[toAddr].fingerPoints[fromAddr[34-FpSize:]] = fromAddr
+				USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]] = fromAddr
 			}
 
 			txCount += tx.RowsAffected
@@ -1253,19 +1248,30 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 		weekStat.Fee, weekStat.EnergyTotal)
 }
 
-func isPhishing(addr string, ts int64, stat *USDTStatistic) bool {
-	fingerPoint := addr[34-FpSize:]
+func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) bool {
+	fp := addr[34-FpSize:]
 
-	if _, ok := stat.fingerPoints[fingerPoint]; !ok {
-		return false
+	if isPhishingOut {
+		if _, ok := stat.outFingerPoints[fp]; !ok {
+			return false
+		}
+
+		interactedAddr := stat.outFingerPoints[fp]
+
+		gap := ts - stat.transferOut[interactedAddr]
+
+		return addr != interactedAddr && gap < 30*60
+	} else {
+		if _, ok := stat.inFingerPoints[fp]; !ok {
+			return false
+		}
+
+		interactedAddr := stat.inFingerPoints[fp]
+
+		gap := ts - stat.transferIn[interactedAddr]
+
+		return addr != interactedAddr && gap < 30*60
 	}
-
-	similarAddr := stat.fingerPoints[fingerPoint]
-
-	outGap := ts - stat.transferOut[similarAddr]
-	inGap := ts - stat.transferIn[addr]
-
-	return addr != stat.fingerPoints[fingerPoint] && (outGap < 30*60 || inGap < 30*60)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {

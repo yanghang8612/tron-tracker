@@ -1263,7 +1263,7 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) 
 
 		gap := ts - stat.transferOut[interactedAddr]
 
-		return addr != interactedAddr && gap < 30*60
+		return addr != interactedAddr && gap < 60*60
 	} else {
 		if _, ok := stat.inFingerPoints[fp]; !ok {
 			return false
@@ -1273,7 +1273,7 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) 
 
 		gap := ts - stat.transferIn[interactedAddr]
 
-		return addr != interactedAddr && gap < 30*60
+		return addr != interactedAddr && gap < 60*60
 	}
 }
 

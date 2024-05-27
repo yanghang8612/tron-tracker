@@ -1088,7 +1088,7 @@ func newUSDTStatistic() *USDTStatistic {
 	}
 }
 
-const FpSize = 3
+const FpSize = 5
 
 func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 	week := generateWeek(startDate)

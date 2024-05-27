@@ -1214,10 +1214,12 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					continue
 				}
 
-				USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
-				USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
-				USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
-				USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]] = fromAddr
+				if len(amountStr) >= 7 {
+					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
+					USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
+					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
+					USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]] = fromAddr
+				}
 			}
 
 			txCount += tx.RowsAffected

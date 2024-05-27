@@ -1175,7 +1175,10 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 						weekStat.Add(result)
 
 						db.usdtPhishingRelations[fromAddr+toAddr] = true
-						db.logger.Infof("Phishing USDT Transfer: date-[%s] from-[%s] to-[%s] hash-[%s] amount-[%s]", countingDate, fromAddr, toAddr, result.Hash, amountStr)
+
+						imitator := USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]]
+						db.logger.Infof("Phishing USDT Transfer: date-[%s] victim-[%s] phisher-[%s] hash-[%s] imitator-[%s] amount-[%s]",
+							countingDate, fromAddr, toAddr, imitator, result.Hash, amountStr)
 					}
 					continue
 				}
@@ -1193,7 +1196,11 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekStat.Add(result)
 
 					db.usdtPhishingRelations[toAddr+fromAddr] = true
-					db.logger.Infof("Phishing USDT Transfer: date-[%s] from-[%s] to-[%s] hash-[%s] amount-[%s]", countingDate, fromAddr, toAddr, result.Hash, amountStr)
+
+					in := USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]]
+					out := USDTStats[toAddr].outFingerPoints[fromAddr[34-FpSize:]]
+					db.logger.Infof("Phishing USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%s]",
+						countingDate, fromAddr, toAddr, in, out, result.Hash, amountStr[:len(amountStr)-7])
 					continue
 				}
 
@@ -1210,8 +1217,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 					in := USDTStats[fromAddr].inFingerPoints[toAddr[34-FpSize:]]
 					out := USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]]
-					db.logger.Infof("Phishing success USDT Transfer: date-[%s] from-[%s] to-[%s] in-[%s] out-[%s] hash-[%s] amount-[%s]",
-						countingDate, fromAddr, toAddr, in, out, result.Hash, amountStr)
+					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%s]",
+						countingDate, fromAddr, toAddr, in, out, result.Hash, amountStr[:len(amountStr)-7])
 					continue
 				}
 

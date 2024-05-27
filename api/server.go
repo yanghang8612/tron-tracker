@@ -197,6 +197,8 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 
 	chargeResults := make([]*ExchangeTokenStatisticInResult, 0)
 	withdrawResults := make([]*ExchangeTokenStatisticInResult, 0)
+	collectTxTotal := int64(0)
+	withdrawTxTotal := int64(0)
 
 	for exchange, ets := range resultMap {
 		if es, ok := ets[token]; ok {
@@ -208,6 +210,8 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 				})
 			}
 
+			collectTxTotal += es.CollectTxCount
+
 			if es.WithdrawTxCount > 0 {
 				withdrawResults = append(withdrawResults, &ExchangeTokenStatisticInResult{
 					Name:    exchange,
@@ -215,10 +219,15 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 					TxCount: es.WithdrawTxCount,
 				})
 			}
+
+			withdrawTxTotal += es.WithdrawTxCount
 		}
 	}
 
 	result := strings.Builder{}
+
+	result.WriteString(strconv.Itoa(int(collectTxTotal)) + "\n")
+	result.WriteString(strconv.Itoa(int(withdrawTxTotal)) + "\n")
 
 	result.WriteString("charge in fee: \n")
 	sort.Slice(chargeResults, func(i, j int) bool {

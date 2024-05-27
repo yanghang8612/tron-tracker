@@ -1192,8 +1192,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekStat.Add(result)
 
 					db.usdtPhishingRelations[toAddr+fromAddr] = true
+					db.logger.Infof("Phishing USDT Transfer: date-[%s] from-[%s] to-[%s] hash-[%s] amount-[%s]", countingDate, fromAddr, toAddr, result.Hash, amountStr)
 					continue
-
 				}
 
 				if _, ok := db.usdtPhishingRelations[fromAddr+toAddr]; ok {

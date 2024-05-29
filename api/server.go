@@ -171,20 +171,20 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 		token = "Total"
 	}
 
-	concernedExchanges := map[string]bool{
-		"Okex":     true,
-		"Binance":  true,
-		"bybit":    true,
-		"WhiteBIT": true,
-		"MXC":      true,
-		"bitget":   true,
-		"Kraken":   true,
-		"Kucoin":   true,
-		"BtcTurk":  true,
-		"HTX":      true,
-		"Gate":     true,
-		"Bitfinex": true,
-		"CEX.IO":   true,
+	concernedExchanges := []string{
+		"Okex",
+		"Binance",
+		"bybit",
+		"WhiteBIT",
+		"MXC",
+		"bitget",
+		"Kraken",
+		"Kucoin",
+		"BtcTurk",
+		"HTX",
+		"Gate",
+		"Bitfinex",
+		"CEX.IO",
 	}
 
 	weeklyStats := make([]map[string]map[string]*models.ExchangeStatistic, 0)
@@ -197,7 +197,7 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	result := strings.Builder{}
 	concernedExchangesStats := make([]models.ExchangeStatistic, weeks)
 
-	for concernedExchange := range concernedExchanges {
+	for _, concernedExchange := range concernedExchanges {
 		result.WriteString(fmt.Sprintf("%s,", concernedExchange))
 
 		for i, weeklyStat := range weeklyStats {

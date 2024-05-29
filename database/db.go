@@ -348,10 +348,36 @@ func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []model
 	return results
 }
 
-func (db *RawDB) GetExchangeTokenStatisticsByDate(date time.Time) []models.ExchangeStatistic {
-	var results []models.ExchangeStatistic
-	db.db.Where("date = ?", date.Format("060102")).Find(&results)
-	return results
+func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days int) map[string]map[string]*models.ExchangeStatistic {
+	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
+
+		var dayStats []models.ExchangeStatistic
+		db.db.Where("date = ?", queryDate.Format("060102")).Find(&dayStats)
+
+		for _, es := range dayStats {
+			if _, ok := resultMap[es.Name]; !ok {
+				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
+			}
+
+			// Skip total statistics
+			var tokenName string
+			if es.Token == "_" {
+				tokenName = "Total"
+			} else {
+				tokenName = db.GetTokenName(es.Token)
+			}
+
+			if _, ok := resultMap[es.Name][tokenName]; !ok {
+				resultMap[es.Name][tokenName] = &models.ExchangeStatistic{}
+			}
+			resultMap[es.Name][tokenName].Merge(&es)
+		}
+	}
+
+	return resultMap
 }
 
 func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint, uint, uint) {

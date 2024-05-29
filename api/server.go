@@ -161,107 +161,71 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 		return
 	}
 
-	days, ok := getIntParam(c, "days")
+	weeks, ok := getIntParam(c, "weeks")
 	if !ok {
 		return
-	}
-
-	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
-	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
-		for _, es := range s.db.GetExchangeTokenStatisticsByDate(queryDate) {
-			if _, ok := resultMap[es.Name]; !ok {
-				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
-			}
-
-			// Skip total statistics
-			if es.Token == "_" {
-				continue
-			}
-
-			tokenName := s.db.GetTokenName(es.Token)
-
-			if _, ok := resultMap[es.Name][tokenName]; !ok {
-				resultMap[es.Name][tokenName] = &models.ExchangeStatistic{}
-			}
-			resultMap[es.Name][tokenName].Merge(&es)
-		}
 	}
 
 	token, ok := getStringParam(c, "token")
-
 	if !ok {
-		c.JSON(200, resultMap)
-		return
+		token = "Total"
 	}
 
-	chargeResults := make([]*ExchangeTokenStatisticInResult, 0)
-	withdrawResults := make([]*ExchangeTokenStatisticInResult, 0)
-	collectTxTotal := int64(0)
-	withdrawTxTotal := int64(0)
+	concernedExchanges := map[string]bool{
+		"Okex":     true,
+		"Binance":  true,
+		"bybit":    true,
+		"WhiteBIT": true,
+		"MXC":      true,
+		"bitget":   true,
+		"Kraken":   true,
+		"Kucoin":   true,
+		"BtcTurk":  true,
+		"HTX":      true,
+		"Gate":     true,
+		"Bitfinex": true,
+		"CEX.IO":   true,
+	}
 
-	for exchange, ets := range resultMap {
-		if es, ok := ets[token]; ok {
-			if es.ChargeTxCount > 0 {
-				chargeResults = append(chargeResults, &ExchangeTokenStatisticInResult{
-					Name:    exchange,
-					Fee:     es.ChargeFee,
-					TxCount: es.ChargeTxCount,
-				})
-			}
-
-			collectTxTotal += es.CollectTxCount
-
-			if es.WithdrawTxCount > 0 {
-				withdrawResults = append(withdrawResults, &ExchangeTokenStatisticInResult{
-					Name:    exchange,
-					Fee:     es.WithdrawFee,
-					TxCount: es.WithdrawTxCount,
-				})
-			}
-
-			withdrawTxTotal += es.WithdrawTxCount
-		}
+	weeklyStats := make([]map[string]map[string]*models.ExchangeStatistic, 0)
+	for i := 0; i < weeks; i++ {
+		weekStartDate := startDate.AddDate(0, 0, i*7)
+		weeklyStat := s.db.GetExchangeTokenStatisticsByDateAndDays(weekStartDate, 7)
+		weeklyStats = append(weeklyStats, weeklyStat)
 	}
 
 	result := strings.Builder{}
+	concernedExchangesStats := make([]*models.ExchangeStatistic, 0)
 
-	result.WriteString(strconv.Itoa(int(collectTxTotal)) + "\n")
-	result.WriteString(strconv.Itoa(int(withdrawTxTotal)) + "\n")
+	for concernedExchange := range concernedExchanges {
+		result.WriteString(fmt.Sprintf("%s,", concernedExchange))
 
-	result.WriteString("charge in fee: \n")
-	sort.Slice(chargeResults, func(i, j int) bool {
-		return chargeResults[i].Fee > chargeResults[j].Fee
-	})
-	for _, res := range chargeResults {
-		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.Fee))
+		concernedExchangesStat := models.ExchangeStatistic{}
+		concernedExchangesStats = append(concernedExchangesStats, &concernedExchangesStat)
+		for _, weeklyStat := range weeklyStats {
+			if exchangeStat, ok := weeklyStat[concernedExchange]; ok {
+				if es, ok := exchangeStat[token]; ok {
+					concernedExchangesStat.Merge(es)
+					result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,", es.ChargeTxCount, es.ChargeFee, es.CollectTxCount, es.CollectFee, es.WithdrawTxCount, es.WithdrawFee))
+				} else {
+					result.WriteString(fmt.Sprintf("0,0,0,0,0,0,"))
+				}
+			} else {
+				result.WriteString(fmt.Sprintf("0,0,0,0,0,0,"))
+			}
+		}
+		result.WriteString("\n")
 	}
-	result.WriteString("\n")
 
-	result.WriteString("charge in tx count: \n")
-	sort.Slice(chargeResults, func(i, j int) bool {
-		return chargeResults[i].TxCount > chargeResults[j].TxCount
-	})
-	for _, res := range chargeResults {
-		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.TxCount))
-	}
-	result.WriteString("\n")
-
-	result.WriteString("withdraw in fee: \n")
-	sort.Slice(withdrawResults, func(i, j int) bool {
-		return withdrawResults[i].Fee > withdrawResults[j].Fee
-	})
-	for _, res := range withdrawResults {
-		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.Fee))
-	}
-	result.WriteString("\n")
-
-	result.WriteString("withdraw in tx count: \n")
-	sort.Slice(withdrawResults, func(i, j int) bool {
-		return withdrawResults[i].TxCount > withdrawResults[j].TxCount
-	})
-	for _, res := range withdrawResults {
-		result.WriteString(fmt.Sprintf("%s,%d\n", res.Name, res.TxCount))
+	for i, es := range concernedExchangesStats {
+		result.WriteString(fmt.Sprintf("Other,"))
+		result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,",
+			weeklyStats[i]["Total"][token].ChargeTxCount-es.ChargeTxCount,
+			weeklyStats[i]["Total"][token].ChargeFee-es.ChargeFee,
+			weeklyStats[i]["Total"][token].CollectTxCount-es.CollectTxCount,
+			weeklyStats[i]["Total"][token].CollectFee-es.CollectFee,
+			weeklyStats[i]["Total"][token].WithdrawTxCount-es.WithdrawTxCount,
+			weeklyStats[i]["Total"][token].WithdrawFee-es.WithdrawFee))
 	}
 	result.WriteString("\n")
 
@@ -274,27 +238,7 @@ func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
 		return
 	}
 
-	etsMap := make(map[string]map[string]*models.ExchangeStatistic)
-	for i := 0; i < 7; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
-		for _, es := range s.db.GetExchangeTokenStatisticsByDate(queryDate) {
-			if _, ok := etsMap[es.Name]; !ok {
-				etsMap[es.Name] = make(map[string]*models.ExchangeStatistic)
-			}
-
-			// Skip total statistics
-			if es.Token == "_" {
-				continue
-			}
-
-			tokenName := s.db.GetTokenName(es.Token)
-
-			if _, ok := etsMap[es.Name][tokenName]; !ok {
-				etsMap[es.Name][tokenName] = &models.ExchangeStatistic{}
-			}
-			etsMap[es.Name][tokenName].Merge(&es)
-		}
-	}
+	etsMap := s.db.GetExchangeTokenStatisticsByDateAndDays(startDate, 7)
 
 	resultMap := make(map[string]map[string][]*ExchangeTokenStatisticInResult)
 	for exchange, ets := range etsMap {

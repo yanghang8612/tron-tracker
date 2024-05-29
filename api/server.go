@@ -220,12 +220,12 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	for i, es := range concernedExchangesStats {
 		result.WriteString(fmt.Sprintf("Other,"))
 		result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,",
-			weeklyStats[i]["Total"][token].ChargeTxCount-es.ChargeTxCount,
-			weeklyStats[i]["Total"][token].ChargeFee-es.ChargeFee,
-			weeklyStats[i]["Total"][token].CollectTxCount-es.CollectTxCount,
-			weeklyStats[i]["Total"][token].CollectFee-es.CollectFee,
-			weeklyStats[i]["Total"][token].WithdrawTxCount-es.WithdrawTxCount,
-			weeklyStats[i]["Total"][token].WithdrawFee-es.WithdrawFee))
+			weeklyStats[i]["All"][token].ChargeTxCount-es.ChargeTxCount,
+			weeklyStats[i]["All"][token].ChargeFee-es.ChargeFee,
+			weeklyStats[i]["All"][token].CollectTxCount-es.CollectTxCount,
+			weeklyStats[i]["All"][token].CollectFee-es.CollectFee,
+			weeklyStats[i]["All"][token].WithdrawTxCount-es.WithdrawTxCount,
+			weeklyStats[i]["All"][token].WithdrawFee-es.WithdrawFee))
 	}
 	result.WriteString("\n")
 

@@ -350,6 +350,7 @@ func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []model
 
 func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days int) map[string]map[string]*models.ExchangeStatistic {
 	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
+	resultMap["All"] = make(map[string]*models.ExchangeStatistic)
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
@@ -365,7 +366,7 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days in
 			// Skip total statistics
 			var tokenName string
 			if es.Token == "_" {
-				tokenName = "Total"
+				tokenName = "TOTAL"
 			} else {
 				tokenName = db.GetTokenName(es.Token)
 			}
@@ -374,6 +375,7 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days in
 				resultMap[es.Name][tokenName] = &models.ExchangeStatistic{}
 			}
 			resultMap[es.Name][tokenName].Merge(&es)
+			resultMap["All"][tokenName].Merge(&es)
 		}
 	}
 

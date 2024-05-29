@@ -195,17 +195,15 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	}
 
 	result := strings.Builder{}
-	concernedExchangesStats := make([]*models.ExchangeStatistic, 0)
+	concernedExchangesStats := make([]models.ExchangeStatistic, weeks)
 
 	for concernedExchange := range concernedExchanges {
 		result.WriteString(fmt.Sprintf("%s,", concernedExchange))
 
-		concernedExchangesStat := models.ExchangeStatistic{}
-		concernedExchangesStats = append(concernedExchangesStats, &concernedExchangesStat)
-		for _, weeklyStat := range weeklyStats {
+		for i, weeklyStat := range weeklyStats {
 			if exchangeStat, ok := weeklyStat[concernedExchange]; ok {
 				if es, ok := exchangeStat[token]; ok {
-					concernedExchangesStat.Merge(es)
+					concernedExchangesStats[i].Merge(es)
 					result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,", es.ChargeTxCount, es.ChargeFee, es.CollectTxCount, es.CollectFee, es.WithdrawTxCount, es.WithdrawFee))
 				} else {
 					result.WriteString(fmt.Sprintf("0,0,0,0,0,0,"))

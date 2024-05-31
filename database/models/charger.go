@@ -15,7 +15,7 @@ type Phisher struct {
 
 type EthUSDTUser struct {
 	ID          uint   `gorm:"primaryKey"`
-	Address     string `gorm:"size:34;index"`
+	Address     string `gorm:"size:42;index"`
 	Amount      int64  `gorm:"index"`
 	TransferIn  uint
 	TransferOut uint

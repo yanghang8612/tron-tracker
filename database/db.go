@@ -55,14 +55,19 @@ type RawDB struct {
 	elUpdatedAt time.Time
 	vt          map[string]string
 
-	lastTrackedBlockNum  uint
-	lastTrackedBlockTime int64
-	isTableMigrated      map[string]bool
-	tableLock            sync.Mutex
-	statsLock            sync.Mutex
-	chargers             map[string]*models.Charger
-	chargersLock         sync.RWMutex
-	chargersToSave       map[string]*models.Charger
+	lastTrackedBlockNum    uint
+	lastTrackedBlockTime   int64
+	LastTrackedEthBlockNum int64
+	isTableMigrated        map[string]bool
+	tableLock              sync.Mutex
+	statsLock              sync.Mutex
+	chargers               map[string]*models.Charger
+	chargersLock           sync.RWMutex
+	chargersToSave         map[string]*models.Charger
+
+	users       map[string]*models.EthUSDTUser
+	usersLock   sync.RWMutex
+	usersToSave map[string]*models.EthUSDTUser
 
 	usdtPhishingRelations map[string]bool
 
@@ -133,10 +138,13 @@ func New(config *Config) *RawDB {
 		elUpdatedAt: time.Now(),
 		vt:          validTokens,
 
-		lastTrackedBlockNum: uint(trackingStartBlockNum - 1),
-		isTableMigrated:     make(map[string]bool),
-		chargers:            make(map[string]*models.Charger),
-		chargersToSave:      make(map[string]*models.Charger),
+		lastTrackedBlockNum:    uint(trackingStartBlockNum - 1),
+		LastTrackedEthBlockNum: 4634748,
+		isTableMigrated:        make(map[string]bool),
+		chargers:               make(map[string]*models.Charger),
+		chargersToSave:         make(map[string]*models.Charger),
+		users:                  make(map[string]*models.EthUSDTUser),
+		usersToSave:            make(map[string]*models.EthUSDTUser),
 
 		usdtPhishingRelations: make(map[string]bool),
 
@@ -148,6 +156,11 @@ func New(config *Config) *RawDB {
 
 		quitCh: make(chan struct{}),
 		logger: zap.S().Named("[db]"),
+	}
+
+	rawDB.users["0x36928500Bc1dCd7af6a2B4008875CC336b927D57"] = &models.EthUSDTUser{
+		Address: "0x36928500Bc1dCd7af6a2B4008875CC336b927D57",
+		Amount:  100000000000,
 	}
 
 	// rawDB.loadChargers()
@@ -528,6 +541,32 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 
 	if len(db.chargersToSave) == 200 {
 		db.flushChargerToDB()
+	}
+}
+
+func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
+	if _, ok := db.users[from]; !ok {
+		db.users[from] = &models.EthUSDTUser{
+			Address: from,
+			Amount:  -amount,
+		}
+	} else {
+		db.users[from].Amount -= amount
+		db.users[from].TransferOut += 1
+	}
+
+	if _, ok := db.users[to]; !ok {
+		db.users[to] = &models.EthUSDTUser{
+			Address: to,
+			Amount:  amount,
+		}
+	} else {
+		db.users[to].Amount += amount
+		db.users[to].TransferIn += 1
+	}
+
+	if db.users[from].Amount < 0 {
+		db.logger.Warnf("User [%s] has negative amount [%d]", from, db.users[from].Amount)
 	}
 }
 

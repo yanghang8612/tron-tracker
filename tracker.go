@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
@@ -71,7 +72,8 @@ func (t *Tracker) loop() {
 			t.loopWG.Done()
 			return
 		default:
-			t.doTrackBlock()
+			// t.doTrackBlock()
+			t.doTrackEthUSDT()
 		}
 	}
 }
@@ -208,4 +210,37 @@ func (t *Tracker) doTrackBlock() {
 		// }
 	}
 	t.db.SaveTransactions(transactions)
+}
+
+func (t *Tracker) doTrackEthUSDT() {
+	blockNum := t.db.LastTrackedEthBlockNum
+	ethLogs, err := net.EthGetLogs(
+		blockNum,
+		blockNum+9,
+		common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+		[][]common.Hash{{
+			common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
+			common.HexToHash("0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"), // Issue(uint256)
+			common.HexToHash("0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44"), // Redeem(uint256)
+			common.HexToHash("0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6"), // DestroyedBlackFunds(address,uint256)
+		}})
+
+	if err != nil {
+		t.logger.Error(err)
+		return
+	}
+
+	for _, log := range ethLogs {
+		if log.Topics[0].Hex() == "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
+			fromAddr := "0x" + log.Topics[1].Hex()[26:]
+			toAddr := "0x" + log.Topics[2].Hex()[26:]
+			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
+
+			t.db.ProcessEthUSDTTransferLog(fromAddr, toAddr, amount)
+		} else {
+			t.logger.Infof("Other log found: %s", log.TxHash.Hex())
+		}
+	}
+	t.db.LastTrackedEthBlockNum += 10
+	t.logger.Infof("Tracked eth block [%d]", t.db.LastTrackedEthBlockNum)
 }

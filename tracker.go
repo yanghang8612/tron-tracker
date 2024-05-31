@@ -261,9 +261,8 @@ func (t *Tracker) doTrackEthUSDT() {
 
 			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount, log)
 		}
-		if log.Topics[0].Hex() == "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 
-		} else {
+		if log.Topics[0].Hex() != "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 			t.logger.Infof("Other log found: %s", log.TxHash.Hex())
 		}
 	}
@@ -273,6 +272,7 @@ func (t *Tracker) doTrackEthUSDT() {
 	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
-		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber)
+		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d], current users [%d]",
+			reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber, len(t.db.GetUsers()))
 	}
 }

@@ -459,6 +459,7 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint) {
 	db.lastTrackedEthBlockNum = blockNum
+	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }
 
 func (db *RawDB) updateExchanges() {
@@ -585,28 +586,40 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 }
 
 func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
-	if _, ok := db.users[from]; !ok {
-		db.users[from] = &models.EthUSDTUser{
-			Address: from,
-			Amount:  -amount,
+	if len(from) != 0 {
+		if _, ok := db.users[from]; !ok {
+			db.users[from] = &models.EthUSDTUser{
+				Address: from,
+				Amount:  -amount,
+			}
+		} else {
+			db.users[from].Amount -= amount
+			db.users[from].TransferOut += 1
 		}
-	} else {
-		db.users[from].Amount -= amount
-		db.users[from].TransferOut += 1
+
+		db.usersToSave[from] = db.users[from]
 	}
 
-	if _, ok := db.users[to]; !ok {
-		db.users[to] = &models.EthUSDTUser{
-			Address: to,
-			Amount:  amount,
+	if len(to) != 0 {
+		if _, ok := db.users[to]; !ok {
+			db.users[to] = &models.EthUSDTUser{
+				Address: to,
+				Amount:  amount,
+			}
+		} else {
+			db.users[to].Amount += amount
+			db.users[to].TransferIn += 1
 		}
-	} else {
-		db.users[to].Amount += amount
-		db.users[to].TransferIn += 1
+
+		db.usersToSave[to] = db.users[to]
 	}
 
 	if db.users[from].Amount < 0 {
 		db.logger.Warnf("User [%s] has negative amount [%d]", from, db.users[from].Amount)
+	}
+
+	if len(db.usersToSave) == 200 {
+		db.flushUserToDB()
 	}
 }
 
@@ -1448,24 +1461,12 @@ func (db *RawDB) flushChargerToDB() {
 }
 
 func (db *RawDB) flushUserToDB() {
-	savedCount := 0
-	chargers := make([]*models.EthUSDTUser, 0)
-	for _, charger := range db.users {
-		chargers = append(chargers, charger)
-		if len(chargers) == 200 {
-			db.db.Save(chargers)
-			savedCount += len(chargers)
-			if savedCount%10000 == 0 {
-				db.logger.Infof("Saved %d users", savedCount)
-			}
-
-			chargers = make([]*models.EthUSDTUser, 0)
-		}
+	users := make([]*models.EthUSDTUser, 0)
+	for _, user := range db.users {
+		users = append(users, user)
 	}
-	db.db.Save(chargers)
-	savedCount += len(chargers)
-	db.logger.Infof("Finish saving %d users", savedCount)
-	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(db.lastTrackedEthBlockNum)))
+	db.db.Save(users)
+	db.users = make(map[string]*models.EthUSDTUser)
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

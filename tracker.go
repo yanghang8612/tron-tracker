@@ -18,10 +18,12 @@ import (
 type Tracker struct {
 	db *database.RawDB
 
-	isCatching bool
-	reporter   *utils.Reporter
-	loopWG     sync.WaitGroup
-	quitCh     chan struct{}
+	isCatching  bool
+	reporter    *utils.Reporter
+	ethReporter *utils.Reporter
+
+	loopWG sync.WaitGroup
+	quitCh chan struct{}
 
 	logger *zap.SugaredLogger
 }
@@ -32,8 +34,12 @@ func New(db *database.RawDB) *Tracker {
 
 		isCatching: true,
 		reporter: utils.NewReporter(1000, 60*time.Second, 0, func(rs utils.ReporterState) string {
-			return fmt.Sprintf("Tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+			return fmt.Sprintf("Tracked [%d] TRON blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
+		ethReporter: utils.NewReporter(10000, 60*time.Second, 0, func(rs utils.ReporterState) string {
+			return fmt.Sprintf("Tracked [%d] ETH blocks in [%.2fs], speed [%.2flogs/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+		}),
+
 		quitCh: make(chan struct{}),
 
 		logger: zap.S().Named("[tracker]"),
@@ -213,7 +219,7 @@ func (t *Tracker) doTrackBlock() {
 }
 
 func (t *Tracker) doTrackEthUSDT() {
-	n := uint(10)
+	n := uint64(10)
 	blockNum := t.db.GetLastTrackedEthBlockNum()
 	ethLogs, err := net.EthGetLogs(
 		blockNum+1,
@@ -231,7 +237,6 @@ func (t *Tracker) doTrackEthUSDT() {
 		return
 	}
 
-	t.logger.Infof("Found [%d] logs", len(ethLogs))
 	for _, log := range ethLogs {
 		switch log.Topics[0].Hex() {
 		case "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef":
@@ -262,6 +267,12 @@ func (t *Tracker) doTrackEthUSDT() {
 			t.logger.Infof("Other log found: %s", log.TxHash.Hex())
 		}
 	}
+
 	t.db.SetLastTrackedEthBlockNum(blockNum + n)
-	t.logger.Infof("Tracked eth block [%d], user [%d]", t.db.GetLastTrackedEthBlockNum(), len(t.db.GetUsers()))
+
+	if shouldReport, reportContent := t.reporter.Add(int(n)); shouldReport {
+		nowBlockNumber, _ := net.EthBlockNumber()
+		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
+		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber)
+	}
 }

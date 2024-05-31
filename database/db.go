@@ -55,9 +55,9 @@ type RawDB struct {
 	elUpdatedAt time.Time
 	vt          map[string]string
 
-	lastTrackedBlockNum    uint
+	lastTrackedBlockNum    uint64
 	lastTrackedBlockTime   int64
-	lastTrackedEthBlockNum uint
+	lastTrackedEthBlockNum uint64
 	isTableMigrated        map[string]bool
 	tableLock              sync.Mutex
 	statsLock              sync.Mutex
@@ -147,8 +147,8 @@ func New(config *Config) *RawDB {
 		elUpdatedAt: time.Now(),
 		vt:          validTokens,
 
-		lastTrackedBlockNum:    uint(trackingStartBlockNum - 1),
-		lastTrackedEthBlockNum: uint(trackedEthBlockNum),
+		lastTrackedBlockNum:    uint64(trackingStartBlockNum - 1),
+		lastTrackedEthBlockNum: uint64(trackedEthBlockNum),
 		isTableMigrated:        make(map[string]bool),
 		chargers:               make(map[string]*models.Charger),
 		chargersToSave:         make(map[string]*models.Charger),
@@ -287,7 +287,7 @@ func (db *RawDB) Report() {
 	db.logger.Infof("Status report, chargers size [%d]", len(db.chargers))
 }
 
-func (db *RawDB) GetLastTrackedBlockNum() uint {
+func (db *RawDB) GetLastTrackedBlockNum() uint64 {
 	return db.lastTrackedBlockNum
 }
 
@@ -295,7 +295,7 @@ func (db *RawDB) GetLastTrackedBlockTime() int64 {
 	return db.lastTrackedBlockTime
 }
 
-func (db *RawDB) GetLastTrackedEthBlockNum() uint {
+func (db *RawDB) GetLastTrackedEthBlockNum() uint64 {
 	return db.lastTrackedEthBlockNum
 }
 
@@ -453,11 +453,11 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
 	}
 
-	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
+	db.lastTrackedBlockNum = uint64(block.BlockHeader.RawData.Number)
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
 }
 
-func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint) {
+func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 	db.lastTrackedEthBlockNum = blockNum
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }

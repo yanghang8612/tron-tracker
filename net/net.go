@@ -44,15 +44,15 @@ func GetNowBlock() (*types.Block, error) {
 	return &block, err
 }
 
-func GetBlockByHeight(height uint) (*types.Block, error) {
-	url := BaseUrl + GetBlockPath + strconv.FormatInt(int64(height), 10)
+func GetBlockByHeight(height uint64) (*types.Block, error) {
+	url := BaseUrl + GetBlockPath + strconv.FormatUint(height, 10)
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
-func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
-	url := BaseUrl + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
+func GetTransactionInfoList(height uint64) ([]*types.TransactionInfo, error) {
+	url := BaseUrl + GetTransactionInfoListPath + strconv.FormatUint(height, 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
 	_, err := client.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err
@@ -76,10 +76,14 @@ func GetExchanges() *types.ExchangeList {
 	return &exchangeList
 }
 
-func EthGetLogs(fromBlock, toBlock uint, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
+func EthBlockNumber() (uint64, error) {
+	return ethClient.BlockNumber(context.Background())
+}
+
+func EthGetLogs(fromBlock, toBlock uint64, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
 	return ethClient.FilterLogs(context.Background(), ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(uint64(fromBlock)),
-		ToBlock:   new(big.Int).SetUint64(uint64(toBlock)),
+		FromBlock: new(big.Int).SetUint64(fromBlock),
+		ToBlock:   new(big.Int).SetUint64(toBlock),
 		Addresses: []common.Address{address},
 		Topics:    topics,
 	})

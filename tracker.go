@@ -213,10 +213,11 @@ func (t *Tracker) doTrackBlock() {
 }
 
 func (t *Tracker) doTrackEthUSDT() {
-	blockNum := t.db.LastTrackedEthBlockNum
+	n := uint(10)
+	blockNum := t.db.GetLastTrackedEthBlockNum()
 	ethLogs, err := net.EthGetLogs(
-		blockNum,
-		blockNum+9,
+		blockNum+1,
+		blockNum+n,
 		common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
 		[][]common.Hash{{
 			common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
@@ -242,6 +243,6 @@ func (t *Tracker) doTrackEthUSDT() {
 			t.logger.Infof("Other log found: %s", log.TxHash.Hex())
 		}
 	}
-	t.db.LastTrackedEthBlockNum += 10
-	t.logger.Infof("Tracked eth block [%d], user [%d]", t.db.LastTrackedEthBlockNum, len(t.db.GetUsers()))
+	t.db.SetLastTrackedEthBlockNum(blockNum + n)
+	t.logger.Infof("Tracked eth block [%d], user [%d]", t.db.GetLastTrackedEthBlockNum(), len(t.db.GetUsers()))
 }

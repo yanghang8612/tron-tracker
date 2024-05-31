@@ -9,6 +9,7 @@ const (
 	CountedDateKey           = "counted_date"
 	CountedWeekKey           = "counted_week"
 	TrackingStartBlockNumKey = "tracking_start_block_num"
+	TrackedEthBlockNumKey    = "tracked_eth_block_num"
 )
 
 type Meta struct {

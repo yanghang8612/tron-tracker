@@ -76,10 +76,10 @@ func GetExchanges() *types.ExchangeList {
 	return &exchangeList
 }
 
-func EthGetLogs(fromBlock, toBlock int64, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
+func EthGetLogs(fromBlock, toBlock uint, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
 	return ethClient.FilterLogs(context.Background(), ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetInt64(fromBlock),
-		ToBlock:   new(big.Int).SetInt64(toBlock),
+		FromBlock: new(big.Int).SetUint64(uint64(fromBlock)),
+		ToBlock:   new(big.Int).SetUint64(uint64(toBlock)),
 		Addresses: []common.Address{address},
 		Topics:    topics,
 	})

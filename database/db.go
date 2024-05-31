@@ -57,7 +57,7 @@ type RawDB struct {
 
 	lastTrackedBlockNum    uint
 	lastTrackedBlockTime   int64
-	LastTrackedEthBlockNum int64
+	lastTrackedEthBlockNum uint
 	isTableMigrated        map[string]bool
 	tableLock              sync.Mutex
 	statsLock              sync.Mutex
@@ -94,6 +94,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.EthUSDTUser{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	dbErr = db.AutoMigrate(&models.ExchangeStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -125,6 +130,10 @@ func New(config *Config) *RawDB {
 	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
 	trackingStartBlockNum, _ := strconv.Atoi(trackingStartBlockNumMeta.Val)
 
+	var trackedEthBlockNumMeta models.Meta
+	db.Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(4634748)}).FirstOrCreate(&trackedEthBlockNumMeta)
+	trackedEthBlockNum, _ := strconv.Atoi(trackedEthBlockNumMeta.Val)
+
 	validTokens := make(map[string]string)
 	for _, token := range config.ValidTokens {
 		validTokens[token[0]] = token[1]
@@ -139,7 +148,7 @@ func New(config *Config) *RawDB {
 		vt:          validTokens,
 
 		lastTrackedBlockNum:    uint(trackingStartBlockNum - 1),
-		LastTrackedEthBlockNum: 4634748,
+		lastTrackedEthBlockNum: uint(trackedEthBlockNum),
 		isTableMigrated:        make(map[string]bool),
 		chargers:               make(map[string]*models.Charger),
 		chargersToSave:         make(map[string]*models.Charger),
@@ -158,12 +167,8 @@ func New(config *Config) *RawDB {
 		logger: zap.S().Named("[db]"),
 	}
 
-	rawDB.users["0x36928500Bc1dCd7af6a2B4008875CC336b927D57"] = &models.EthUSDTUser{
-		Address: "0x36928500Bc1dCd7af6a2B4008875CC336b927D57",
-		Amount:  100000000000,
-	}
-
 	// rawDB.loadChargers()
+	rawDB.loadUsers()
 
 	return rawDB
 }
@@ -235,7 +240,33 @@ func (db *RawDB) loadChargers() {
 	}
 }
 
+func (db *RawDB) loadUsers() {
+	if db.db.Migrator().HasTable(&models.EthUSDTUser{}) {
+		users := make([]*models.EthUSDTUser, 0)
+
+		db.logger.Info("Start loading users from db")
+		result := db.db.Find(&users)
+		db.logger.Infof("Loaded [%d] users from db", result.RowsAffected)
+
+		db.logger.Info("Start building users map")
+		for i, user := range users {
+			db.users[user.Address] = user
+			if i%1_000_000 == 0 {
+				db.logger.Infof("Built [%d] users map", i)
+			}
+		}
+		db.logger.Info("Complete building users map")
+	} else {
+		db.users["0x36928500Bc1dCd7af6a2B4008875CC336b927D57"] = &models.EthUSDTUser{
+			Address: "0x36928500Bc1dCd7af6a2B4008875CC336b927D57",
+			Amount:  100000000000,
+		}
+	}
+}
+
 func (db *RawDB) Start() {
+	db.logger.Infof("RawDB start, tron block [%d], eth block [%d]", db.lastTrackedBlockNum, db.lastTrackedEthBlockNum)
+
 	db.loopWG.Add(2)
 	go db.cacheFlushLoop()
 	go db.countLoop()
@@ -246,6 +277,7 @@ func (db *RawDB) Close() {
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()
+	db.flushUserToDB()
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -261,6 +293,10 @@ func (db *RawDB) GetLastTrackedBlockNum() uint {
 
 func (db *RawDB) GetLastTrackedBlockTime() int64 {
 	return db.lastTrackedBlockTime
+}
+
+func (db *RawDB) GetLastTrackedEthBlockNum() uint {
+	return db.lastTrackedEthBlockNum
 }
 
 func (db *RawDB) GetTokenName(addr string) string {
@@ -419,6 +455,10 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
+}
+
+func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint) {
+	db.lastTrackedEthBlockNum = blockNum
 }
 
 func (db *RawDB) updateExchanges() {
@@ -1405,6 +1445,27 @@ func (db *RawDB) flushChargerToDB() {
 	}
 	db.db.Save(chargers)
 	db.chargersToSave = make(map[string]*models.Charger)
+}
+
+func (db *RawDB) flushUserToDB() {
+	savedCount := 0
+	chargers := make([]*models.EthUSDTUser, 0)
+	for _, charger := range db.users {
+		chargers = append(chargers, charger)
+		if len(chargers) == 200 {
+			db.db.Save(chargers)
+			savedCount += len(chargers)
+			if savedCount%10000 == 0 {
+				db.logger.Infof("Saved %d users", savedCount)
+			}
+
+			chargers = make([]*models.EthUSDTUser, 0)
+		}
+	}
+	db.db.Save(chargers)
+	savedCount += len(chargers)
+	db.logger.Infof("Finish saving %d users", savedCount)
+	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(db.lastTrackedEthBlockNum)))
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

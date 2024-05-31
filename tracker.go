@@ -270,7 +270,7 @@ func (t *Tracker) doTrackEthUSDT() {
 
 	t.db.SetLastTrackedEthBlockNum(blockNum + n)
 
-	if shouldReport, reportContent := t.reporter.Add(int(n)); shouldReport {
+	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
 		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d]", reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber)

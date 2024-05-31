@@ -598,6 +598,10 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
 		}
 
 		db.usersToSave[from] = db.users[from]
+
+		if db.users[from].Amount < 0 {
+			db.logger.Warnf("User [%s] has negative amount [%d]", from, db.users[from].Amount)
+		}
 	}
 
 	if len(to) != 0 {
@@ -612,10 +616,6 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
 		}
 
 		db.usersToSave[to] = db.users[to]
-	}
-
-	if db.users[from].Amount < 0 {
-		db.logger.Warnf("User [%s] has negative amount [%d]", from, db.users[from].Amount)
 	}
 
 	if len(db.usersToSave) == 200 {

@@ -17,7 +17,7 @@ type EthUSDTUser struct {
 	ID           uint   `gorm:"primaryKey"`
 	Address      string `gorm:"size:42;index"`
 	Amount       uint64 `gorm:"index"`
-	LastUpdateAt uint64
+	LastUpdateAt uint64 `gorm:"index"`
 	TransferIn   uint
 	TransferOut  uint
 }

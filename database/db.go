@@ -278,7 +278,7 @@ func (db *RawDB) Close() {
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()
-	db.flushUserToDB(true)
+	db.flushUserToDB()
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -618,7 +618,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 		db.users[from].LastUpdateAt = log.BlockNumber
 		db.users[from].TransferOut += 1
 
-		db.usersToSave[from] = db.users[from]
+		// db.usersToSave[from] = db.users[from]
 
 		if db.users[from].Amount < 0 {
 			db.logger.Warnf("User [%s] has negative amount [%d], tx [%s]", from, db.users[from].Amount, log.TxHash)
@@ -634,12 +634,12 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 		db.users[to].LastUpdateAt = log.BlockNumber
 		db.users[to].TransferIn += 1
 
-		db.usersToSave[to] = db.users[to]
+		// db.usersToSave[to] = db.users[to]
 	}
 
-	if len(db.usersToSave) >= 10_000 {
-		db.flushUserToDB(false)
-	}
+	// if len(db.usersToSave) >= 10_000 {
+	// 	db.flushUserToDB(false)
+	// }
 }
 
 func (db *RawDB) GetUsers() map[string]*models.EthUSDTUser {
@@ -1479,16 +1479,23 @@ func (db *RawDB) flushChargerToDB() {
 	db.chargersToSave = make(map[string]*models.Charger)
 }
 
-func (db *RawDB) flushUserToDB(force bool) {
+func (db *RawDB) flushUserToDB() {
+	savedCount := 0
 	users := make([]*models.EthUSDTUser, 0)
-	for _, user := range db.usersToSave {
-		if force || db.lastTrackedEthBlockNum-user.LastUpdateAt > 20 {
-			users = append(users, user)
+	for _, user := range db.users {
+		users = append(users, user)
+
+		if len(users) == 200 {
+			db.db.Save(users)
+		}
+		savedCount += 1
+
+		if savedCount%100_000 == 0 {
+			db.logger.Infof("Saved %d users to DB", savedCount)
 		}
 	}
 	db.db.Save(users)
-	db.logger.Infof("Saved %d users to DB", len(users))
-	db.usersToSave = make(map[string]*models.EthUSDTUser)
+	db.logger.Infof("Finish saving users, total %d", len(users))
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

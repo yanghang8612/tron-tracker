@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -579,12 +580,12 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		}
 	}
 
-	if len(db.chargersToSave) == 200 {
+	if len(db.chargersToSave) >= 200 {
 		db.flushChargerToDB()
 	}
 }
 
-func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
+func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64, log ethtypes.Log) {
 	if len(from) != 0 {
 		if _, ok := db.users[from]; !ok {
 			db.users[from] = &models.EthUSDTUser{
@@ -599,7 +600,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
 		db.usersToSave[from] = db.users[from]
 
 		if db.users[from].Amount < 0 {
-			db.logger.Warnf("User [%s] has negative amount [%d]", from, db.users[from].Amount)
+			db.logger.Warnf("User [%s] has negative amount [%d], tx [%s]", from, db.users[from].Amount, log.TxHash)
 		}
 	}
 
@@ -617,7 +618,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
 		db.usersToSave[to] = db.users[to]
 	}
 
-	if len(db.usersToSave) == 200 {
+	if len(db.usersToSave) >= 200 {
 		db.flushUserToDB()
 	}
 }
@@ -1461,11 +1462,11 @@ func (db *RawDB) flushChargerToDB() {
 
 func (db *RawDB) flushUserToDB() {
 	users := make([]*models.EthUSDTUser, 0)
-	for _, user := range db.users {
+	for _, user := range db.usersToSave {
 		users = append(users, user)
 	}
 	db.db.Save(users)
-	db.users = make(map[string]*models.EthUSDTUser)
+	db.usersToSave = make(map[string]*models.EthUSDTUser)
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

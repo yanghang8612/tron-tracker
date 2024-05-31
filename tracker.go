@@ -244,22 +244,22 @@ func (t *Tracker) doTrackEthUSDT() {
 			toAddr := "0x" + log.Topics[2].Hex()[26:]
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
 
-			t.db.ProcessEthUSDTTransferLog(fromAddr, toAddr, amount)
+			t.db.ProcessEthUSDTTransferLog(fromAddr, toAddr, amount, log)
 		case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
 			toAddr := "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
 
-			t.db.ProcessEthUSDTTransferLog("", toAddr, amount)
+			t.db.ProcessEthUSDTTransferLog("", toAddr, amount, log)
 		case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
 			fromAddr := "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
 
-			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount)
+			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount, log)
 		case "0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6":
 			fromAddr := "0x" + hex.EncodeToString(log.Data[12:32])
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data[32:])).Int64()
 
-			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount)
+			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount, log)
 		}
 		if log.Topics[0].Hex() == "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 

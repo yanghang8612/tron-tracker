@@ -243,5 +243,5 @@ func (t *Tracker) doTrackEthUSDT() {
 		}
 	}
 	t.db.LastTrackedEthBlockNum += 10
-	t.logger.Infof("Tracked eth block [%d]", t.db.LastTrackedEthBlockNum)
+	t.logger.Infof("Tracked eth block [%d], user [%d]", t.db.LastTrackedEthBlockNum, len(t.db.GetUsers()))
 }

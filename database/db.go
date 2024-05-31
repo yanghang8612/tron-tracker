@@ -570,6 +570,10 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64) {
 	}
 }
 
+func (db *RawDB) GetUsers() map[string]*models.EthUSDTUser {
+	return db.users
+}
+
 func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	db.statsLock.Lock()
 	defer db.statsLock.Unlock()

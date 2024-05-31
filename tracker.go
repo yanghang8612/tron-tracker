@@ -230,6 +230,7 @@ func (t *Tracker) doTrackEthUSDT() {
 		return
 	}
 
+	t.logger.Infof("Found [%d] logs", len(ethLogs))
 	for _, log := range ethLogs {
 		if log.Topics[0].Hex() == "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
 			fromAddr := "0x" + log.Topics[1].Hex()[26:]

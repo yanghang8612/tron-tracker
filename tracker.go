@@ -37,7 +37,7 @@ func New(db *database.RawDB) *Tracker {
 			return fmt.Sprintf("Tracked [%d] TRON blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 		ethReporter: utils.NewReporter(10000, 60*time.Second, 0, func(rs utils.ReporterState) string {
-			return fmt.Sprintf("Tracked [%d] ETH blocks in [%.2fs], speed [%.2flogs/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+			return fmt.Sprintf("Tracked [%d] ETH blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 
 		quitCh: make(chan struct{}),
@@ -246,12 +246,12 @@ func (t *Tracker) doTrackEthUSDT() {
 
 			t.db.ProcessEthUSDTTransferLog(fromAddr, toAddr, amount)
 		case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
-			toAddr := "0xC6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828"
+			toAddr := "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
 
 			t.db.ProcessEthUSDTTransferLog("", toAddr, amount)
 		case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
-			fromAddr := "0xC6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828"
+			fromAddr := "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
 			amount := utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Int64()
 
 			t.db.ProcessEthUSDTTransferLog(fromAddr, "", amount)

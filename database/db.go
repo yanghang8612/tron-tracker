@@ -169,6 +169,12 @@ func New(config *Config) *RawDB {
 
 	// rawDB.loadChargers()
 	rawDB.loadUsers()
+	if rawDB.lastTrackedEthBlockNum == 4634748 {
+		rawDB.users["0x36928500bc1dcd7af6a2b4008875cc336b927d57"] = &models.EthUSDTUser{
+			Address: "0x36928500bc1dcd7af6a2b4008875cc336b927d57",
+			Amount:  100000000000,
+		}
+	}
 
 	return rawDB
 }
@@ -241,27 +247,20 @@ func (db *RawDB) loadChargers() {
 }
 
 func (db *RawDB) loadUsers() {
-	if db.db.Migrator().HasTable(&models.EthUSDTUser{}) {
-		users := make([]*models.EthUSDTUser, 0)
+	users := make([]*models.EthUSDTUser, 0)
 
-		db.logger.Info("Start loading users from db")
-		result := db.db.Find(&users)
-		db.logger.Infof("Loaded [%d] users from db", result.RowsAffected)
+	db.logger.Info("Start loading users from db")
+	result := db.db.Find(&users)
+	db.logger.Infof("Loaded [%d] users from db", result.RowsAffected)
 
-		db.logger.Info("Start building users map")
-		for i, user := range users {
-			db.users[user.Address] = user
-			if i%1_000_000 == 0 {
-				db.logger.Infof("Built [%d] users map", i)
-			}
-		}
-		db.logger.Info("Complete building users map")
-	} else {
-		db.users["0x36928500Bc1dCd7af6a2B4008875CC336b927D57"] = &models.EthUSDTUser{
-			Address: "0x36928500Bc1dCd7af6a2B4008875CC336b927D57",
-			Amount:  100000000000,
+	db.logger.Info("Start building users map")
+	for i, user := range users {
+		db.users[user.Address] = user
+		if i%1_000_000 == 0 {
+			db.logger.Infof("Built [%d] users map", i)
 		}
 	}
+	db.logger.Info("Complete building users map")
 }
 
 func (db *RawDB) Start() {

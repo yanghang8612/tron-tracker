@@ -1487,6 +1487,7 @@ func (db *RawDB) flushUserToDB(force bool) {
 		}
 	}
 	db.db.Save(users)
+	db.logger.Infof("Saved %d users to DB", len(users))
 	db.usersToSave = make(map[string]*models.EthUSDTUser)
 }
 

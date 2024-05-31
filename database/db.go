@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -277,7 +278,7 @@ func (db *RawDB) Close() {
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()
-	db.flushUserToDB()
+	db.flushUserToDB(true)
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -585,17 +586,37 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 	}
 }
 
-func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64, log ethtypes.Log) {
+func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
+	var (
+		from   string
+		to     string
+		amount uint64
+	)
+
+	switch log.Topics[0].Hex() {
+	case "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef":
+		from = "0x" + log.Topics[1].Hex()[26:]
+		to = "0x" + log.Topics[2].Hex()[26:]
+		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
+	case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
+		to = "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
+		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
+	case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
+		from = "0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828"
+		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
+	case "0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6":
+		from = "0x" + hex.EncodeToString(log.Data[12:32])
+		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data[32:])).Uint64()
+	}
+
 	if len(from) != 0 {
 		if _, ok := db.users[from]; !ok {
-			db.users[from] = &models.EthUSDTUser{
-				Address: from,
-				Amount:  -amount,
-			}
-		} else {
-			db.users[from].Amount -= amount
-			db.users[from].TransferOut += 1
+			db.users[from] = &models.EthUSDTUser{}
 		}
+
+		db.users[from].Amount -= amount
+		db.users[from].LastUpdateAt = log.BlockNumber
+		db.users[from].TransferOut += 1
 
 		db.usersToSave[from] = db.users[from]
 
@@ -606,20 +627,18 @@ func (db *RawDB) ProcessEthUSDTTransferLog(from, to string, amount int64, log et
 
 	if len(to) != 0 {
 		if _, ok := db.users[to]; !ok {
-			db.users[to] = &models.EthUSDTUser{
-				Address: to,
-				Amount:  amount,
-			}
-		} else {
-			db.users[to].Amount += amount
-			db.users[to].TransferIn += 1
+			db.users[to] = &models.EthUSDTUser{}
 		}
+
+		db.users[to].Amount += amount
+		db.users[to].LastUpdateAt = log.BlockNumber
+		db.users[to].TransferIn += 1
 
 		db.usersToSave[to] = db.users[to]
 	}
 
-	if len(db.usersToSave) >= 200 {
-		db.flushUserToDB()
+	if len(db.usersToSave) >= 10_000 {
+		db.flushUserToDB(false)
 	}
 }
 
@@ -1460,10 +1479,12 @@ func (db *RawDB) flushChargerToDB() {
 	db.chargersToSave = make(map[string]*models.Charger)
 }
 
-func (db *RawDB) flushUserToDB() {
+func (db *RawDB) flushUserToDB(force bool) {
 	users := make([]*models.EthUSDTUser, 0)
 	for _, user := range db.usersToSave {
-		users = append(users, user)
+		if force || db.lastTrackedEthBlockNum-user.LastUpdateAt > 20 {
+			users = append(users, user)
+		}
 	}
 	db.db.Save(users)
 	db.usersToSave = make(map[string]*models.EthUSDTUser)

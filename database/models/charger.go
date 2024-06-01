@@ -21,3 +21,10 @@ type EthUSDTUser struct {
 	TransferIn   uint
 	TransferOut  uint
 }
+
+func (e *EthUSDTUser) Add(o *EthUSDTUser) {
+	e.Amount += o.Amount
+	e.LastUpdateAt = o.LastUpdateAt
+	e.TransferIn += o.TransferIn
+	e.TransferOut += o.TransferOut
+}

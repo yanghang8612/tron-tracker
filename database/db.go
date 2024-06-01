@@ -67,9 +67,10 @@ type RawDB struct {
 	chargersLock           sync.RWMutex
 	chargersToSave         map[string]*models.Charger
 
-	users       map[string]*models.EthUSDTUser
-	usersLock   sync.RWMutex
-	usersToSave map[string]*models.EthUSDTUser
+	users          map[string]*models.EthUSDTUser
+	usersLock      sync.RWMutex
+	usersToSave    map[string]*models.EthUSDTUser
+	ethUSDTDayStat *models.ERC20Statistic
 
 	usdtPhishingRelations map[string]bool
 
@@ -97,6 +98,11 @@ func New(config *Config) *RawDB {
 	}
 
 	dbErr = db.AutoMigrate(&models.EthUSDTUser{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	dbErr = db.AutoMigrate(&models.ERC20Statistic{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
@@ -249,20 +255,24 @@ func (db *RawDB) loadChargers() {
 }
 
 func (db *RawDB) loadUsers() {
-	users := make([]*models.EthUSDTUser, 0)
-
 	db.logger.Info("Start loading users from db")
-	result := db.db.Find(&users)
-	db.logger.Infof("Loaded [%d] users from db", result.RowsAffected)
 
-	db.logger.Info("Start building users map")
-	for i, user := range users {
-		db.users[user.Address] = user
-		if i%1_000_000 == 0 {
-			db.logger.Infof("Built [%d] users map", i)
+	userCount := int64(0)
+	users := make([]*models.EthUSDTUser, 0)
+	result := db.db.FindInBatches(&users, 100, func(tx *gorm.DB, _ int) error {
+		for _, user := range users {
+			if db.lastTrackedEthBlockNum-user.LastUpdateAt <= 30*86400/12 {
+				db.users[user.Address] = user
+			}
 		}
-	}
-	db.logger.Info("Complete building users map")
+		userCount += tx.RowsAffected
+		if userCount%1_000_000 == 0 {
+			db.logger.Infof("Loaded [%d] users from db", userCount)
+		}
+
+		return nil
+	})
+	db.logger.Infof("Loaded [%d] of [%d] users from db", len(db.users), result.RowsAffected)
 }
 
 func (db *RawDB) Start() {
@@ -278,7 +288,7 @@ func (db *RawDB) Close() {
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()
-	db.flushUserToDB()
+	db.flushUserToDB(true)
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -460,6 +470,30 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 	db.lastTrackedEthBlockNum = blockNum
+	block, _ := net.EthGetBlockByNumber(blockNum)
+	date := generateDate(int64(block.Header().Time))
+
+	if db.ethUSDTDayStat == nil {
+		db.ethUSDTDayStat = &models.ERC20Statistic{
+			Date:    date,
+			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+		}
+	} else if db.ethUSDTDayStat.Date != date {
+		actualHolders := 0
+		for _, user := range db.users {
+			if user.Amount > 0 {
+				actualHolders += 1
+			}
+		}
+		db.ethUSDTDayStat.HistoricalHolder = len(db.users)
+		db.ethUSDTDayStat.ActualHolder = actualHolders
+		db.db.Save(db.ethUSDTDayStat)
+
+		db.ethUSDTDayStat = &models.ERC20Statistic{
+			Date:    date,
+			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+		}
+	}
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }
 
@@ -611,11 +645,15 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 
 	if len(from) != 0 {
 		if _, ok := db.users[from]; !ok {
+			// Actually this can not happen
 			db.users[from] = &models.EthUSDTUser{}
 		}
 
 		db.users[from].Amount -= amount
 		db.users[from].LastUpdateAt = log.BlockNumber
+		if db.users[from].TransferOut == 0 {
+			db.ethUSDTDayStat.NewFrom += 1
+		}
 		db.users[from].TransferOut += 1
 
 		// db.usersToSave[from] = db.users[from]
@@ -628,6 +666,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 	if len(to) != 0 {
 		if _, ok := db.users[to]; !ok {
 			db.users[to] = &models.EthUSDTUser{}
+			db.ethUSDTDayStat.NewTo += 1
 		}
 
 		db.users[to].Amount += amount
@@ -637,9 +676,9 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 		// db.usersToSave[to] = db.users[to]
 	}
 
-	// if len(db.usersToSave) >= 10_000 {
-	// 	db.flushUserToDB(false)
-	// }
+	if len(db.users) >= 10_000_000 {
+		db.flushUserToDB(false)
+	}
 }
 
 func (db *RawDB) GetUsers() map[string]*models.EthUSDTUser {
@@ -1479,11 +1518,24 @@ func (db *RawDB) flushChargerToDB() {
 	db.chargersToSave = make(map[string]*models.Charger)
 }
 
-func (db *RawDB) flushUserToDB() {
+func (db *RawDB) flushUserToDB(force bool) {
 	savedCount := 0
 	users := make([]*models.EthUSDTUser, 0)
-	for _, user := range db.users {
-		users = append(users, user)
+	for addr, user := range db.users {
+		// If the user has updated in the last month, then skip him
+		if !force && db.lastTrackedEthBlockNum-user.LastUpdateAt <= 30*86400/12 {
+			continue
+		}
+
+		userInDb := &models.EthUSDTUser{}
+		db.db.Where("address = ?", user.Address).First(userInDb)
+		if userInDb.ID == 0 {
+			users = append(users, user)
+		} else {
+			userInDb.Add(user)
+			users = append(users, userInDb)
+		}
+		delete(db.users, addr)
 
 		if len(users) == 200 {
 			db.db.Save(users)
@@ -1495,7 +1547,9 @@ func (db *RawDB) flushUserToDB() {
 		}
 	}
 	db.db.Save(users)
-	db.logger.Infof("Finish saving users, total %d", len(users))
+	savedCount += len(users)
+	db.logger.Infof("Finish saving users, total %d", savedCount)
+	db.users = make(map[string]*models.EthUSDTUser)
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

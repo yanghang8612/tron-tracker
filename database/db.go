@@ -651,9 +651,9 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 
 		db.users[from].Amount -= amount
 		db.users[from].LastUpdateAt = log.BlockNumber
-		if db.users[from].TransferOut == 0 {
-			db.ethUSDTDayStat.NewFrom += 1
-		}
+		// if db.users[from].TransferOut == 0 {
+		// 	db.ethUSDTDayStat.NewFrom += 1
+		// }
 		db.users[from].TransferOut += 1
 
 		// db.usersToSave[from] = db.users[from]
@@ -666,7 +666,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 	if len(to) != 0 {
 		if _, ok := db.users[to]; !ok {
 			db.users[to] = &models.EthUSDTUser{}
-			db.ethUSDTDayStat.NewTo += 1
+			// db.ethUSDTDayStat.NewTo += 1
 		}
 
 		db.users[to].Amount += amount

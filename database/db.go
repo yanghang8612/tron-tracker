@@ -261,7 +261,7 @@ func (db *RawDB) loadUsers() {
 	users := make([]*models.EthUSDTUser, 0)
 	result := db.db.FindInBatches(&users, 100, func(tx *gorm.DB, _ int) error {
 		for _, user := range users {
-			if db.lastTrackedEthBlockNum-user.LastUpdateAt <= 30*86400/12 {
+			if user.Amount > 0 {
 				db.users[user.Address] = user
 			}
 		}
@@ -470,30 +470,30 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 	db.lastTrackedEthBlockNum = blockNum
-	// block, _ := net.EthGetBlockByNumber(blockNum)
-	// date := generateDate(int64(block.Header().Time))
-	//
-	// if db.ethUSDTDayStat == nil {
-	// 	db.ethUSDTDayStat = &models.ERC20Statistic{
-	// 		Date:    date,
-	// 		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-	// 	}
-	// } else if db.ethUSDTDayStat.Date != date {
-	// 	actualHolders := 0
-	// 	for _, user := range db.users {
-	// 		if user.Amount > 0 {
-	// 			actualHolders += 1
-	// 		}
-	// 	}
-	// 	db.ethUSDTDayStat.HistoricalHolder = len(db.users)
-	// 	db.ethUSDTDayStat.ActualHolder = actualHolders
-	// 	db.db.Save(db.ethUSDTDayStat)
-	//
-	// 	db.ethUSDTDayStat = &models.ERC20Statistic{
-	// 		Date:    date,
-	// 		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-	// 	}
-	// }
+	header, _ := net.EthGetHeaderByNumber(blockNum)
+	date := generateDate(int64(header.Time))
+
+	if db.ethUSDTDayStat == nil {
+		db.ethUSDTDayStat = &models.ERC20Statistic{
+			Date:    date,
+			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+		}
+	} else if db.ethUSDTDayStat.Date != date {
+		actualHolders := 0
+		for _, user := range db.users {
+			if user.Amount > 0 {
+				actualHolders += 1
+			}
+		}
+		db.ethUSDTDayStat.HistoricalHolder = len(db.users)
+		db.ethUSDTDayStat.ActualHolder = actualHolders
+		db.db.Save(db.ethUSDTDayStat)
+
+		db.ethUSDTDayStat = &models.ERC20Statistic{
+			Date:    date,
+			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+		}
+	}
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }
 
@@ -651,9 +651,9 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 
 		db.users[from].Amount -= amount
 		db.users[from].LastUpdateAt = log.BlockNumber
-		// if db.users[from].TransferOut == 0 {
-		// 	db.ethUSDTDayStat.NewFrom += 1
-		// }
+		if len(to) > 0 && db.users[from].TransferOut == 0 {
+			db.ethUSDTDayStat.NewFrom += 1
+		}
 		db.users[from].TransferOut += 1
 
 		// db.usersToSave[from] = db.users[from]
@@ -666,7 +666,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 	if len(to) != 0 {
 		if _, ok := db.users[to]; !ok {
 			db.users[to] = &models.EthUSDTUser{}
-			// db.ethUSDTDayStat.NewTo += 1
+			db.ethUSDTDayStat.NewTo += 1
 		}
 
 		db.users[to].Amount += amount
@@ -1522,8 +1522,8 @@ func (db *RawDB) flushUserToDB(force bool) {
 	savedCount := 0
 	users := make([]*models.EthUSDTUser, 0)
 	for addr, user := range db.users {
-		// If the user has updated in the last month, then skip him
-		if !force && db.lastTrackedEthBlockNum-user.LastUpdateAt <= 30*86400/12 {
+		// If user has balance, then keep them in memory
+		if !force && user.Amount > 0 {
 			continue
 		}
 

@@ -84,6 +84,10 @@ func EthGetBlockByNumber(blockNumber uint64) (*ethtypes.Block, error) {
 	return ethClient.BlockByNumber(context.Background(), new(big.Int).SetUint64(blockNumber))
 }
 
+func EthGetHeaderByNumber(blockNumber uint64) (*ethtypes.Header, error) {
+	return ethClient.HeaderByNumber(context.Background(), new(big.Int).SetUint64(blockNumber))
+}
+
 func EthGetLogs(fromBlock, toBlock uint64, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
 	return ethClient.FilterLogs(context.Background(), ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(fromBlock),

@@ -57,15 +57,16 @@ type RawDB struct {
 	elUpdatedAt time.Time
 	vt          map[string]string
 
-	lastTrackedBlockNum    uint64
-	lastTrackedBlockTime   int64
-	lastTrackedEthBlockNum uint64
-	isTableMigrated        map[string]bool
-	tableLock              sync.Mutex
-	statsLock              sync.Mutex
-	chargers               map[string]*models.Charger
-	chargersLock           sync.RWMutex
-	chargersToSave         map[string]*models.Charger
+	lastTrackedBlockNum      uint64
+	lastTrackedBlockTime     int64
+	lastTrackedEthBlockNum   uint64
+	nextDaysStartEthBlockNum uint64
+	isTableMigrated          map[string]bool
+	tableLock                sync.Mutex
+	statsLock                sync.Mutex
+	chargers                 map[string]*models.Charger
+	chargersLock             sync.RWMutex
+	chargersToSave           map[string]*models.Charger
 
 	users          map[string]*models.EthUSDTUser
 	usersLock      sync.RWMutex
@@ -183,6 +184,7 @@ func New(config *Config) *RawDB {
 			Amount:  100000000000,
 		}
 	}
+	rawDB.updateDayStat(rawDB.lastTrackedEthBlockNum)
 
 	return rawDB
 }
@@ -470,15 +472,8 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 	db.lastTrackedEthBlockNum = blockNum
-	header, _ := net.EthGetHeaderByNumber(blockNum)
-	date := generateDate(int64(header.Time))
 
-	if db.ethUSDTDayStat == nil {
-		db.ethUSDTDayStat = &models.ERC20Statistic{
-			Date:    date,
-			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-		}
-	} else if db.ethUSDTDayStat.Date != date {
+	if blockNum >= db.nextDaysStartEthBlockNum {
 		actualHolders := 0
 		for _, user := range db.users {
 			if user.Amount > 0 {
@@ -489,12 +484,24 @@ func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 		db.ethUSDTDayStat.ActualHolder = actualHolders
 		db.db.Save(db.ethUSDTDayStat)
 
-		db.ethUSDTDayStat = &models.ERC20Statistic{
-			Date:    date,
-			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-		}
+		db.updateDayStat(blockNum)
 	}
+
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
+}
+
+func (db *RawDB) updateDayStat(blockNum uint64) {
+	header, _ := net.EthGetHeaderByNumber(blockNum)
+	date := generateDate(int64(header.Time))
+	db.ethUSDTDayStat = &models.ERC20Statistic{
+		Date:    generateDate(int64(header.Time)),
+		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+	}
+	ts, _ := time.Parse("060102", date)
+	nextDay := ts.AddDate(0, 0, 1)
+	nextDayBlockNum, _ := net.EthBlockNumberByTime(nextDay.Unix())
+	db.nextDaysStartEthBlockNum = nextDayBlockNum
+	db.logger.Infof("Next day start eth block num [%d]", nextDayBlockNum)
 }
 
 func (db *RawDB) updateExchanges() {
@@ -1520,6 +1527,7 @@ func (db *RawDB) flushChargerToDB() {
 
 func (db *RawDB) flushUserToDB(force bool) {
 	savedCount := 0
+	savedUsers := make(map[string]bool)
 	users := make([]*models.EthUSDTUser, 0)
 	for addr, user := range db.users {
 		// If user has balance, then keep them in memory
@@ -1527,18 +1535,19 @@ func (db *RawDB) flushUserToDB(force bool) {
 			continue
 		}
 
+		savedUsers[addr] = true
 		userInDb := &models.EthUSDTUser{}
-		db.db.Where("address = ?", user.Address).First(userInDb)
+		db.db.Where("address = ?", addr).First(userInDb)
 		if userInDb.ID == 0 {
 			users = append(users, user)
 		} else {
 			userInDb.Add(user)
 			users = append(users, userInDb)
 		}
-		delete(db.users, addr)
 
 		if len(users) == 200 {
 			db.db.Save(users)
+			users = make([]*models.EthUSDTUser, 0)
 		}
 		savedCount += 1
 
@@ -1549,7 +1558,10 @@ func (db *RawDB) flushUserToDB(force bool) {
 	db.db.Save(users)
 	savedCount += len(users)
 	db.logger.Infof("Finish saving users, total %d", savedCount)
-	db.users = make(map[string]*models.EthUSDTUser)
+
+	for addr := range savedUsers {
+		delete(db.users, addr)
+	}
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

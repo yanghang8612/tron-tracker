@@ -19,6 +19,7 @@ import (
 const (
 	BaseUrl                    = "http://localhost:8088/"
 	ETHJsonRpcUrl              = "http://localhost:8545/"
+	EtherScan                  = "https://api.etherscan.io/"
 	GetBlockPath               = "wallet/getblockbynum?num="
 	GetNowBlockPath            = "wallet/getnowblock"
 	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="
@@ -78,6 +79,37 @@ func GetExchanges() *types.ExchangeList {
 
 func EthBlockNumber() (uint64, error) {
 	return ethClient.BlockNumber(context.Background())
+}
+
+func EthBlockNumberByTime(timestamp int64) (uint64, error) {
+	resp, err := client.R().Get(EtherScan +
+		"api?module=block&action=getblocknobytime&closest=after&timestamp=" +
+		strconv.FormatInt(timestamp, 10))
+
+	if err != nil {
+		return 0, err
+	} else {
+		var respStruct struct {
+			Status  string `json:"status"`
+			Message string `json:"message"`
+			Result  string `json:"result"`
+		}
+
+		err = json.Unmarshal(resp.Body(), &respStruct)
+		if err != nil {
+			return 0, err
+		}
+
+		if respStruct.Status == "1" {
+			blockNumber, err := strconv.ParseUint(respStruct.Result, 10, 64)
+			if err != nil {
+				return 0, err
+			}
+			return blockNumber, nil
+		} else {
+			return 0, ethereum.NotFound
+		}
+	}
 }
 
 func EthGetBlockByNumber(blockNumber uint64) (*ethtypes.Block, error) {

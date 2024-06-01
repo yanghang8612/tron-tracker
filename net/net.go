@@ -84,7 +84,7 @@ func EthBlockNumber() (uint64, error) {
 func EthBlockNumberByTime(timestamp int64) (uint64, error) {
 	resp, err := client.R().Get(EtherScan +
 		"api?module=block&action=getblocknobytime&closest=after&timestamp=" +
-		strconv.FormatInt(timestamp, 10))
+		strconv.FormatInt(timestamp, 10) + "&apikey=82SMH9HIUESXN4IPSFA237VHIMHQB1AQSI")
 
 	if err != nil {
 		return 0, err

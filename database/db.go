@@ -470,30 +470,30 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 
 func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 	db.lastTrackedEthBlockNum = blockNum
-	block, _ := net.EthGetBlockByNumber(blockNum)
-	date := generateDate(int64(block.Header().Time))
-
-	if db.ethUSDTDayStat == nil {
-		db.ethUSDTDayStat = &models.ERC20Statistic{
-			Date:    date,
-			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-		}
-	} else if db.ethUSDTDayStat.Date != date {
-		actualHolders := 0
-		for _, user := range db.users {
-			if user.Amount > 0 {
-				actualHolders += 1
-			}
-		}
-		db.ethUSDTDayStat.HistoricalHolder = len(db.users)
-		db.ethUSDTDayStat.ActualHolder = actualHolders
-		db.db.Save(db.ethUSDTDayStat)
-
-		db.ethUSDTDayStat = &models.ERC20Statistic{
-			Date:    date,
-			Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-		}
-	}
+	// block, _ := net.EthGetBlockByNumber(blockNum)
+	// date := generateDate(int64(block.Header().Time))
+	//
+	// if db.ethUSDTDayStat == nil {
+	// 	db.ethUSDTDayStat = &models.ERC20Statistic{
+	// 		Date:    date,
+	// 		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+	// 	}
+	// } else if db.ethUSDTDayStat.Date != date {
+	// 	actualHolders := 0
+	// 	for _, user := range db.users {
+	// 		if user.Amount > 0 {
+	// 			actualHolders += 1
+	// 		}
+	// 	}
+	// 	db.ethUSDTDayStat.HistoricalHolder = len(db.users)
+	// 	db.ethUSDTDayStat.ActualHolder = actualHolders
+	// 	db.db.Save(db.ethUSDTDayStat)
+	//
+	// 	db.ethUSDTDayStat = &models.ERC20Statistic{
+	// 		Date:    date,
+	// 		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
+	// 	}
+	// }
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }
 

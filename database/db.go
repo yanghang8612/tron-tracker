@@ -691,7 +691,7 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 		}
 	}
 
-	if len(db.users) >= 10_000_000 {
+	if db.dirtyUserCount >= 8_000_000 {
 		db.flushUserToDB(false)
 	}
 }

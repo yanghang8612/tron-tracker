@@ -228,22 +228,24 @@ func (t *Tracker) doTrackEthUSDT() {
 
 	trackedBlockNum := t.db.GetLastTrackedEthBlockNum()
 
-	n := uint64(1)
+	n := 1
+	r := 1
 	if nowBlockNumber-trackedBlockNum > 1000 {
-		n = uint64(100)
+		n = 100
+		r = 10
 	} else if nowBlockNumber == trackedBlockNum {
 		time.Sleep(1 * time.Second)
 		return
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(10)
+	wg.Add(r)
 	logsMap := map[int][]ethtypes.Log{}
-	for i := 0; i < 10; i++ {
+	for i := 0; i < r; i++ {
 		go func(index int, startBlockNum uint64) {
 			ethLogs, _ := net.EthGetLogs(
 				startBlockNum+1,
-				startBlockNum+n,
+				startBlockNum+uint64(n),
 				common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
 				[][]common.Hash{{
 					common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
@@ -253,11 +255,11 @@ func (t *Tracker) doTrackEthUSDT() {
 				}})
 			logsMap[index] = ethLogs
 			wg.Done()
-		}(i, trackedBlockNum+uint64(i)*n)
+		}(i, trackedBlockNum+uint64(i*n))
 	}
 	wg.Wait()
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < r; i++ {
 		for _, log := range logsMap[i] {
 			t.db.ProcessEthUSDTTransferLog(log)
 
@@ -278,7 +280,7 @@ func (t *Tracker) doTrackEthUSDT() {
 
 	// t.db.SetLastTrackedEthBlockNum(trackedBlockNum + n)
 
-	if shouldReport, reportContent := t.ethReporter.Add(int(10 * n)); shouldReport {
+	if shouldReport, reportContent := t.ethReporter.Add(r * n); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
 		t.logger.Infof("%s, tracking from [%d] to [%d], left [%d], current total/dirty users [%d/%d]",

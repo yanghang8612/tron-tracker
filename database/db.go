@@ -264,7 +264,7 @@ func (db *RawDB) loadUsers() {
 			user.Address = ""
 		}
 
-		phase := len(db.users) / 1_000_000
+		phase := len(db.users) / 200_000
 		if _, ok := report[phase]; !ok {
 			report[phase] = true
 			db.logger.Infof("Loaded [%d] users from db", len(db.users))
@@ -1564,7 +1564,7 @@ func (db *RawDB) flushUserToDB(force bool) {
 		}
 		savedCount += 1
 
-		if savedCount%1_000_000 == 0 {
+		if savedCount%200_000 == 0 {
 			db.logger.Infof("Saved %d users to DB", savedCount)
 		}
 	}

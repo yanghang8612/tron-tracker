@@ -34,7 +34,7 @@ var (
 
 func init() {
 	var err error
-	ethClient, err = ethclient.Dial(EthIPCEndpoint)
+	ethClient, err = ethclient.Dial(EthJsonRpcEndpoint)
 	if err != nil {
 		zap.S().Error(err)
 	}

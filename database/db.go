@@ -488,15 +488,27 @@ func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 func (db *RawDB) updateDayStat(blockNum uint64) {
 	header, _ := net.EthGetHeaderByNumber(blockNum)
 	date := generateDate(int64(header.Time))
+
 	db.ethUSDTDayStat = &models.ERC20Statistic{
-		Date:    generateDate(int64(header.Time)),
+		Date:    date,
 		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
 	}
+
 	ts, _ := time.Parse("060102", date)
 	nextDay := ts.AddDate(0, 0, 1)
-	nextDayBlockNum, _ := net.EthBlockNumberByTime(nextDay.Unix())
+	nextDayBlockNum := uint64(0)
+	for i := 0; i < 3; i++ {
+		result, _ := net.EthBlockNumberByTime(nextDay.Unix())
+		if result == 0 {
+			time.Sleep(200 * time.Millisecond)
+		} else {
+			nextDayBlockNum = result
+			break
+		}
+	}
+
 	db.nextDaysStartEthBlockNum = nextDayBlockNum
-	db.logger.Infof("Next day start eth block num [%d]", nextDayBlockNum)
+	db.logger.Infof("Next day [%s] start eth block num [%d]", nextDay.Format("060102"), nextDayBlockNum)
 }
 
 func (db *RawDB) updateExchanges() {
@@ -839,7 +851,7 @@ func (db *RawDB) countLoop() {
 				db.countedDate = dateToCount
 
 				if countedDate.Weekday() == time.Saturday {
-					// db.countTRXPhishingForWeek(db.countedWeek)
+					db.countTRXPhishingForWeek(db.countedWeek)
 					db.countUSDTPhishingForWeek(db.countedWeek)
 					db.countedWeek = db.countForWeek(db.countedWeek)
 				}

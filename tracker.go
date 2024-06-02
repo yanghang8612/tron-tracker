@@ -219,12 +219,25 @@ func (t *Tracker) doTrackBlock() {
 }
 
 func (t *Tracker) doTrackEthUSDT() {
-	n := uint64(10)
-	blockNum := t.db.GetLastTrackedEthBlockNum()
+	nowBlockNumber, err := net.EthBlockNumber()
+	if err != nil {
+		time.Sleep(12 * time.Second)
+		return
+	}
+
+	trackedBlockNum := t.db.GetLastTrackedEthBlockNum()
+
+	n := uint64(1)
+	if nowBlockNumber-trackedBlockNum > 100 {
+		n = uint64(100)
+	} else if nowBlockNumber == trackedBlockNum {
+		time.Sleep(1 * time.Second)
+		return
+	}
 
 	ethLogs, err := net.EthGetLogs(
-		blockNum+1,
-		blockNum+n,
+		trackedBlockNum+1,
+		trackedBlockNum+n,
 		common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
 		[][]common.Hash{{
 			common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
@@ -234,7 +247,7 @@ func (t *Tracker) doTrackEthUSDT() {
 		}})
 
 	if err != nil {
-		t.logger.Error(err)
+		time.Sleep(12 * time.Second)
 		return
 	}
 
@@ -255,7 +268,7 @@ func (t *Tracker) doTrackEthUSDT() {
 		}
 	}
 
-	t.db.SetLastTrackedEthBlockNum(blockNum + n)
+	t.db.SetLastTrackedEthBlockNum(trackedBlockNum + n)
 
 	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()

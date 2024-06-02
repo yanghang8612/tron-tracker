@@ -256,6 +256,7 @@ func (db *RawDB) loadChargers() {
 func (db *RawDB) loadUsers() {
 	db.logger.Info("Start loading users from db")
 
+	report := make(map[int]bool)
 	users := make([]*models.EthUSDTUser, 0)
 	result := db.db.FindInBatches(&users, 100, func(_ *gorm.DB, _ int) error {
 		for _, user := range users {
@@ -263,8 +264,10 @@ func (db *RawDB) loadUsers() {
 			user.Address = ""
 		}
 
-		if len(users)%1_000_000 == 0 {
-			db.logger.Infof("Loaded [%d] users from db", len(users))
+		phase := len(db.users) / 1_000_000
+		if _, ok := report[phase]; !ok {
+			report[phase] = true
+			db.logger.Infof("Loaded [%d] users from db", len(db.users))
 		}
 
 		return nil
@@ -1535,6 +1538,7 @@ func (db *RawDB) flushChargerToDB() {
 }
 
 func (db *RawDB) flushUserToDB(force bool) {
+	db.logger.Infof("Start saving users to DB, total [%d]", len(db.users))
 	savedCount := 0
 	usersToSave := make([]*models.EthUSDTUser, 0)
 	for addr, user := range db.users {
@@ -1545,7 +1549,7 @@ func (db *RawDB) flushUserToDB(force bool) {
 
 		user.Address = addr.Hex()
 		usersToSave = append(usersToSave, user)
-		if len(usersToSave) == 200 {
+		if len(usersToSave) == 100 {
 			db.db.Save(usersToSave)
 			for _, u := range usersToSave {
 				u.Address = ""

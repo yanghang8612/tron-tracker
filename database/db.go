@@ -279,9 +279,9 @@ func (db *RawDB) loadUsers() {
 func (db *RawDB) Start() {
 	db.logger.Infof("RawDB start, tron block [%d], eth block [%d]", db.lastTrackedBlockNum, db.lastTrackedEthBlockNum)
 
-	db.loopWG.Add(2)
+	db.loopWG.Add(1)
 	go db.cacheFlushLoop()
-	go db.countLoop()
+	// go db.countLoop()
 }
 
 func (db *RawDB) Close() {

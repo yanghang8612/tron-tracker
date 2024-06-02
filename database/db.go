@@ -657,12 +657,16 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 		}
 
 		db.users[from].Amount -= amount
+
 		if !emptyTo && db.users[from].TransferOut == 0 {
 			db.ethUSDTDayStat.NewFrom += 1
 		}
 		db.users[from].TransferOut += 1
-		db.users[from].Dirty = true
-		db.dirtyUserCount += 1
+
+		if !db.users[from].Dirty {
+			db.users[from].Dirty = true
+			db.dirtyUserCount += 1
+		}
 
 		if db.users[from].Amount < 0 {
 			db.logger.Warnf("User [%s] has negative amount [%d], tx [%s]", from, db.users[from].Amount, log.TxHash)
@@ -677,8 +681,11 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 
 		db.users[to].Amount += amount
 		db.users[to].TransferIn += 1
-		db.users[to].Dirty = true
-		db.dirtyUserCount += 1
+
+		if !db.users[to].Dirty {
+			db.users[to].Dirty = true
+			db.dirtyUserCount += 1
+		}
 	}
 
 	if len(db.users) >= 10_000_000 {

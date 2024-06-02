@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
@@ -15,7 +14,7 @@ import (
 )
 
 func main() {
-	go http.ListenAndServe(":8080", nil)
+	// go http.ListenAndServe(":8080", nil)
 
 	cfg := loadConfig()
 

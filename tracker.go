@@ -260,7 +260,7 @@ func (t *Tracker) doTrackEthUSDT() {
 	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
-		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d], current users [%d]",
-			reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber, len(t.db.GetUsers()))
+		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d], current total users [%d], dirty users [%d]",
+			reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber, len(t.db.GetUsers()), t.db.GetDirtyUsersCount())
 	}
 }

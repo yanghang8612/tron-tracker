@@ -14,17 +14,16 @@ type Phisher struct {
 }
 
 type EthUSDTUser struct {
-	ID           uint   `gorm:"primaryKey"`
-	Address      string `gorm:"size:42;index"`
-	Amount       uint64 `gorm:"index"`
-	LastUpdateAt uint64 `gorm:"index"`
-	TransferIn   uint
-	TransferOut  uint
+	ID          uint   `gorm:"primaryKey"`
+	Address     string `gorm:"size:42;index"`
+	Amount      uint64 `gorm:"index"`
+	TransferIn  uint
+	TransferOut uint
+	Dirty       bool `gorm:"-:all"`
 }
 
 func (e *EthUSDTUser) Add(o *EthUSDTUser) {
 	e.Amount += o.Amount
-	e.LastUpdateAt = o.LastUpdateAt
 	e.TransferIn += o.TransferIn
 	e.TransferOut += o.TransferOut
 }

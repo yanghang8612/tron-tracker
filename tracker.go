@@ -268,7 +268,9 @@ func (t *Tracker) doTrackEthUSDT() {
 		}
 	}
 
-	// t.db.SetLastTrackedEthBlockNum(trackedBlockNum + n)
+	if len(ethLogs) == 0 {
+		t.db.SetLastTrackedEthBlockNum(trackedBlockNum + n)
+	}
 
 	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()

@@ -11,6 +11,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/go-resty/resty/v2"
+	jsoniter "github.com/json-iterator/go"
 	"go.uber.org/zap"
 	"tron-tracker/types"
 	"tron-tracker/utils"
@@ -122,10 +123,37 @@ func EthGetHeaderByNumber(blockNumber uint64) (*ethtypes.Header, error) {
 }
 
 func EthGetLogs(fromBlock, toBlock uint64, address common.Address, topics [][]common.Hash) ([]ethtypes.Log, error) {
-	return ethClient.FilterLogs(context.Background(), ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(fromBlock),
-		ToBlock:   new(big.Int).SetUint64(toBlock),
-		Addresses: []common.Address{address},
-		Topics:    topics,
-	})
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "eth_getLogs",
+		"params": []interface{}{
+			map[string]interface{}{
+				"fromBlock": "0x" + strconv.FormatUint(fromBlock, 16),
+				"toBlock":   "0x" + strconv.FormatUint(toBlock, 16),
+				"address":   address,
+				"topics":    topics,
+			},
+		},
+		"id": 1,
+	}
+
+	resp, err := client.R().
+		SetHeader("Content-Type", "application/json").
+		SetBody(payload).Post(EthJsonRpcEndpoint)
+
+	if err != nil {
+		return nil, err
+	}
+
+	var respStruct struct {
+		Result []ethtypes.Log `json:"result"`
+	}
+
+	var json = jsoniter.ConfigCompatibleWithStandardLibrary
+	err = json.Unmarshal(resp.Body(), &respStruct)
+	if err != nil {
+		return nil, err
+	}
+
+	return respStruct.Result, nil
 }

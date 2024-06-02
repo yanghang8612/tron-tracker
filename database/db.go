@@ -694,6 +694,10 @@ func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
 	if db.dirtyUserCount >= 8_000_000 {
 		db.flushUserToDB(false)
 	}
+
+	if log.BlockNumber != db.lastTrackedEthBlockNum {
+		db.SetLastTrackedEthBlockNum(log.BlockNumber)
+	}
 }
 
 func (db *RawDB) GetUsers() map[common.Address]*models.EthUSDTUser {

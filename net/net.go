@@ -18,7 +18,8 @@ import (
 
 const (
 	BaseUrl                    = "http://localhost:8088/"
-	ETHJsonRpcUrl              = "http://localhost:8545/"
+	EthJsonRpcEndpoint         = "http://localhost:8545/"
+	EthIPCEndpoint             = "/data/ethereum/execution/data/geth.ipc"
 	EtherScan                  = "https://api.etherscan.io/"
 	GetBlockPath               = "wallet/getblockbynum?num="
 	GetNowBlockPath            = "wallet/getnowblock"
@@ -32,7 +33,7 @@ var (
 
 func init() {
 	var err error
-	ethClient, err = ethclient.Dial(ETHJsonRpcUrl)
+	ethClient, err = ethclient.Dial(EthIPCEndpoint)
 	if err != nil {
 		zap.S().Error(err)
 	}

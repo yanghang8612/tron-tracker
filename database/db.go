@@ -176,13 +176,13 @@ func New(config *Config) *RawDB {
 	}
 
 	// rawDB.loadChargers()
-	rawDB.loadUsers()
-	if rawDB.lastTrackedEthBlockNum == 4634748 {
-		rawDB.users[common.HexToAddress("0x36928500bc1dcd7af6a2b4008875cc336b927d57")] = &models.EthUSDTUser{
-			Amount: 100000000000,
-		}
-	}
-	rawDB.updateDayStat(rawDB.lastTrackedEthBlockNum)
+	// rawDB.loadUsers()
+	// if rawDB.lastTrackedEthBlockNum == 4634748 {
+	// 	rawDB.users[common.HexToAddress("0x36928500bc1dcd7af6a2b4008875cc336b927d57")] = &models.EthUSDTUser{
+	// 		Amount: 100000000000,
+	// 	}
+	// }
+	// rawDB.updateDayStat(rawDB.lastTrackedEthBlockNum)
 
 	return rawDB
 }

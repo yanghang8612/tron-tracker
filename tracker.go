@@ -79,7 +79,7 @@ func (t *Tracker) loop() {
 			return
 		default:
 			t.doTrackBlock()
-			t.doTrackEthUSDT()
+			// t.doTrackEthUSDT()
 		}
 	}
 }

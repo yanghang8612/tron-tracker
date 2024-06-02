@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	http.ListenAndServe(":8080", nil)
+	go http.ListenAndServe(":8080", nil)
 
 	cfg := loadConfig()
 

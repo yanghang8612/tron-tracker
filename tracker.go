@@ -232,7 +232,7 @@ func (t *Tracker) doTrackEthUSDT() {
 	r := 1
 	if nowBlockNumber-trackedBlockNum > 1000 {
 		n = 100
-		r = 10
+		r = 3
 	} else if nowBlockNumber == trackedBlockNum {
 		time.Sleep(1 * time.Second)
 		return

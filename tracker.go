@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
@@ -228,59 +227,50 @@ func (t *Tracker) doTrackEthUSDT() {
 
 	trackedBlockNum := t.db.GetLastTrackedEthBlockNum()
 
-	n := 1
-	r := 1
-	if nowBlockNumber-trackedBlockNum > 1000 {
-		n = 100
-		r = 3
+	n := uint64(1)
+	if nowBlockNumber-trackedBlockNum > 100 {
+		n = uint64(100)
 	} else if nowBlockNumber == trackedBlockNum {
 		time.Sleep(1 * time.Second)
 		return
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(r)
-	logsMap := map[int][]ethtypes.Log{}
-	for i := 0; i < r; i++ {
-		go func(index int, startBlockNum uint64) {
-			ethLogs, _ := net.EthGetLogs(
-				startBlockNum+1,
-				startBlockNum+uint64(n),
-				common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
-				[][]common.Hash{{
-					common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
-					common.HexToHash("0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"), // Issue(uint256)
-					common.HexToHash("0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44"), // Redeem(uint256)
-					common.HexToHash("0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6"), // DestroyedBlackFunds(address,uint256)
-				}})
-			logsMap[index] = ethLogs
-			wg.Done()
-		}(i, trackedBlockNum+uint64(i*n))
+	ethLogs, err := net.EthGetLogs(
+		trackedBlockNum+1,
+		trackedBlockNum+n,
+		common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7"),
+		[][]common.Hash{{
+			common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"), // Transfer(address,address,uint256)
+			common.HexToHash("0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a"), // Issue(uint256)
+			common.HexToHash("0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44"), // Redeem(uint256)
+			common.HexToHash("0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6"), // DestroyedBlackFunds(address,uint256)
+		}})
+
+	if err != nil {
+		time.Sleep(12 * time.Second)
+		return
 	}
-	wg.Wait()
 
-	for i := 0; i < r; i++ {
-		for _, log := range logsMap[i] {
-			t.db.ProcessEthUSDTTransferLog(log)
+	for _, log := range ethLogs {
+		t.db.ProcessEthUSDTTransferLog(log)
 
-			if log.Topics[0].Hex() != "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
-				var logType string
-				switch log.Topics[0].Hex() {
-				case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
-					logType = "Issue"
-				case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
-					logType = "Redeem"
-				case "0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6":
-					logType = "DestroyedBlackFunds"
-				}
-				t.logger.Infof("%s log found: %s", logType, log.TxHash.Hex())
+		if log.Topics[0].Hex() != "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
+			var logType string
+			switch log.Topics[0].Hex() {
+			case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
+				logType = "Issue"
+			case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
+				logType = "Redeem"
+			case "0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6":
+				logType = "DestroyedBlackFunds"
 			}
+			t.logger.Infof("%s log found: %s", logType, log.TxHash.Hex())
 		}
 	}
 
 	// t.db.SetLastTrackedEthBlockNum(trackedBlockNum + n)
 
-	if shouldReport, reportContent := t.ethReporter.Add(r * n); shouldReport {
+	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
 		t.logger.Infof("%s, tracking from [%d] to [%d], left [%d], current total/dirty users [%d/%d]",

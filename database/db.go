@@ -484,8 +484,6 @@ func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
 
 		db.updateDayStat(blockNum)
 	}
-
-	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(blockNum)))
 }
 
 func (db *RawDB) updateDayStat(blockNum uint64) {
@@ -1542,6 +1540,10 @@ func (db *RawDB) flushChargerToDB() {
 }
 
 func (db *RawDB) flushUserToDB(force bool) {
+	if force {
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(db.lastTrackedEthBlockNum)))
+	}
+
 	db.logger.Infof("Start saving users to DB, total [%d]", len(db.users))
 	savedCount := 0
 	usersToSave := make([]*models.EthUSDTUser, 0)

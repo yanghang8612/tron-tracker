@@ -257,8 +257,8 @@ func (t *Tracker) doTrackEthUSDT() {
 	}
 	wg.Wait()
 
-	for _, logs := range logsMap {
-		for _, log := range logs {
+	for i := 0; i < 10; i++ {
+		for _, log := range logsMap[i] {
 			t.db.ProcessEthUSDTTransferLog(log)
 
 			if log.Topics[0].Hex() != "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {

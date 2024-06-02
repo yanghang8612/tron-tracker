@@ -34,10 +34,10 @@ func New(db *database.RawDB) *Tracker {
 
 		isCatching: true,
 		reporter: utils.NewReporter(1000, 60*time.Second, 0, func(rs utils.ReporterState) string {
-			return fmt.Sprintf("Tracked [%d] TRON blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+			return fmt.Sprintf("Tracked [%d] TRON blocks in [%.2fs], speed [%.2fblks/s]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 		ethReporter: utils.NewReporter(10000, 60*time.Second, 0, func(rs utils.ReporterState) string {
-			return fmt.Sprintf("Tracked [%d] ETH blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
+			return fmt.Sprintf("Tracked [%d] ETH blocks in [%.2fs], speed [%.2fblks/s]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 
 		quitCh: make(chan struct{}),
@@ -260,7 +260,7 @@ func (t *Tracker) doTrackEthUSDT() {
 	if shouldReport, reportContent := t.ethReporter.Add(int(n)); shouldReport {
 		nowBlockNumber, _ := net.EthBlockNumber()
 		trackedBlockNumber := t.db.GetLastTrackedEthBlockNum()
-		t.logger.Infof("%s, tracking progress [%d] => [%d], left blocks [%d], current total users [%d], dirty users [%d]",
+		t.logger.Infof("%s, tracking from [%d] to [%d], left [%d], current total/dirty users [%d/%d]",
 			reportContent, trackedBlockNumber, nowBlockNumber, nowBlockNumber-trackedBlockNumber, len(t.db.GetUsers()), t.db.GetDirtyUsersCount())
 	}
 }

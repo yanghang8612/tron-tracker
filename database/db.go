@@ -849,11 +849,11 @@ func (db *RawDB) countLoop() {
 
 			if trackingDate.Sub(countedDate).Hours() > 24 {
 				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
-				db.countForDate(dateToCount)
+				// db.countForDate(dateToCount)
 				db.countedDate = dateToCount
 
 				if countedDate.Weekday() == time.Saturday {
-					db.countTRXPhishingForWeek(db.countedWeek)
+					// db.countTRXPhishingForWeek(db.countedWeek)
 					db.countUSDTPhishingForWeek(db.countedWeek)
 					db.countedWeek = db.countForWeek(db.countedWeek)
 				}

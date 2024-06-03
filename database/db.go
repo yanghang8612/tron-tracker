@@ -876,6 +876,10 @@ func (db *RawDB) countForDate(date string) {
 
 	result := db.db.Table("transactions_"+date).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 		for _, result := range results {
+			if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+				continue
+			}
+
 			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 			if result.Name == "TRX" {
 				if _, ok := TRXStats[typeName]; !ok {
@@ -1417,7 +1421,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					continue
 				}
 
-				if len(amountStr) >= 10 {
+				// 10 000 000
+				if len(amountStr) >= 8 {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
 					USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
 					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
@@ -1497,6 +1502,10 @@ func (db *RawDB) countForWeek(startDate string) string {
 	for generateWeek(countingDate) == week {
 		// result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 		// 	for _, result := range results {
+		// 		if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+		// 			continue
+		// 		}
+		//
 		// 		typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 		// 		if result.Name == "TRX" {
 		// 			if _, ok := TRXStats[typeName]; !ok {

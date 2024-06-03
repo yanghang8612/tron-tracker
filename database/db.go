@@ -1417,7 +1417,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					continue
 				}
 
-				if len(amountStr) >= 7 {
+				if len(amountStr) >= 10 {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
 					USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
 					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
@@ -1468,7 +1468,7 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) 
 
 		gap := ts - stat.transferOut[interactedAddr]
 
-		return addr != interactedAddr && gap < 60*60
+		return addr != interactedAddr && gap < 24*60*60
 	} else {
 		if _, ok := stat.inFingerPoints[fp]; !ok {
 			return false
@@ -1478,7 +1478,7 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) 
 
 		gap := ts - stat.transferIn[interactedAddr]
 
-		return addr != interactedAddr && gap < 60*60
+		return addr != interactedAddr && gap < 24*60*60
 	}
 }
 

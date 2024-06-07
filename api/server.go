@@ -67,6 +67,7 @@ func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
+	s.router.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
 	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
 	s.router.GET("/special_statistics", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
@@ -228,6 +229,31 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	result.WriteString("\n")
 
 	c.String(200, result.String())
+}
+
+func (s *Server) exchangesTokenDailyStatistic(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "date")
+	if !ok {
+		return
+	}
+
+	etsMap := s.db.GetExchangeTokenStatisticsByDateAndDays(startDate, 1)
+
+	token, ok := getStringParam(c, "token")
+
+	if !ok {
+		c.JSON(200, etsMap)
+		return
+	}
+
+	resultMap := make(map[string]*models.ExchangeStatistic)
+	for exchange, ets := range etsMap {
+		if es, ok := ets[token]; ok {
+			resultMap[exchange] = es
+		}
+	}
+
+	c.JSON(200, resultMap)
 }
 
 func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {

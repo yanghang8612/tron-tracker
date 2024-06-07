@@ -2,7 +2,6 @@ package database
 
 import (
 	"bufio"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"os"
@@ -12,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
@@ -69,10 +66,6 @@ type RawDB struct {
 	chargersLock             sync.RWMutex
 	chargersToSave           map[string]*models.Charger
 
-	users          map[common.Address]*models.EthUSDTUser
-	dirtyUserCount int
-	ethUSDTDayStat *models.ERC20Statistic
-
 	usdtPhishingRelations map[string]bool
 
 	trackingDate string
@@ -94,11 +87,6 @@ func New(config *Config) *RawDB {
 		SkipDefaultTransaction: true,
 		Logger:                 logger.Discard,
 	})
-	if dbErr != nil {
-		panic(dbErr)
-	}
-
-	dbErr = db.AutoMigrate(&models.EthUSDTUser{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
@@ -161,7 +149,6 @@ func New(config *Config) *RawDB {
 		isTableMigrated:        make(map[string]bool),
 		chargers:               make(map[string]*models.Charger),
 		chargersToSave:         make(map[string]*models.Charger),
-		users:                  make(map[common.Address]*models.EthUSDTUser),
 
 		usdtPhishingRelations: make(map[string]bool),
 
@@ -176,13 +163,6 @@ func New(config *Config) *RawDB {
 	}
 
 	// rawDB.loadChargers()
-	// rawDB.loadUsers()
-	// if rawDB.lastTrackedEthBlockNum == 4634748 {
-	// 	rawDB.users[common.HexToAddress("0x36928500bc1dcd7af6a2b4008875cc336b927d57")] = &models.EthUSDTUser{
-	// 		Amount: 100000000000,
-	// 	}
-	// }
-	// rawDB.updateDayStat(rawDB.lastTrackedEthBlockNum)
 
 	return rawDB
 }
@@ -254,28 +234,6 @@ func (db *RawDB) loadChargers() {
 	}
 }
 
-func (db *RawDB) loadUsers() {
-	db.logger.Info("Start loading users from db")
-
-	report := make(map[int]bool)
-	users := make([]*models.EthUSDTUser, 0)
-	result := db.db.FindInBatches(&users, 100, func(_ *gorm.DB, _ int) error {
-		for _, user := range users {
-			db.users[common.HexToAddress(user.Address)] = user
-			user.Address = ""
-		}
-
-		phase := len(db.users) / 200_000
-		if _, ok := report[phase]; !ok {
-			report[phase] = true
-			db.logger.Infof("Loaded [%d] users from db", len(db.users))
-		}
-
-		return nil
-	})
-	db.logger.Infof("Loaded [%d] of [%d] users from db", len(db.users), result.RowsAffected)
-}
-
 func (db *RawDB) Start() {
 	db.logger.Infof("RawDB start, tron block [%d], eth block [%d]", db.lastTrackedBlockNum, db.lastTrackedEthBlockNum)
 
@@ -289,7 +247,6 @@ func (db *RawDB) Close() {
 	db.loopWG.Wait()
 
 	db.flushChargerToDB()
-	db.flushUserToDB(true)
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
@@ -469,50 +426,6 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
 }
 
-func (db *RawDB) SetLastTrackedEthBlockNum(blockNum uint64) {
-	db.lastTrackedEthBlockNum = blockNum
-
-	if blockNum >= db.nextDaysStartEthBlockNum {
-		actualHolders := 0
-		for _, user := range db.users {
-			if user.Amount > 0 {
-				actualHolders += 1
-			}
-		}
-		db.ethUSDTDayStat.HistoricalHolder = len(db.users)
-		db.ethUSDTDayStat.ActualHolder = actualHolders
-		db.db.Save(db.ethUSDTDayStat)
-
-		db.updateDayStat(blockNum)
-	}
-}
-
-func (db *RawDB) updateDayStat(blockNum uint64) {
-	header, _ := net.EthGetHeaderByNumber(blockNum)
-	date := generateDate(int64(header.Time))
-
-	db.ethUSDTDayStat = &models.ERC20Statistic{
-		Date:    date,
-		Address: "0xdac17f958d2ee523a2206206994597c13d831ec7",
-	}
-
-	ts, _ := time.Parse("060102", date)
-	nextDay := ts.AddDate(0, 0, 1)
-	nextDayBlockNum := uint64(0)
-	for i := 0; i < 3; i++ {
-		result, _ := net.EthBlockNumberByTime(nextDay.Unix())
-		if result == 0 {
-			time.Sleep(200 * time.Millisecond)
-		} else {
-			nextDayBlockNum = result
-			break
-		}
-	}
-
-	db.nextDaysStartEthBlockNum = nextDayBlockNum
-	db.logger.Infof("Next day [%s] start eth block num [%d]", nextDay.Format("060102"), nextDayBlockNum)
-}
-
 func (db *RawDB) updateExchanges() {
 	if time.Now().Sub(db.elUpdatedAt) < 1*time.Hour {
 		return
@@ -634,89 +547,6 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 	if len(db.chargersToSave) >= 200 {
 		db.flushChargerToDB()
 	}
-}
-
-func (db *RawDB) ProcessEthUSDTTransferLog(log ethtypes.Log) {
-	var (
-		from      common.Address
-		to        common.Address
-		emtpyFrom bool
-		emptyTo   bool
-		amount    uint64
-	)
-
-	switch log.Topics[0].Hex() {
-	case "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef":
-		from = common.BytesToAddress(log.Topics[1].Bytes())
-		to = common.BytesToAddress(log.Topics[2].Bytes())
-		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
-	case "0xcb8241adb0c3fdb35b70c24ce35c5eb0c17af7431c99f827d44a445ca624176a":
-		emtpyFrom = true
-		to = common.HexToAddress("0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828")
-		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
-	case "0x702d5967f45f6513a38ffc42d6ba9bf230bd40e8f53b16363c7eb4fd2deb9a44":
-		from = common.HexToAddress("0xc6cde7c39eb2f0f0095f41570af89efc2c1ea828")
-		emptyTo = true
-		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data)).Uint64()
-	case "0x61e6e66b0d6339b2980aecc6ccc0039736791f0ccde9ed512e789a7fbdd698c6":
-		from = common.BytesToAddress(log.Data[12:32])
-		emptyTo = true
-		amount = utils.ConvertHexToBigInt(hex.EncodeToString(log.Data[32:])).Uint64()
-	}
-
-	if !emtpyFrom {
-		if _, ok := db.users[from]; !ok {
-			// Actually this can not happen
-			db.users[from] = &models.EthUSDTUser{}
-		}
-
-		db.users[from].Amount -= amount
-
-		if !emptyTo && db.users[from].TransferOut == 0 {
-			db.ethUSDTDayStat.NewFrom += 1
-		}
-		db.users[from].TransferOut += 1
-
-		if !db.users[from].Dirty {
-			db.users[from].Dirty = true
-			db.dirtyUserCount += 1
-		}
-
-		if db.users[from].Amount < 0 {
-			db.logger.Warnf("User [%s] has negative amount [%d], tx [%s]", from, db.users[from].Amount, log.TxHash)
-		}
-	}
-
-	if !emptyTo {
-		if _, ok := db.users[to]; !ok {
-			db.users[to] = &models.EthUSDTUser{}
-			db.ethUSDTDayStat.NewTo += 1
-		}
-
-		db.users[to].Amount += amount
-		db.users[to].TransferIn += 1
-
-		if !db.users[to].Dirty {
-			db.users[to].Dirty = true
-			db.dirtyUserCount += 1
-		}
-	}
-
-	if db.dirtyUserCount >= 8_000_000 {
-		db.flushUserToDB(false)
-	}
-
-	if log.BlockNumber != db.lastTrackedEthBlockNum {
-		db.SetLastTrackedEthBlockNum(log.BlockNumber)
-	}
-}
-
-func (db *RawDB) GetUsers() map[common.Address]*models.EthUSDTUser {
-	return db.users
-}
-
-func (db *RawDB) GetDirtyUsersCount() int {
-	return db.dirtyUserCount
 }
 
 func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
@@ -1422,7 +1252,7 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 				}
 
 				// 10 000 000
-				if len(amountStr) >= 8 {
+				if len(amountStr) >= 8 || amountStr == "1000000" {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
 					USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
 					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
@@ -1559,42 +1389,6 @@ func (db *RawDB) flushChargerToDB() {
 	}
 	db.db.Save(chargers)
 	db.chargersToSave = make(map[string]*models.Charger)
-}
-
-func (db *RawDB) flushUserToDB(force bool) {
-	if force {
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackedEthBlockNumKey}).Update("val", strconv.Itoa(int(db.lastTrackedEthBlockNum)))
-	}
-
-	db.logger.Infof("Start saving users to DB, total [%d]", len(db.users))
-	savedCount := 0
-	usersToSave := make([]*models.EthUSDTUser, 0)
-	for addr, user := range db.users {
-		// If user is clean, then skip them
-		if !user.Dirty || !force && user.Amount > 0 {
-			continue
-		}
-
-		user.Address = addr.Hex()
-		usersToSave = append(usersToSave, user)
-		if len(usersToSave) == 100 {
-			db.db.Save(usersToSave)
-			for _, u := range usersToSave {
-				u.Address = ""
-				u.Dirty = false
-				db.dirtyUserCount -= 1
-			}
-			usersToSave = make([]*models.EthUSDTUser, 0)
-		}
-		savedCount += 1
-
-		if savedCount%200_000 == 0 {
-			db.logger.Infof("Saved %d users to DB", savedCount)
-		}
-	}
-	db.db.Save(usersToSave)
-	savedCount += len(usersToSave)
-	db.logger.Infof("Finish saving [%d] users, total %d", savedCount, len(db.users))
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

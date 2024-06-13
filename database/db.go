@@ -564,26 +564,24 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 
 	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
+	weeklyUsersFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
+	if err != nil {
+		db.logger.Info("Weekly file has`t been created yet")
+		return
+	}
+	defer weeklyUsersFile.Close()
+
 	statsResultFilePath := fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday)
 	if _, err := os.Stat(statsResultFilePath); err == nil && !override {
 		return
 	}
 
 	statsResultFile, err := os.Create(statsResultFilePath)
-	defer statsResultFile.Close()
-
 	if err != nil {
 		db.logger.Errorf("Create stats file error: [%s]", err.Error())
 		return
 	}
-
-	weeklyUsersFile, err := os.Open(fmt.Sprintf("tronlink/week%s.txt", thisMonday))
-	defer weeklyUsersFile.Close()
-
-	if err != nil {
-		db.logger.Info("Weekly file has`t been created yet")
-		return
-	}
+	defer statsResultFile.Close()
 
 	scanner := bufio.NewScanner(weeklyUsersFile)
 

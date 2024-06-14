@@ -719,7 +719,7 @@ func (db *RawDB) countChargeAndWithdraw(startDate string) {
 	for countingDate != time.Now().Format("060102") {
 		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
-				if db.el.Contains(result.FromAddr) && db.chargers[result.ToAddr] != nil {
+				if db.el.Contains(result.FromAddr) && db.chargers[result.ToAddr] != nil && !utils.IsSameExchange(db.el.Get(result.FromAddr).Name, db.chargers[result.ToAddr].ExchangeName) {
 					db.logger.Infof("Found ChargeAndWithdraw Transactions for date [%s], tx hash [%s]", countingDate, result.Hash)
 					dayFee += result.Fee
 				}

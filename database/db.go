@@ -713,6 +713,7 @@ func (db *RawDB) countChargeAndWithdraw(startDate string) {
 	var (
 		countingDate = startDate
 		dayFee       = int64(0)
+		dayTxs       = 0
 		results      = make([]*models.Transaction, 0)
 	)
 
@@ -722,13 +723,14 @@ func (db *RawDB) countChargeAndWithdraw(startDate string) {
 				if db.el.Contains(result.FromAddr) && db.chargers[result.ToAddr] != nil && !utils.IsSameExchange(db.el.Get(result.FromAddr).Name, db.chargers[result.ToAddr].ExchangeName) {
 					db.logger.Infof("Found ChargeAndWithdraw Transactions for date [%s], tx hash [%s]", countingDate, result.Hash)
 					dayFee += result.Fee
+					dayTxs++
 				}
 			}
 
 			return nil
 		})
 
-		db.logger.Infof("Finish counting ChargeAndWithdraw Transactions for date [%s], total counted txs [%d], fee [%d]", countingDate, result.RowsAffected, dayFee)
+		db.logger.Infof("Finish counting ChargeAndWithdraw Transactions for date [%s], total counted txs [%d], txs [%d], fee [%d]", countingDate, result.RowsAffected, dayTxs, dayFee)
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")

@@ -694,9 +694,47 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
+			db.countChargeAndWithdraw("240527")
+
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+var isDone bool
+
+func (db *RawDB) countChargeAndWithdraw(startDate string) {
+	if isDone {
+		return
+	}
+
+	db.logger.Info("Start counting ChargeAndWithdraw Transactions")
+
+	var (
+		countingDate = startDate
+		dayFee       = int64(0)
+		results      = make([]*models.Transaction, 0)
+	)
+
+	for countingDate != time.Now().Format("060102") {
+		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+			for _, result := range results {
+				if db.el.Contains(result.FromAddr) && db.chargers[result.ToAddr] != nil {
+					db.logger.Infof("Found ChargeAndWithdraw Transactions for date [%s], tx hash [%s]", countingDate, result.Hash)
+					dayFee += result.Fee
+				}
+			}
+
+			return nil
+		})
+
+		db.logger.Infof("Finish counting ChargeAndWithdraw Transactions for date [%s], total counted txs [%d], fee [%d]", countingDate, result.RowsAffected, dayFee)
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	isDone = true
 }
 
 func (db *RawDB) countForDate(date string) {

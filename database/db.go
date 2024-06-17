@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1110,8 +1111,6 @@ func newUSDTStatistic() *USDTStatistic {
 	}
 }
 
-const FpSize = 5
-
 func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 	week := generateWeek(startDate)
 	db.logger.Infof("Start counting Phishing USDT Transactions for week [%s], start date [%s]", week, startDate)
@@ -1202,14 +1201,14 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 						db.usdtPhishingRelations[fromAddr+toAddr] = true
 
-						imitator := USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]]
-						db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] hash-[%s] imitator-[%s] amount-[%s]",
+						imitator := USDTStats[fromAddr].outFingerPoints[getFp(toAddr)]
+						db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] hash-[%s] amount-[%s]",
 							countingDate, fromAddr, toAddr, imitator, result.Hash, amountStr)
 					}
 					continue
 				}
 
-				if len(amountStr) <= 7 && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
+				if isPhishingAmount(amountStr) && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
 					isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], false)) {
 					dayPhishCount += 1
 					dayUSDTCost += result.Amount.Int64()
@@ -1225,8 +1224,9 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 
 					db.usdtPhishingRelations[toAddr+fromAddr] = true
 
-					in := USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]]
-					out := USDTStats[toAddr].outFingerPoints[fromAddr[34-FpSize:]]
+					fromFp := getFp(fromAddr)
+					in := USDTStats[toAddr].inFingerPoints[fromFp]
+					out := USDTStats[toAddr].outFingerPoints[fromFp]
 					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
 						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
 					continue
@@ -1243,8 +1243,9 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					weekSuccessPhisherMap[toAddr] = true
 					weekSuccessAmount += result.Amount.Int64()
 
-					in := USDTStats[fromAddr].inFingerPoints[toAddr[34-FpSize:]]
-					out := USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]]
+					toFp := getFp(toAddr)
+					in := USDTStats[fromAddr].inFingerPoints[toFp]
+					out := USDTStats[fromAddr].outFingerPoints[toFp]
 					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
 						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
 					db.logger.Infof("Success: %s %s %s %s %f", countingDate, fromAddr, toAddr, result.Hash, float64(result.Amount.Int64())/1e6)
@@ -1252,11 +1253,11 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 				}
 
 				// 10 000 000
-				if len(amountStr) >= 8 || amountStr == "1000000" {
+				if len(amountStr) >= 7 {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
-					USDTStats[fromAddr].outFingerPoints[toAddr[34-FpSize:]] = toAddr
+					USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
 					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
-					USDTStats[toAddr].inFingerPoints[fromAddr[34-FpSize:]] = fromAddr
+					USDTStats[toAddr].inFingerPoints[getFp(fromAddr)] = fromAddr
 				}
 			}
 
@@ -1291,8 +1292,20 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 		weekSuccessPhishCount, len(weekSuccessVictimsMap), weekSuccessAmount/1e6)
 }
 
+func isPhishingAmount(amount string) bool {
+	if len(amount) <= 6 {
+		return true
+	}
+
+	if len(amount) == 7 && amount < "3000000" {
+		return true
+	}
+
+	return false
+}
+
 func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) bool {
-	fp := addr[34-FpSize:]
+	fp := getFp(addr)
 
 	if isPhishingOut {
 		if _, ok := stat.outFingerPoints[fp]; !ok {
@@ -1315,6 +1328,16 @@ func isPhishing(addr string, ts int64, stat *USDTStatistic, isPhishingOut bool) 
 
 		return addr != interactedAddr && gap < 24*60*60
 	}
+}
+
+const FpSize = 5
+
+func getFp(addr string) string {
+	fp := []byte(addr[34-FpSize:])
+	sort.Slice(fp, func(i, j int) bool {
+		return fp[i] < fp[j]
+	})
+	return string(fp)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {

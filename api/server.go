@@ -393,7 +393,7 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 
 	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
 
-	statsResultFile, err := os.Open(fmt.Sprintf("tronlink/week%s_stats.txt", thisMonday))
+	statsResultFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s_stats.txt", thisMonday))
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":    500,

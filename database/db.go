@@ -1297,7 +1297,7 @@ func isPhishingAmount(amount string) bool {
 		return true
 	}
 
-	if len(amount) == 7 && amount < "3000000" {
+	if len(amount) == 7 && amount[6] != '0' {
 		return true
 	}
 

@@ -1260,8 +1260,8 @@ func (db *RawDB) countUSDTPhishingForWeek(startDate string) {
 					continue
 				}
 
-				// 100 000 000
-				if len(amountStr) >= 9 || amountStr == "1000000" || amountStr == "5000000" {
+				// 1 000 000
+				if len(amountStr) >= 7 && amountStr[len(amountStr)-1] == '0' {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
 					USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
 					USDTStats[fromAddr].outTxHashes[getFp(toAddr)] = fmt.Sprintf("%s %s %s", time.Unix(result.Timestamp, 0).Format("01-02"), result.Hash, amountStr)

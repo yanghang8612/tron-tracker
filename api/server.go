@@ -834,7 +834,7 @@ type ethStatistics struct {
 }
 
 func getEthereumDailyStats(day string) ethStatistics {
-	file, err := os.Open(day + ".log")
+	file, err := os.Open("/data/ethereum/execution/" + day + ".log")
 
 	if err != nil {
 		fmt.Println(err)

@@ -79,6 +79,7 @@ func (s *Server) Start() {
 	s.router.GET("/trx_statistics", s.trxStatistics)
 	s.router.GET("/user_statistics", s.userStatistics)
 	s.router.GET("/token_statistics", s.tokenStatistics)
+	s.router.GET("/eth_statistics", s.ethStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -781,6 +782,96 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 	resultArray = append(resultArray, TRC10Stat, NonUSDTStat)
 
 	c.JSON(200, resultArray)
+}
+
+func (s *Server) ethStatistics(c *gin.Context) {
+	date, ok := prepareDateParam(c, "date")
+	if !ok {
+		return
+	}
+
+	todayStats := getEthereumDailyStats(date.Format("060102"))
+	yesterdayStats := getEthereumDailyStats(date.AddDate(0, 0, -1).Format("060102"))
+
+	c.JSON(200, gin.H{
+		"eth_accounts":        humanize.Comma(int64(todayStats.totalAccounts)),
+		"eth_accounts_change": humanize.Comma(int64(todayStats.totalAccounts - yesterdayStats.totalAccounts)),
+		"account_db_size":     humanize.Bytes(todayStats.accountDBSize),
+		"account_db_change":   humanize.Bytes(todayStats.accountDBSize - yesterdayStats.accountDBSize),
+		"tx_db_size":          humanize.Bytes(todayStats.txDBSize),
+		"tx_db_change":        humanize.Bytes(todayStats.accountDBSize - yesterdayStats.txDBSize),
+		"total_db_size":       humanize.Bytes(todayStats.totalDBSize),
+		"total_db_change":     humanize.Bytes(todayStats.accountDBSize - yesterdayStats.totalDBSize),
+	})
+}
+
+// Helper function to convert size string to bytes
+func sizeToBytes(sizeStr string) uint64 {
+	sizeStr = strings.TrimSpace(sizeStr)
+	var multiplier uint64
+	switch {
+	case strings.HasSuffix(sizeStr, "KiB"):
+		multiplier = 1024
+	case strings.HasSuffix(sizeStr, "MiB"):
+		multiplier = 1024 * 1024
+	case strings.HasSuffix(sizeStr, "GiB"):
+		multiplier = 1024 * 1024 * 1024
+	case strings.HasSuffix(sizeStr, "TiB"):
+		multiplier = 1024 * 1024 * 1024 * 1024
+	default:
+		multiplier = 1
+	}
+	valueStr := strings.Fields(sizeStr)[0]
+	value, _ := strconv.ParseFloat(valueStr, 64)
+	return uint64(value * float64(multiplier))
+}
+
+type ethStatistics struct {
+	totalAccounts uint64
+	accountDBSize uint64
+	txDBSize      uint64
+	totalDBSize   uint64
+}
+
+func getEthereumDailyStats(day string) ethStatistics {
+	file, err := os.Open(day + ".log")
+
+	if err != nil {
+		fmt.Println(err)
+		return ethStatistics{}
+	}
+
+	var (
+		result  = ethStatistics{}
+		scanner = bufio.NewScanner(file)
+	)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.Contains(line, "store") {
+			items := strings.Split(line, "|")
+			database := items[1]
+			category := items[2]
+			size := sizeToBytes(items[3])
+			result.totalDBSize += size
+
+			if strings.Contains(database, "Key-Value") && strings.Contains(category, "Account snapshot") {
+				totalAccounts, _ := strconv.ParseUint(strings.TrimSpace(items[4]), 10, 64)
+				result.totalAccounts += totalAccounts
+			}
+
+			if strings.Contains(database, "Key-Value") && strings.Contains(category, "Path trie account nodes") {
+				result.accountDBSize = size
+			}
+
+			if strings.Contains(database, "Ancient") && strings.Contains(category, "Bodies") {
+				result.txDBSize = size
+			}
+		}
+	}
+
+	return result
 }
 
 func prepareDateParam(c *gin.Context, name string) (time.Time, bool) {

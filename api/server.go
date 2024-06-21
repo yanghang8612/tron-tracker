@@ -798,10 +798,12 @@ func (s *Server) ethStatistics(c *gin.Context) {
 		"eth_accounts_change": humanize.Comma(int64(todayStats.totalAccounts - yesterdayStats.totalAccounts)),
 		"account_db_size":     humanize.Bytes(todayStats.accountDBSize),
 		"account_db_change":   humanize.Bytes(todayStats.accountDBSize - yesterdayStats.accountDBSize),
+		"eth_txs":             humanize.Comma(int64(todayStats.totalTxs)),
+		"eth_txs_change":      humanize.Comma(int64(todayStats.totalTxs - yesterdayStats.totalTxs)),
 		"tx_db_size":          humanize.Bytes(todayStats.txDBSize),
-		"tx_db_change":        humanize.Bytes(todayStats.accountDBSize - yesterdayStats.txDBSize),
+		"tx_db_change":        humanize.Bytes(todayStats.txDBSize - yesterdayStats.txDBSize),
 		"total_db_size":       humanize.Bytes(todayStats.totalDBSize),
-		"total_db_change":     humanize.Bytes(todayStats.accountDBSize - yesterdayStats.totalDBSize),
+		"total_db_change":     humanize.Bytes(todayStats.totalDBSize - yesterdayStats.totalDBSize),
 	})
 }
 
@@ -829,6 +831,7 @@ func sizeToBytes(sizeStr string) uint64 {
 type ethStatistics struct {
 	totalAccounts uint64
 	accountDBSize uint64
+	totalTxs      uint64
 	txDBSize      uint64
 	totalDBSize   uint64
 }
@@ -858,11 +861,16 @@ func getEthereumDailyStats(day string) ethStatistics {
 
 			if strings.Contains(database, "Key-Value") && strings.Contains(category, "Account snapshot") {
 				totalAccounts, _ := strconv.ParseUint(strings.TrimSpace(items[4]), 10, 64)
-				result.totalAccounts += totalAccounts
+				result.totalAccounts = totalAccounts
 			}
 
 			if strings.Contains(database, "Key-Value") && strings.Contains(category, "Path trie account nodes") {
 				result.accountDBSize = size
+			}
+
+			if strings.Contains(database, "Key-Value") && strings.Contains(category, "Transaction index") {
+				totalTxs, _ := strconv.ParseUint(strings.TrimSpace(items[4]), 10, 64)
+				result.totalTxs = totalTxs
 			}
 
 			if strings.Contains(database, "Ancient") && strings.Contains(category, "Bodies") {

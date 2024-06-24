@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -16,6 +14,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
 	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"tron-tracker/database"
@@ -815,21 +814,17 @@ func (s *Server) tronStatistics(c *gin.Context) {
 }
 
 func (s *Server) forward(c *gin.Context) {
-	remote, err := url.Parse("http://localhost:8088")
+	client := resty.New()
+	resp, err := client.R().Get("http://localhost:8088/wallet/getaddressandtx?" + c.Request.URL.RawQuery)
 	if err != nil {
-		panic(err)
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": err.Error(),
+		})
+		return
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(remote)
-	proxy.Director = func(req *http.Request) {
-		req.Header = c.Request.Header
-		req.Host = remote.Host
-		req.URL.Scheme = remote.Scheme
-		req.URL.Host = remote.Host
-		req.URL.Path = "/wallet/getaddressandtx"
-	}
-
-	proxy.ServeHTTP(c.Writer, c.Request)
+	c.Data(200, "application/json", resp.Body())
 }
 
 // Helper function to convert size string to bytes

@@ -809,10 +809,6 @@ func (s *Server) ethStatistics(c *gin.Context) {
 	})
 }
 
-func (s *Server) tronStatistics(c *gin.Context) {
-	c.Redirect(http.StatusMovedPermanently, "http://127.0.0.1:8088/wallet/getaddressandtx")
-}
-
 func (s *Server) forward(c *gin.Context) {
 	client := resty.New()
 	resp, err := client.R().Get("http://localhost:8088/wallet/getaddressandtx?" + c.Request.URL.RawQuery)

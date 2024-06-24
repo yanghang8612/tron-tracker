@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"sort"
 	"strconv"
@@ -80,7 +82,7 @@ func (s *Server) Start() {
 	s.router.GET("/user_statistics", s.userStatistics)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
-	s.router.GET("/tron_statistics", s.tronStatistics)
+	s.router.GET("/tron_statistics", s.forward)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -810,6 +812,24 @@ func (s *Server) ethStatistics(c *gin.Context) {
 
 func (s *Server) tronStatistics(c *gin.Context) {
 	c.Redirect(http.StatusMovedPermanently, "http://127.0.0.1:8088/wallet/getaddressandtx")
+}
+
+func (s *Server) forward(c *gin.Context) {
+	remote, err := url.Parse("http://localhost:8088")
+	if err != nil {
+		panic(err)
+	}
+
+	proxy := httputil.NewSingleHostReverseProxy(remote)
+	proxy.Director = func(req *http.Request) {
+		req.Header = c.Request.Header
+		req.Host = remote.Host
+		req.URL.Scheme = remote.Scheme
+		req.URL.Host = remote.Host
+		req.URL.Path = "/wallet/getaddressandtx"
+	}
+
+	proxy.ServeHTTP(c.Writer, c.Request)
 }
 
 // Helper function to convert size string to bytes

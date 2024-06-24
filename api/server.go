@@ -80,6 +80,7 @@ func (s *Server) Start() {
 	s.router.GET("/user_statistics", s.userStatistics)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
+	s.router.GET("/tron_statistics", s.tronStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -805,6 +806,10 @@ func (s *Server) ethStatistics(c *gin.Context) {
 		"total_db_size":       humanize.Bytes(todayStats.totalDBSize),
 		"total_db_change":     humanize.Bytes(todayStats.totalDBSize - yesterdayStats.totalDBSize),
 	})
+}
+
+func (s *Server) tronStatistics(c *gin.Context) {
+	c.Redirect(http.StatusMovedPermanently, "http://127.0.0.1:8088/wallet/getaddressandtx")
 }
 
 // Helper function to convert size string to bytes

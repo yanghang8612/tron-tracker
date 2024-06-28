@@ -300,6 +300,17 @@ func (o *ExchangeStatistic) AddWithdraw(stat *UserTokenStatistic) {
 	o.WithdrawEnergyUsage += stat.FromEnergyUsage
 }
 
+func (o *ExchangeStatistic) AddWithdrawFromTx(tx *Transaction) {
+	o.TotalFee += tx.Fee
+	o.WithdrawTxCount++
+	o.WithdrawFee += tx.Fee
+	o.WithdrawNetFee += tx.NetFee
+	o.WithdrawNetUsage += tx.NetUsage
+	o.WithdrawEnergyTotal += tx.EnergyTotal
+	o.WithdrawEnergyFee += tx.EnergyFee
+	o.WithdrawEnergyUsage += tx.EnergyUsage
+}
+
 type FungibleTokenStatistic struct {
 	ID            uint            `gorm:"primaryKey" json:"-"`
 	Date          string          `gorm:"size:6;index" json:"date,omitempty"`

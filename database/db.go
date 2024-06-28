@@ -356,7 +356,7 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days in
 		queryDate := date.AddDate(0, 0, i)
 
 		var dayStats []models.ExchangeStatistic
-		db.db.Where("date = ?", queryDate.Format("060102")).Find(&dayStats)
+		db.db.Where("date = ? and token <> ?", queryDate.Format("060102"), "Special").Find(&dayStats)
 
 		for _, es := range dayStats {
 			if _, ok := resultMap[es.Name]; !ok {
@@ -700,12 +700,13 @@ func (db *RawDB) countLoop() {
 }
 
 func (db *RawDB) countForDate(date string) {
-	db.logger.Infof("Start counting TRX Transactions for date [%s]", date)
+	db.logger.Infof("Start counting Transactions for date [%s]", date)
 
 	var (
-		txCount  = int64(0)
-		results  = make([]*models.Transaction, 0)
-		TRXStats = make(map[string]*models.FungibleTokenStatistic)
+		txCount              = int64(0)
+		results              = make([]*models.Transaction, 0)
+		TRXStats             = make(map[string]*models.FungibleTokenStatistic)
+		ExchangeSpecialStats = make(map[string]*models.ExchangeStatistic)
 	)
 
 	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
@@ -716,11 +717,27 @@ func (db *RawDB) countForDate(date string) {
 			} else {
 				TRXStats[typeName].Add(result)
 			}
+
+			from := result.FromAddr
+			to := result.ToAddr
+			if charger, ok := db.chargers[to]; ok && db.el.Contains(from) {
+				exchange := db.el.Get(from)
+				if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
+					ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{
+						Date:  date,
+						Name:  charger.ExchangeName,
+						Token: "Special",
+					}
+
+					ExchangeSpecialStats[exchange.Name].AddWithdrawFromTx(result)
+				}
+			}
+
 		}
 		txCount += tx.RowsAffected
 
 		if txCount%500_000 == 0 {
-			db.logger.Infof("Counting TRX Transactions for date [%s], current counted txs [%d]", date, txCount)
+			db.logger.Infof("Counting Transactions for date [%s], current counted txs [%d]", date, txCount)
 		}
 
 		return nil
@@ -730,13 +747,17 @@ func (db *RawDB) countForDate(date string) {
 		db.db.Create(stats)
 	}
 
+	for _, stats := range ExchangeSpecialStats {
+		db.db.Create(stats)
+	}
+
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
-	db.logger.Infof("Finish counting TRX Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)
+	db.logger.Infof("Finish counting Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)
 }
 
 func (db *RawDB) countForWeek(startDate string) string {
 	week := generateWeek(startDate)
-	db.logger.Infof("Start counting TRX Transactions for week [%s], start date [%s]", week, startDate)
+	db.logger.Infof("Start counting Transactions for week [%s], start date [%s]", week, startDate)
 
 	var (
 		countingDate = startDate
@@ -758,14 +779,14 @@ func (db *RawDB) countForWeek(startDate string) string {
 			txCount += tx.RowsAffected
 
 			if txCount%500_000 == 0 {
-				db.logger.Infof("Counting TRX Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+				db.logger.Infof("Counting Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
 			}
 
 			return nil
 		})
 
 		if result.Error != nil {
-			db.logger.Errorf("Counting TRX Transactions for week [%s], error [%v]", week, result.Error)
+			db.logger.Errorf("Counting Transactions for week [%s], error [%v]", week, result.Error)
 		}
 
 		date, _ := time.Parse("060102", countingDate)
@@ -777,7 +798,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 	}
 
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedWeekKey}).Update("val", countingDate)
-	db.logger.Infof("Finish counting TRX Transactions for week [%s], total counted txs [%d]", week, txCount)
+	db.logger.Infof("Finish counting Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	return countingDate
 }

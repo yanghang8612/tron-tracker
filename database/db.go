@@ -2,7 +2,9 @@ package database
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strconv"
@@ -151,6 +153,37 @@ func New(config *Config) *RawDB {
 	}
 
 	rawDB.loadChargers()
+
+	file, err := os.Open(fmt.Sprintf("/data/market_pairs/240702/00.json"))
+	if err != nil {
+		log.Fatalf("Open file error: [%s]", err.Error())
+	}
+	defer file.Close()
+
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Read file error: [%s]", err.Error())
+	}
+
+	var response net.MarketPairsResponse
+	err = json.Unmarshal(bytes, &response)
+	if err != nil {
+		log.Fatalf("Unmarshal error: [%s]", err.Error())
+	}
+
+	var marketPairs = make([]*models.MarketPairStatistic, 0)
+
+	for _, marketPair := range response.Data.MarketPairs {
+		marketPairs = append(marketPairs, &models.MarketPairStatistic{
+			Datetime:     "24070200",
+			ExchangeName: marketPair.ExchangeName,
+			Pair:         marketPair.MarketPair,
+			Volume:       marketPair.VolumeUsd,
+			Percent:      marketPair.VolumePercent,
+		})
+	}
+
+	rawDB.db.Save(marketPairs)
 
 	return rawDB
 }

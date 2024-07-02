@@ -92,7 +92,6 @@ func GetMarketPairs() (string, []*models.MarketPairStatistic, error) {
 
 	var marketPairs = make([]*models.MarketPairStatistic, 0)
 
-	var sumPercent = 0.0
 	for _, marketPair := range response.Data.MarketPairs {
 		marketPairs = append(marketPairs, &models.MarketPairStatistic{
 			Datetime:     time.Now().Format("06010215"),
@@ -101,8 +100,6 @@ func GetMarketPairs() (string, []*models.MarketPairStatistic, error) {
 			Volume:       marketPair.VolumeUsd,
 			Percent:      marketPair.VolumePercent,
 		})
-
-		sumPercent += marketPair.VolumePercent
 	}
 
 	return string(resp.Body()), marketPairs, nil

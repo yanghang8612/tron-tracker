@@ -82,6 +82,7 @@ func (s *Server) Start() {
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
+	s.router.GET("/trx_market_pair_statistics", s.trxMarketPairStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -762,7 +763,7 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		NonUSDTStat = &models.TokenStatistic{Address: "Other Contract"}
 		resultArray = make([]*models.TokenStatistic, 0)
 	)
-	for _, ts := range s.db.GetTokenStatisticByDateAndTokenAndDays(startDate, days) {
+	for _, ts := range s.db.GetTokenStatisticsByDateAndDays(startDate, days) {
 		switch len(ts.Address) {
 		case 7:
 			TRC10Stat.Merge(ts)
@@ -821,6 +822,31 @@ func (s *Server) forward(c *gin.Context) {
 	}
 
 	c.Data(200, "application/json", resp.Body())
+}
+
+func (s *Server) trxMarketPairStatistics(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	marketPairStats := s.db.GetMarketPairStatisticsByDateAndDays(startDate, days)
+
+	result := make([]*models.MarketPairStatistic, 0)
+	for _, mps := range marketPairStats {
+		result = append(result, mps)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Percent > result[j].Percent
+	})
+
+	c.JSON(200, result)
 }
 
 // Helper function to convert size string to bytes

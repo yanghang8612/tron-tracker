@@ -3,9 +3,11 @@ package net
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
+	"tron-tracker/database/models"
 	"tron-tracker/types"
 	"tron-tracker/utils"
 )
@@ -56,4 +58,52 @@ func GetExchanges() *types.ExchangeList {
 		exchangeList.Exchanges[i].Name = utils.TrimExchangeName(exchangeList.Exchanges[i].Name)
 	}
 	return &exchangeList
+}
+
+type MarketPairsResponse struct {
+	Data struct {
+		MarketPairs []struct {
+			Rank               int     `json:"rank"`
+			ExchangeName       string  `json:"exchangeName"`
+			MarketPair         string  `json:"marketPair"`
+			Price              float64 `json:"price"`
+			VolumeUsd          float64 `json:"volumeUsd"`
+			EffectiveLiquidity float64 `json:"effectiveLiquidity"`
+			LastUpdated        string  `json:"lastUpdated"`
+			Quote              float64 `json:"quote"`
+			VolumeBase         float64 `json:"volumeBase"`
+			VolumeQuote        float64 `json:"volumeQuote"`
+			VolumePercent      float64 `json:"volumePercent"`
+		} `json:"marketPairs"`
+	} `json:"data"`
+}
+
+func GetMarketPairs() (string, []*models.MarketPairStatistic, error) {
+	resp, err := client.R().Get("https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?slug=tron&start=1&limit=1000&category=spot&centerType=all&sort=cmc_rank_advanced&direction=desc&spotUntracked=true")
+	if err != nil {
+		return "", nil, err
+	}
+
+	var response MarketPairsResponse
+	err = json.Unmarshal(resp.Body(), &response)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var marketPairs = make([]*models.MarketPairStatistic, 0)
+
+	var sumPercent = 0.0
+	for _, marketPair := range response.Data.MarketPairs {
+		marketPairs = append(marketPairs, &models.MarketPairStatistic{
+			Datetime:     time.Now().Format("06010215"),
+			ExchangeName: marketPair.ExchangeName,
+			Pair:         marketPair.MarketPair,
+			Volume:       marketPair.VolumeUsd,
+			Percent:      marketPair.VolumePercent,
+		})
+
+		sumPercent += marketPair.VolumePercent
+	}
+
+	return string(resp.Body()), marketPairs, nil
 }

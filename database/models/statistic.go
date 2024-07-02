@@ -355,3 +355,12 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 		o.UniqueToMap[tx.ToAddr] = true
 	}
 }
+
+type MarketPairStatistic struct {
+	ID           uint    `gorm:"primaryKey" json:"-"`
+	Datetime     string  `gorm:"size:8;index" json:"date,omitempty"`
+	ExchangeName string  `gorm:"index" json:"exchange_name"`
+	Pair         string  `json:"pair"`
+	Volume       float64 `json:"volume"`
+	Percent      float64 `json:"percent"`
+}

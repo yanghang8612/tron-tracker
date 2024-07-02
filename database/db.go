@@ -96,6 +96,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.MarketPairStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	dbErr = db.AutoMigrate(&models.Meta{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -317,7 +322,7 @@ func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatis
 	return tokenStat
 }
 
-func (db *RawDB) GetTokenStatisticByDateAndTokenAndDays(date time.Time, days int) map[string]*models.TokenStatistic {
+func (db *RawDB) GetTokenStatisticsByDateAndDays(date time.Time, days int) map[string]*models.TokenStatistic {
 	resultMap := make(map[string]*models.TokenStatistic)
 
 	for i := 0; i < days; i++ {
@@ -413,6 +418,40 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 	db.db.Table("transfers_"+date).Where("from_addr = ? and token = ?", addr, USDT).Count(&withdrawCnt)
 
 	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
+}
+
+func (db *RawDB) GetMarketPairStatisticsByDateAndDays(date time.Time, days int) map[string]*models.MarketPairStatistic {
+	resultMap := make(map[string]*models.MarketPairStatistic)
+
+	var totalVolume float64
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStats []*models.MarketPairStatistic
+		db.db.Where("datetime = ?", queryDate+"00").Find(&dayStats)
+
+		for _, dayStat := range dayStats {
+			if dayStat.Percent == 0 {
+				continue
+			}
+
+			key := dayStat.ExchangeName + "_" + dayStat.Pair
+			if _, ok := resultMap[key]; !ok {
+				resultMap[key] = dayStat
+			} else {
+				resultMap[key].Volume += dayStat.Volume
+			}
+
+			totalVolume += dayStat.Volume
+		}
+	}
+
+	for _, stat := range resultMap {
+		stat.Datetime = ""
+		stat.Percent = stat.Volume / totalVolume
+	}
+
+	return resultMap
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
@@ -658,6 +697,41 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	statsResultFile.WriteString(strconv.FormatInt(collectEnergy, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(chargeFee, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(chargeEnergy, 10) + "\n")
+}
+
+func (db *RawDB) DoMarketPairStatistics() {
+	db.logger.Infof("Start doing market pair statistics")
+
+	originData, marketPairs, err := net.GetMarketPairs()
+	if err != nil {
+		db.logger.Errorf("Get market pairs error: [%s]", err.Error())
+		return
+	}
+
+	db.saveMarketPairOriginData(originData)
+	db.db.Save(marketPairs)
+
+	db.logger.Infof("Finish doing market pair statistics")
+}
+
+func (db *RawDB) saveMarketPairOriginData(data string) {
+	date := time.Now().Format("060102")
+	hour := time.Now().Format("15")
+	filePath := fmt.Sprintf("/data/market_pairs/%s/", date)
+	err := os.MkdirAll(filePath, os.ModePerm)
+	if err != nil {
+		db.logger.Errorf("Create directory error: [%s]", err.Error())
+		return
+	}
+
+	dataFile, err := os.Create(filePath + hour + ".json")
+	if err != nil {
+		db.logger.Errorf("Create data file error: [%s]", err.Error())
+		return
+	}
+	defer dataFile.Close()
+
+	dataFile.WriteString(data)
 }
 
 func (db *RawDB) cacheFlushLoop() {

@@ -702,22 +702,31 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 func (db *RawDB) DoMarketPairStatistics() {
 	db.logger.Infof("Start doing market pair statistics")
 
-	originData, marketPairs, err := net.GetMarketPairs()
+	tronOriginData, tronMarketPairs, err := net.GetMarketPairs("tron")
 	if err != nil {
-		db.logger.Errorf("Get market pairs error: [%s]", err.Error())
+		db.logger.Errorf("Get tron market pairs error: [%s]", err.Error())
 		return
 	}
 
-	db.saveMarketPairOriginData(originData)
-	db.db.Save(marketPairs)
+	db.saveMarketPairOriginData("tron", tronOriginData)
+	db.db.Save(tronMarketPairs)
+
+	steemOriginData, steemMarketPairs, err := net.GetMarketPairs("steem")
+	if err != nil {
+		db.logger.Errorf("Get steem market pairs error: [%s]", err.Error())
+		return
+	}
+
+	db.saveMarketPairOriginData("steem", steemOriginData)
+	db.db.Save(steemMarketPairs)
 
 	db.logger.Infof("Finish doing market pair statistics")
 }
 
-func (db *RawDB) saveMarketPairOriginData(data string) {
+func (db *RawDB) saveMarketPairOriginData(token, data string) {
 	date := time.Now().Format("060102")
 	hour := time.Now().Format("15")
-	filePath := fmt.Sprintf("/data/market_pairs/%s/", date)
+	filePath := fmt.Sprintf("/data/market_pairs/%s/%s/", token, date)
 	err := os.MkdirAll(filePath, os.ModePerm)
 	if err != nil {
 		db.logger.Errorf("Create directory error: [%s]", err.Error())

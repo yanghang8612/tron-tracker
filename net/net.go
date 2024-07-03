@@ -2,6 +2,7 @@ package net
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -78,8 +79,8 @@ type MarketPairsResponse struct {
 	} `json:"data"`
 }
 
-func GetMarketPairs() (string, []*models.MarketPairStatistic, error) {
-	resp, err := client.R().Get("https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?slug=tron&start=1&limit=1000&category=spot&centerType=all&sort=cmc_rank_advanced&direction=desc&spotUntracked=true")
+func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error) {
+	resp, err := client.R().Get(fmt.Sprintf("https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?slug=%s&start=1&limit=1000&category=spot&centerType=all&sort=cmc_rank_advanced&direction=desc&spotUntracked=true", token))
 	if err != nil {
 		return "", nil, err
 	}
@@ -95,6 +96,7 @@ func GetMarketPairs() (string, []*models.MarketPairStatistic, error) {
 	for _, marketPair := range response.Data.MarketPairs {
 		marketPairs = append(marketPairs, &models.MarketPairStatistic{
 			Datetime:     time.Now().Format("06010215"),
+			Token:        token,
 			ExchangeName: marketPair.ExchangeName,
 			Pair:         marketPair.MarketPair,
 			Volume:       marketPair.VolumeUsd,

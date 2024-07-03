@@ -67,6 +67,7 @@ type MarketPairsResponse struct {
 			Rank               int     `json:"rank"`
 			ExchangeName       string  `json:"exchangeName"`
 			MarketPair         string  `json:"marketPair"`
+			MarketReputation   float64 `json:"marketReputation"`
 			Price              float64 `json:"price"`
 			VolumeUsd          float64 `json:"volumeUsd"`
 			EffectiveLiquidity float64 `json:"effectiveLiquidity"`
@@ -99,6 +100,7 @@ func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error)
 			Token:        token,
 			ExchangeName: marketPair.ExchangeName,
 			Pair:         marketPair.MarketPair,
+			Reputation:   marketPair.MarketReputation,
 			Volume:       marketPair.VolumeUsd,
 			Percent:      marketPair.VolumePercent,
 		})

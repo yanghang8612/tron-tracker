@@ -362,6 +362,7 @@ type MarketPairStatistic struct {
 	Token        string  `gorm:"index" json:"token,omitempty"`
 	ExchangeName string  `gorm:"index" json:"exchange_name"`
 	Pair         string  `json:"pair"`
+	Reputation   float64 `json:"reputation"`
 	Volume       float64 `json:"volume"`
 	Percent      float64 `json:"percent"`
 }

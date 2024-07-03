@@ -420,7 +420,7 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
 
-func (db *RawDB) GetMarketPairStatisticsByDateAndDays(date time.Time, days int) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
 	var totalVolume float64
@@ -428,7 +428,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDays(date time.Time, days int) 
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.MarketPairStatistic
-		db.db.Where("datetime = ?", queryDate+"00").Find(&dayStats)
+		db.db.Where("datetime = ? and token = ?", queryDate+"00", token).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if dayStat.Percent == 0 {
@@ -448,6 +448,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDays(date time.Time, days int) 
 
 	for _, stat := range resultMap {
 		stat.Datetime = ""
+		stat.Token = ""
 		stat.Percent = stat.Volume / totalVolume
 	}
 

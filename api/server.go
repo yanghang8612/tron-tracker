@@ -82,7 +82,7 @@ func (s *Server) Start() {
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
-	s.router.GET("/trx_market_pair_statistics", s.trxMarketPairStatistics)
+	s.router.GET("/market_pair_statistics", s.marketPairStatistics)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -824,7 +824,7 @@ func (s *Server) forward(c *gin.Context) {
 	c.Data(200, "application/json", resp.Body())
 }
 
-func (s *Server) trxMarketPairStatistics(c *gin.Context) {
+func (s *Server) marketPairStatistics(c *gin.Context) {
 	startDate, ok := prepareDateParam(c, "start_date")
 	if !ok {
 		return
@@ -835,7 +835,12 @@ func (s *Server) trxMarketPairStatistics(c *gin.Context) {
 		return
 	}
 
-	marketPairStats := s.db.GetMarketPairStatisticsByDateAndDays(startDate, days)
+	token, ok := getStringParam(c, "token")
+	if !ok {
+		return
+	}
+
+	marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
 	for _, mps := range marketPairStats {

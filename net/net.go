@@ -64,18 +64,20 @@ func GetExchanges() *types.ExchangeList {
 type MarketPairsResponse struct {
 	Data struct {
 		MarketPairs []struct {
-			Rank               int     `json:"rank"`
-			ExchangeName       string  `json:"exchangeName"`
-			MarketPair         string  `json:"marketPair"`
-			MarketReputation   float64 `json:"marketReputation"`
-			Price              float64 `json:"price"`
-			VolumeUsd          float64 `json:"volumeUsd"`
-			EffectiveLiquidity float64 `json:"effectiveLiquidity"`
-			LastUpdated        string  `json:"lastUpdated"`
-			Quote              float64 `json:"quote"`
-			VolumeBase         float64 `json:"volumeBase"`
-			VolumeQuote        float64 `json:"volumeQuote"`
-			VolumePercent      float64 `json:"volumePercent"`
+			Rank                int     `json:"rank"`
+			ExchangeName        string  `json:"exchangeName"`
+			MarketPair          string  `json:"marketPair"`
+			MarketReputation    float64 `json:"marketReputation"`
+			Price               float64 `json:"price"`
+			VolumeUsd           float64 `json:"volumeUsd"`
+			EffectiveLiquidity  float64 `json:"effectiveLiquidity"`
+			LastUpdated         string  `json:"lastUpdated"`
+			Quote               float64 `json:"quote"`
+			VolumeBase          float64 `json:"volumeBase"`
+			VolumeQuote         float64 `json:"volumeQuote"`
+			VolumePercent       float64 `json:"volumePercent"`
+			DepthUsdPositiveTwo float64 `json:"depthUsdPositiveTwo"`
+			DepthUsdNegativeTwo float64 `json:"depthUsdNegativeTwo"`
 		} `json:"marketPairs"`
 	} `json:"data"`
 }
@@ -96,13 +98,15 @@ func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error)
 
 	for _, marketPair := range response.Data.MarketPairs {
 		marketPairs = append(marketPairs, &models.MarketPairStatistic{
-			Datetime:     time.Now().Format("06010215"),
-			Token:        token,
-			ExchangeName: marketPair.ExchangeName,
-			Pair:         marketPair.MarketPair,
-			Reputation:   marketPair.MarketReputation,
-			Volume:       marketPair.VolumeUsd,
-			Percent:      marketPair.VolumePercent,
+			Datetime:            time.Now().Format("021504"),
+			Token:               token,
+			ExchangeName:        marketPair.ExchangeName,
+			Pair:                marketPair.MarketPair,
+			Reputation:          marketPair.MarketReputation,
+			Volume:              marketPair.VolumeUsd,
+			Percent:             marketPair.VolumePercent,
+			DepthUsdPositiveTwo: marketPair.DepthUsdPositiveTwo,
+			DepthUsdNegativeTwo: marketPair.DepthUsdNegativeTwo,
 		})
 	}
 

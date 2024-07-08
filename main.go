@@ -29,7 +29,7 @@ func main() {
 	_, _ = c.AddFunc("0 */5 0-12 * * 1", func() {
 		db.DoTronLinkWeeklyStatistics(time.Now(), false)
 	})
-	_, _ = c.AddFunc("0 5 * * * *", func() {
+	_, _ = c.AddFunc("0 10/* * * * *", func() {
 		db.DoMarketPairStatistics()
 	})
 	_, _ = c.AddFunc("0 */10 * * * *", func() {

@@ -425,12 +425,13 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 	var totalVolume float64
 	for i := 0; i < days; i++ {
-		queryDate := date.AddDate(0, 0, i).Format("060102")
+		queryDate := date.AddDate(0, 0, i)
+		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
-		var dayStats []*models.MarketPairStatistic
-		db.db.Where("datetime = ? and token = ?", queryDate+"00", token).Find(&dayStats)
+		var todayStats []*models.MarketPairStatistic
+		db.db.Table(todayDBName).Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
 
-		for _, dayStat := range dayStats {
+		for _, dayStat := range todayStats {
 			if dayStat.Percent == 0 {
 				continue
 			}
@@ -444,12 +445,30 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 			totalVolume += dayStat.Volume
 		}
+
+		lastDay := queryDate.AddDate(0, 0, -1)
+		lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
+
+		var lastDayStats []*models.MarketPairStatistic
+		db.db.Table(lastDayDBName).Where("token = ?", token).Find(&lastDayStats)
+
+		for _, dayStat := range lastDayStats {
+			if dayStat.Percent == 0 {
+				continue
+			}
+
+			key := dayStat.ExchangeName + "_" + dayStat.Pair
+			resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
+			resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+		}
 	}
 
 	for _, stat := range resultMap {
 		stat.Datetime = ""
 		stat.Token = ""
 		stat.Percent = stat.Volume / totalVolume
+		stat.DepthUsdPositiveTwo /= float64(24 * 6 * days)
+		stat.DepthUsdNegativeTwo /= float64(24 * 6 * days)
 	}
 
 	return resultMap
@@ -703,6 +722,9 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 func (db *RawDB) DoMarketPairStatistics() {
 	db.logger.Infof("Start doing market pair statistics")
 
+	statsDBName := "market_pair_statistics_" + time.Now().Format("0601")
+	db.createTableIfNotExist(statsDBName, models.MarketPairStatistic{})
+
 	tronOriginData, tronMarketPairs, err := net.GetMarketPairs("tron")
 	if err != nil {
 		db.logger.Errorf("Get tron market pairs error: [%s]", err.Error())
@@ -710,7 +732,7 @@ func (db *RawDB) DoMarketPairStatistics() {
 	}
 
 	db.saveMarketPairOriginData("tron", tronOriginData)
-	db.db.Save(tronMarketPairs)
+	db.db.Table(statsDBName).Save(tronMarketPairs)
 
 	steemOriginData, steemMarketPairs, err := net.GetMarketPairs("steem")
 	if err != nil {
@@ -719,14 +741,14 @@ func (db *RawDB) DoMarketPairStatistics() {
 	}
 
 	db.saveMarketPairOriginData("steem", steemOriginData)
-	db.db.Save(steemMarketPairs)
+	db.db.Table(statsDBName).Save(steemMarketPairs)
 
 	db.logger.Infof("Finish doing market pair statistics")
 }
 
 func (db *RawDB) saveMarketPairOriginData(token, data string) {
 	date := time.Now().Format("060102")
-	hour := time.Now().Format("15")
+	hour := time.Now().Format("1504")
 	filePath := fmt.Sprintf("/data/market_pairs/%s/%s/", token, date)
 	err := os.MkdirAll(filePath, os.ModePerm)
 	if err != nil {

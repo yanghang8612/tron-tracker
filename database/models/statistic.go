@@ -357,12 +357,14 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 }
 
 type MarketPairStatistic struct {
-	ID           uint    `gorm:"primaryKey" json:"-"`
-	Datetime     string  `gorm:"size:8;index" json:"date,omitempty"`
-	Token        string  `gorm:"index" json:"token,omitempty"`
-	ExchangeName string  `gorm:"index" json:"exchange_name"`
-	Pair         string  `json:"pair"`
-	Reputation   float64 `json:"reputation"`
-	Volume       float64 `json:"volume"`
-	Percent      float64 `json:"percent"`
+	ID                  uint    `gorm:"primaryKey" json:"-"`
+	Datetime            string  `gorm:"size:8;index" json:"date,omitempty"`
+	Token               string  `gorm:"index" json:"token,omitempty"`
+	ExchangeName        string  `gorm:"index" json:"exchange_name"`
+	Pair                string  `json:"pair"`
+	Reputation          float64 `json:"reputation"`
+	Volume              float64 `json:"volume"`
+	Percent             float64 `json:"percent"`
+	DepthUsdPositiveTwo float64 `json:"depth_usd_positive_two"`
+	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two"`
 }

@@ -783,7 +783,7 @@ func (s *Server) topUsers(c *gin.Context) {
 		}
 	})
 
-	c.JSON(200, resStatsSortedByFee)
+	c.JSON(200, resStatsSortedByFee[:n])
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {

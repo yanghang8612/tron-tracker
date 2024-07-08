@@ -57,6 +57,10 @@ func GetExchanges() *types.ExchangeList {
 
 	for i := range exchangeList.Exchanges {
 		exchangeList.Exchanges[i].Name = utils.TrimExchangeName(exchangeList.Exchanges[i].Name)
+
+		if exchangeList.Exchanges[i].Name == "BtcTurk" {
+			exchangeList.Exchanges[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
+		}
 	}
 	return &exchangeList
 }

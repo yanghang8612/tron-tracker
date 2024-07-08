@@ -96,11 +96,6 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
-	dbErr = db.AutoMigrate(&models.MarketPairStatistic{})
-	if dbErr != nil {
-		panic(dbErr)
-	}
-
 	dbErr = db.AutoMigrate(&models.Meta{})
 	if dbErr != nil {
 		panic(dbErr)

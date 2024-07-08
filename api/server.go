@@ -79,6 +79,7 @@ func (s *Server) Start() {
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 	s.router.GET("/trx_statistics", s.trxStatistics)
 	s.router.GET("/user_statistics", s.userStatistics)
+	s.router.GET("/top_users", s.topUsers)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
@@ -740,6 +741,49 @@ func (s *Server) userStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(date, user, days))
+}
+
+func (s *Server) topUsers(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	n, ok := getIntParam(c, "n")
+	if !ok {
+		return
+	}
+
+	fromStatsMap := s.db.GetFromStatisticByDateAndDays(startDate, days)
+
+	fromStats := make([]*models.UserStatistic, 0)
+
+	for _, stats := range fromStatsMap {
+		fromStats = append(fromStats, stats)
+	}
+
+	type ResEntity struct {
+		Address  string `json:"address"`
+		TotalFee int64  `json:"total_fee"`
+	}
+
+	sort.Slice(fromStats, func(i, j int) bool {
+		return fromStats[i].Fee > fromStats[j].Fee
+	})
+
+	resStatsSortedByFee := pickTopNAndLastN(fromStats, n, func(t *models.UserStatistic) *ResEntity {
+		return &ResEntity{
+			Address:  t.Address,
+			TotalFee: t.Fee,
+		}
+	})
+
+	c.JSON(200, resStatsSortedByFee)
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {

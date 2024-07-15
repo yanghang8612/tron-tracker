@@ -821,7 +821,12 @@ func (db *RawDB) countForDate(date string) {
 
 			from := result.FromAddr
 			to := result.ToAddr
-			if charger, ok := db.chargers[to]; ok && db.el.Contains(from) {
+
+			db.chargersLock.RLock()
+			charger, ok := db.chargers[to]
+			db.chargersLock.RUnlock()
+
+			if ok && db.el.Contains(from) {
 				exchange := db.el.Get(from)
 				if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
 					ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{

@@ -377,7 +377,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		currentTotalStatistic.Merge(&dayStatistic)
 	}
 
-	startDate.AddDate(0, 0, -days)
+	startDate = startDate.AddDate(0, 0, -days)
 	lastTotalStatistic := &models.UserStatistic{}
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))

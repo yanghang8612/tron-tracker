@@ -9,7 +9,7 @@ func FormatChangePercent(oldValue, newValue int64) string {
 		change := newValue - oldValue
 		changePercent := float64(change) / float64(oldValue) * 100.0
 		if changePercent <= 0 {
-			return fmt.Sprintf("%.2f%%", changePercent)
+			return fmt.Sprintf("-%.2f%%", changePercent)
 		} else {
 			return fmt.Sprintf("+%.2f%%", changePercent)
 		}

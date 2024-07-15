@@ -371,14 +371,39 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		return
 	}
 
-	totalStatistic := &models.UserStatistic{}
+	currentTotalStatistic := &models.UserStatistic{}
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		totalStatistic.Merge(&dayStatistic)
+		currentTotalStatistic.Merge(&dayStatistic)
 	}
 
+	lastTotalStatistic := &models.UserStatistic{}
+	for i := 0; i < days; i++ {
+		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i+days).Format("060102"))
+		lastTotalStatistic.Merge(&dayStatistic)
+	}
+
+	comment := strings.Builder{}
+	comment.WriteString(fmt.Sprintf(
+		"上周TRX转账: %s笔(%s), 相比上上周 %s笔\n上周低价值TRX转账: %s笔(%s), 相比上上周 %s笔\n\n",
+		humanize.Comma(currentTotalStatistic.TRXTotal),
+		utils.FormatChangePercent(lastTotalStatistic.TRXTotal, currentTotalStatistic.TRXTotal),
+		humanize.Comma(currentTotalStatistic.TRXTotal-lastTotalStatistic.TRXTotal),
+		humanize.Comma(currentTotalStatistic.SmallTRXTotal),
+		utils.FormatChangePercent(lastTotalStatistic.SmallTRXTotal, currentTotalStatistic.SmallTRXTotal),
+		humanize.Comma(currentTotalStatistic.SmallTRXTotal-lastTotalStatistic.SmallTRXTotal)))
+	comment.WriteString(fmt.Sprintf(
+		"上周USDT转账: %s笔(%s), 相比上上周 %s笔\n上周低价值USDT转账: %s笔(%s), 相比上上周 %s笔",
+		humanize.Comma(currentTotalStatistic.USDTTotal),
+		utils.FormatChangePercent(lastTotalStatistic.USDTTotal, currentTotalStatistic.USDTTotal),
+		humanize.Comma(currentTotalStatistic.USDTTotal-lastTotalStatistic.USDTTotal),
+		humanize.Comma(currentTotalStatistic.SmallUSDTTotal),
+		utils.FormatChangePercent(lastTotalStatistic.SmallUSDTTotal, currentTotalStatistic.SmallUSDTTotal),
+		humanize.Comma(currentTotalStatistic.SmallUSDTTotal-lastTotalStatistic.SmallUSDTTotal)))
+
 	c.JSON(200, gin.H{
-		"total_statistic": totalStatistic,
+		"total_statistic": currentTotalStatistic,
+		"comment":         comment.String(),
 	})
 }
 

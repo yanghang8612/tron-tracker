@@ -721,7 +721,7 @@ func (db *RawDB) countForUser(startDate string) {
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
-					if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+					if len(result.ToAddr) == 0 {
 						continue
 					}
 

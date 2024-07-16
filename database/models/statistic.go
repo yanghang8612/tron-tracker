@@ -356,16 +356,16 @@ type ERC20Statistic struct {
 }
 
 type UserStats struct {
-	ID               uint   `gorm:"primaryKey" json:"-"`
-	Address          string `gorm:"index"`
-	TRXInCount       int64  `gorm:"index"`
-	TRXInAmountSum   BigInt `gorm:"index"`
-	TRXOutCount      int64  `gorm:"index"`
-	TRXOutAmountSum  BigInt `gorm:"index"`
-	USDTInCount      int64  `gorm:"index"`
-	USDTInAmountSum  BigInt `gorm:"index"`
-	USDTOutCount     int64  `gorm:"index"`
-	USDTOutAmountSum BigInt `gorm:"index"`
+	ID               uint `gorm:"primaryKey"`
+	Address          string
+	TRXInCount       int64
+	TRXInAmountSum   BigInt
+	TRXOutCount      int64
+	TRXOutAmountSum  BigInt
+	USDTInCount      int64
+	USDTInAmountSum  BigInt
+	USDTOutCount     int64
+	USDTOutAmountSum BigInt
 }
 
 func NewUserStats(address string) *UserStats {

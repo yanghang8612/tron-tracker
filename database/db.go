@@ -112,6 +112,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.UserStats{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 
@@ -675,24 +680,85 @@ func (db *RawDB) countLoop() {
 			db.loopWG.Done()
 			return
 		default:
-			trackingDate, _ := time.Parse("060102", db.trackingDate)
-			countedDate, _ := time.Parse("060102", db.countedDate)
+			// trackingDate, _ := time.Parse("060102", db.trackingDate)
+			// countedDate, _ := time.Parse("060102", db.countedDate)
 
-			if trackingDate.Sub(countedDate).Hours() > 24 {
-				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
-				db.countForDate(dateToCount)
-				db.countedDate = dateToCount
+			// if trackingDate.Sub(countedDate).Hours() > 24 {
+			// 	dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
+			// 	db.countForDate(dateToCount)
+			// 	db.countedDate = dateToCount
+			//
+			// 	if countedDate.Weekday() == time.Saturday {
+			// 		db.countTRXPhishingForWeek(db.countedWeek)
+			// 		// db.countUSDTPhishingForWeek(db.countedWeek)
+			// 		db.countedWeek = db.countForWeek(db.countedWeek)
+			// 	}
+			// }
+			db.countForUser(db.countedDate)
+			os.Exit(15)
 
-				if countedDate.Weekday() == time.Saturday {
-					db.countTRXPhishingForWeek(db.countedWeek)
-					// db.countUSDTPhishingForWeek(db.countedWeek)
-					db.countedWeek = db.countForWeek(db.countedWeek)
-				}
-			}
-
-			time.Sleep(1 * time.Second)
+			// time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+func (db *RawDB) countForUser(startDate string) {
+	db.logger.Infof("Start counting TRX&USDT Transactions from date [%s]", startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		UserStats    = make(map[string]*models.UserStats)
+		report       = make(map[int]bool)
+		// TRXStats  = make(map[string]*models.FungibleTokenStatistic)
+		// USDTStats = make(map[string]*models.FungibleTokenStatistic)
+	)
+
+	for countingDate != time.Now().Format("060102") {
+		db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+						continue
+					}
+
+					if _, ok := UserStats[result.FromAddr]; !ok {
+						UserStats[result.FromAddr] = &models.UserStats{
+							Address: result.FromAddr,
+						}
+					}
+					UserStats[result.FromAddr].AddFrom(result)
+
+					if _, ok := UserStats[result.ToAddr]; !ok {
+						UserStats[result.ToAddr] = &models.UserStats{
+							Address: result.ToAddr,
+						}
+					}
+					UserStats[result.ToAddr].AddTo(result)
+				}
+
+				txCount += tx.RowsAffected
+
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing TRX&USDT Transactions, current counting date [%s], counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	for _, stats := range UserStats {
+		db.db.Create(stats)
+	}
+
+	db.logger.Infof("Finish counting TRX&USDT Transactions from date [%s] to [%s], total counted txs [%d]", startDate, time.Now().Format("060102"), txCount)
 }
 
 func (db *RawDB) countForDate(date string) {

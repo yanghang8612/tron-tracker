@@ -354,3 +354,38 @@ type ERC20Statistic struct {
 	NewFrom          int
 	NewTo            int
 }
+
+type UserStats struct {
+	ID               uint   `gorm:"primaryKey" json:"-"`
+	Address          string `gorm:"index"`
+	TRXInCount       int64
+	TRXInAmountSum   BigInt
+	TRXOutCount      int64
+	TRXOutAmountSum  BigInt
+	USDTInCount      int64
+	USDTInAmountSum  BigInt
+	USDTOutCount     int64
+	USDTOutAmountSum BigInt
+}
+
+func (o *UserStats) AddFrom(tx *Transaction) {
+	switch tx.Type {
+	case 1:
+		o.TRXOutCount++
+		o.TRXOutAmountSum.Add(tx.Amount)
+	case 31:
+		o.USDTOutCount++
+		o.USDTOutAmountSum.Add(tx.Amount)
+	}
+}
+
+func (o *UserStats) AddTo(tx *Transaction) {
+	switch tx.Type {
+	case 1:
+		o.TRXInCount++
+		o.TRXInAmountSum.Add(tx.Amount)
+	case 31:
+		o.USDTInCount++
+		o.USDTInAmountSum.Add(tx.Amount)
+	}
+}

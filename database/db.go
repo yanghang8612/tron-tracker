@@ -709,7 +709,7 @@ func (db *RawDB) countForUser(startDate string) {
 		countingDate = startDate
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
-		UserStats    = make(map[string]*models.UserStats)
+		userStats    = make(map[string]*models.UserStats)
 		report       = make(map[int]bool)
 		// TRXStats  = make(map[string]*models.FungibleTokenStatistic)
 		// USDTStats = make(map[string]*models.FungibleTokenStatistic)
@@ -724,15 +724,15 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
-					if _, ok := UserStats[result.FromAddr]; !ok {
-						UserStats[result.FromAddr] = models.NewUserStats(result.FromAddr)
+					if _, ok := userStats[result.FromAddr]; !ok {
+						userStats[result.FromAddr] = models.NewUserStats(result.FromAddr)
 					}
-					UserStats[result.FromAddr].AddFrom(result)
+					userStats[result.FromAddr].AddFrom(result)
 
-					if _, ok := UserStats[result.ToAddr]; !ok {
-						UserStats[result.ToAddr] = models.NewUserStats(result.ToAddr)
+					if _, ok := userStats[result.ToAddr]; !ok {
+						userStats[result.ToAddr] = models.NewUserStats(result.ToAddr)
 					}
-					UserStats[result.ToAddr].AddTo(result)
+					userStats[result.ToAddr].AddTo(result)
 				}
 
 				txCount += tx.RowsAffected
@@ -750,8 +750,23 @@ func (db *RawDB) countForUser(startDate string) {
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 	}
 
-	for _, stats := range UserStats {
-		db.db.Create(stats)
+	db.logger.Infof("Start saving userStats, total size [%d]", len(userStats))
+
+	statsToSave := make([]*models.UserStats, 0)
+	saveCount := 0
+
+	for _, stat := range userStats {
+		statsToSave = append(statsToSave, stat)
+
+		if len(statsToSave) == 500 {
+			db.db.Create(&statsToSave)
+			statsToSave = make([]*models.UserStats, 0)
+			saveCount += 500
+		}
+
+		if saveCount%100_000 == 0 {
+			db.logger.Infof("Saved [%d] userStats", saveCount)
+		}
 	}
 
 	db.logger.Infof("Finish counting TRX&USDT Transactions from date [%s] to [%s], total counted txs [%d]", startDate, time.Now().Format("060102"), txCount)

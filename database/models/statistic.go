@@ -368,6 +368,16 @@ type UserStats struct {
 	USDTOutAmountSum BigInt
 }
 
+func NewUserStats(address string) *UserStats {
+	return &UserStats{
+		Address:          address,
+		TRXInAmountSum:   NewBigInt(big.NewInt(0)),
+		TRXOutAmountSum:  NewBigInt(big.NewInt(0)),
+		USDTInAmountSum:  NewBigInt(big.NewInt(0)),
+		USDTOutAmountSum: NewBigInt(big.NewInt(0)),
+	}
+}
+
 func (o *UserStats) AddFrom(tx *Transaction) {
 	switch tx.Type {
 	case 1:

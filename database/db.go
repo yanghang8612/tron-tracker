@@ -725,16 +725,12 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 
 					if _, ok := UserStats[result.FromAddr]; !ok {
-						UserStats[result.FromAddr] = &models.UserStats{
-							Address: result.FromAddr,
-						}
+						UserStats[result.FromAddr] = models.NewUserStats(result.FromAddr)
 					}
 					UserStats[result.FromAddr].AddFrom(result)
 
 					if _, ok := UserStats[result.ToAddr]; !ok {
-						UserStats[result.ToAddr] = &models.UserStats{
-							Address: result.ToAddr,
-						}
+						UserStats[result.ToAddr] = models.NewUserStats(result.ToAddr)
 					}
 					UserStats[result.ToAddr].AddTo(result)
 				}

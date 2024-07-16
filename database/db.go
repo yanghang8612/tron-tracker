@@ -87,6 +87,7 @@ func New(config *Config) *RawDB {
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		Logger:                 logger.Discard,
+		CreateBatchSize:        1000,
 	})
 	if dbErr != nil {
 		panic(dbErr)
@@ -752,19 +753,11 @@ func (db *RawDB) countForUser(startDate string) {
 
 	db.logger.Infof("Start saving userStats, total size [%d]", len(userStats))
 
-	statsToSave := make([]*models.UserStats, 0)
 	saveCount := 0
-
 	for _, stat := range userStats {
-		statsToSave = append(statsToSave, stat)
-
-		if len(statsToSave) == 500 {
-			db.db.Create(&statsToSave)
-			statsToSave = make([]*models.UserStats, 0)
-		}
+		db.db.Create(stat)
 
 		saveCount++
-
 		if saveCount%100_000 == 0 {
 			db.logger.Infof("Saved [%d] userStats", saveCount)
 		}

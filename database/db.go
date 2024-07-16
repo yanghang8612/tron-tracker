@@ -761,8 +761,9 @@ func (db *RawDB) countForUser(startDate string) {
 		if len(statsToSave) == 500 {
 			db.db.Create(&statsToSave)
 			statsToSave = make([]*models.UserStats, 0)
-			saveCount += 500
 		}
+
+		saveCount++
 
 		if saveCount%100_000 == 0 {
 			db.logger.Infof("Saved [%d] userStats", saveCount)

@@ -477,7 +477,7 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
 		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume").
+		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume", "percent").
 			Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
 
 		for _, dayStat := range todayStats {
@@ -498,8 +498,10 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 	for key, stat := range resultMap {
 		if stat.Reputation/float64(days) < 0.76 {
 			delete(resultMap, key)
+			continue
 		}
 
+		stat.Percent = 0
 		stat.Reputation = 0
 		stat.Volume /= float64(days)
 	}

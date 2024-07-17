@@ -510,7 +510,7 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 }
 
 func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
-	resultMap := make(map[string]*models.MarketPairStatistic)
+	mpsMap := make(map[string]*models.MarketPairStatistic)
 	dateMap := make(map[string]bool)
 
 	for i := 0; i < days; i++ {
@@ -519,8 +519,7 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 		todayDBName := "market_pair_statistics_" + dbNameSuffix
 
 		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "percent", "depth_usd_positive_two", "depth_usd_negative_two").
-			Where("datetime like ? and token = ?", queryDate.Format("02")+"%", token).Find(&todayStats)
+		db.db.Table(todayDBName).Where("datetime like ? and token = ?", queryDate.Format("02")+"%", token).Find(&todayStats)
 
 		for _, dayStat := range todayStats {
 			if dayStat.Percent == 0 {
@@ -532,26 +531,28 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 			}
 
 			key := dayStat.ExchangeName + "_" + dayStat.Pair
-			if _, ok := resultMap[key]; !ok {
-				resultMap[key] = dayStat
+			if _, ok := mpsMap[key]; !ok {
+				mpsMap[key] = dayStat
 			} else {
-				resultMap[key].Reputation += dayStat.Reputation
-				resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
-				resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+				mpsMap[key].Reputation += dayStat.Reputation
+				mpsMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
+				mpsMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
 			}
 		}
 	}
 
-	for key, stat := range resultMap {
+	resultMap := make(map[string]*models.MarketPairStatistic)
+	for key, stat := range mpsMap {
 		if stat.Reputation/float64(days) < 0.76 {
-			delete(resultMap, key)
 			continue
 		}
 
-		stat.Percent = 0
-		stat.Reputation = 0
-		stat.DepthUsdPositiveTwo /= float64(len(dateMap))
-		stat.DepthUsdNegativeTwo /= float64(len(dateMap))
+		resultMap[key] = &models.MarketPairStatistic{
+			ExchangeName:        stat.ExchangeName,
+			Pair:                stat.Pair,
+			DepthUsdPositiveTwo: stat.DepthUsdPositiveTwo / float64(len(dateMap)),
+			DepthUsdNegativeTwo: stat.DepthUsdNegativeTwo / float64(len(dateMap)),
+		}
 	}
 
 	return resultMap

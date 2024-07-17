@@ -84,6 +84,7 @@ func (s *Server) Start() {
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
 	s.router.GET("/market_pair_statistics", s.marketPairStatistics)
+	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -919,6 +920,31 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Percent > result[j].Percent
+	})
+
+	c.JSON(200, result)
+}
+
+func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	token, ok := getStringParam(c, "token")
+	if !ok {
+		return
+	}
+
+	marketPairStats := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, 7, token)
+
+	result := make([]*models.MarketPairStatistic, 0)
+	for _, mps := range marketPairStats {
+		result = append(result, mps)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Volume > result[j].Volume
 	})
 
 	c.JSON(200, result)

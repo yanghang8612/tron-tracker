@@ -469,6 +469,44 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 	return resultMap
 }
 
+func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
+	resultMap := make(map[string]*models.MarketPairStatistic)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
+		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
+
+		var todayStats []*models.MarketPairStatistic
+		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume").
+			Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
+
+		for _, dayStat := range todayStats {
+			if dayStat.Percent == 0 {
+				continue
+			}
+
+			key := dayStat.ExchangeName + "_" + dayStat.Pair
+			if _, ok := resultMap[key]; !ok {
+				resultMap[key] = dayStat
+			} else {
+				resultMap[key].Reputation += dayStat.Reputation
+				resultMap[key].Volume += dayStat.Volume
+			}
+		}
+	}
+
+	for key, stat := range resultMap {
+		if stat.Reputation/float64(days) < 0.76 {
+			delete(resultMap, key)
+		}
+
+		stat.Reputation = 0
+		stat.Volume /= float64(days)
+	}
+
+	return resultMap
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.updateExchanges()
 

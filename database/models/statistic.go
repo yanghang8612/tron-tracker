@@ -360,11 +360,11 @@ type MarketPairStatistic struct {
 	ID                  uint    `gorm:"primaryKey" json:"-"`
 	Datetime            string  `gorm:"size:6;index" json:"date,omitempty"`
 	Token               string  `gorm:"index" json:"token,omitempty"`
-	ExchangeName        string  `gorm:"index" json:"exchange_name"`
-	Pair                string  `json:"pair"`
-	Reputation          float64 `json:"reputation"`
-	Volume              float64 `json:"volume"`
-	Percent             float64 `json:"percent"`
-	DepthUsdPositiveTwo float64 `json:"depth_usd_positive_two"`
-	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two"`
+	ExchangeName        string  `gorm:"index" json:"exchange_name,omitempty"`
+	Pair                string  `json:"pair,omitempty"`
+	Reputation          float64 `json:"reputation,omitempty"`
+	Volume              float64 `json:"volume,omitempty"`
+	Percent             float64 `json:"percent,omitempty"`
+	DepthUsdPositiveTwo float64 `json:"depth_usd_positive_two,omitempty"`
+	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two,omitempty"`
 }

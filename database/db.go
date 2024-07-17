@@ -514,12 +514,13 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 	dateMap := make(map[string]bool)
 
 	for i := 0; i < days; i++ {
-		dbNameSuffix := date.AddDate(0, 0, i).Format("0601")
+		queryDate := date.AddDate(0, 0, i)
+		dbNameSuffix := queryDate.Format("0601")
 		todayDBName := "market_pair_statistics_" + dbNameSuffix
 
 		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "depth_usd_positive_two", "depth_usd_negative_two").
-			Where("token = ?", token).Find(&todayStats)
+		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "percent", "depth_usd_positive_two", "depth_usd_negative_two").
+			Where("datetime like ? and token = ?", queryDate.Format("02")+"%", token).Find(&todayStats)
 
 		for _, dayStat := range todayStats {
 			if dayStat.Percent == 0 {

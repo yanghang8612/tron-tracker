@@ -85,6 +85,7 @@ func (s *Server) Start() {
 	s.router.GET("/tron_statistics", s.forward)
 	s.router.GET("/market_pair_statistics", s.marketPairStatistics)
 	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
+	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 
 	go func() {
 		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -936,16 +937,37 @@ func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
 		return
 	}
 
-	marketPairStats := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, 7, token)
+	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, 7, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
-	for _, mps := range marketPairStats {
+	for _, mps := range marketPairDailyVolumes {
 		result = append(result, mps)
 	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Volume > result[j].Volume
 	})
+
+	c.JSON(200, result)
+}
+
+func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	token, ok := getStringParam(c, "token")
+	if !ok {
+		return
+	}
+
+	marketPairAverageDepths := s.db.GetMarketPairAverageDepthsByDateAndDaysAndToken(startDate, 7, token)
+
+	result := make([]*models.MarketPairStatistic, 0)
+	for _, mps := range marketPairAverageDepths {
+		result = append(result, mps)
+	}
 
 	c.JSON(200, result)
 }

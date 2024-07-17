@@ -509,6 +509,53 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 	return resultMap
 }
 
+func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
+	resultMap := make(map[string]*models.MarketPairStatistic)
+	dateMap := make(map[string]bool)
+
+	for i := 0; i < days; i++ {
+		dbNameSuffix := date.AddDate(0, 0, i).Format("0601")
+		todayDBName := "market_pair_statistics_" + dbNameSuffix
+
+		var todayStats []*models.MarketPairStatistic
+		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "depth_usd_positive_two", "depth_usd_negative_two").
+			Where("token = ?", token).Find(&todayStats)
+
+		for _, dayStat := range todayStats {
+			if dayStat.Percent == 0 {
+				continue
+			}
+
+			if _, ok := dateMap[dbNameSuffix+dayStat.Datetime]; !ok {
+				dateMap[dbNameSuffix+dayStat.Datetime] = true
+			}
+
+			key := dayStat.ExchangeName + "_" + dayStat.Pair
+			if _, ok := resultMap[key]; !ok {
+				resultMap[key] = dayStat
+			} else {
+				resultMap[key].Reputation += dayStat.Reputation
+				resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
+				resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+			}
+		}
+	}
+
+	for key, stat := range resultMap {
+		if stat.Reputation/float64(days) < 0.76 {
+			delete(resultMap, key)
+			continue
+		}
+
+		stat.Percent = 0
+		stat.Reputation = 0
+		stat.DepthUsdPositiveTwo /= float64(len(dateMap))
+		stat.DepthUsdNegativeTwo /= float64(len(dateMap))
+	}
+
+	return resultMap
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.updateExchanges()
 

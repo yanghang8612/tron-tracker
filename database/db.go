@@ -472,7 +472,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
-	for i := 0; i < days; i++ {
+	for i := 1; i <= days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
 

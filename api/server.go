@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dustin/go-humanize"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/jinzhu/now"
@@ -47,6 +48,7 @@ type Server struct {
 
 func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig) *Server {
 	router := gin.Default()
+	router.Use(cors.Default())
 	srv := &http.Server{
 		Addr:    ":" + strconv.Itoa(serverConfig.Port),
 		Handler: router,

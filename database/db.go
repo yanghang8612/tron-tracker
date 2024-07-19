@@ -731,8 +731,8 @@ func (db *RawDB) countForUser(startDate string) {
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
 		userStats    = make(map[string]*UserRecentStats)
-		outStats     = make(map[string]map[string]int)
-		inStats      = make(map[string]map[string]int)
+		outStats     = make(map[string][]int)
+		inStats      = make(map[string]int)
 		phishers     = make(map[string]bool)
 		report       = make(map[int]bool)
 		// TRXStats  = make(map[string]*models.FungibleTokenStatistic)
@@ -749,21 +749,16 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 
 					amountStr := result.Amount.String()
-					amountType := fmt.Sprintf("1e%d", len(amountStr))
+					amountType := len(amountStr)
 
 					if _, ok := outStats[result.FromAddr]; !ok {
-						outStats[result.FromAddr] = make(map[string]int)
+						outStats[result.FromAddr] = make([]int, 18)
 					}
 
 					outStats[result.FromAddr][amountType]++
-					outStats[result.FromAddr]["total"]++
+					outStats[result.FromAddr][0]++
 
-					if _, ok := inStats[result.ToAddr]; !ok {
-						inStats[result.ToAddr] = make(map[string]int)
-					}
-
-					inStats[result.ToAddr][amountType]++
-					inStats[result.ToAddr]["total"]++
+					inStats[result.ToAddr]++
 				}
 
 				txCount += tx.RowsAffected
@@ -782,9 +777,9 @@ func (db *RawDB) countForUser(startDate string) {
 	}
 
 	for user, stats := range outStats {
-		small := stats["1e1"] + stats["1e2"] + stats["1e3"]
-		total := stats["total"]
-		if inStats[user]["total"] < 5 && small > 10 && small*100/total > 90 {
+		small := stats[1] + stats[2] + stats[3]
+		total := stats[0]
+		if inStats[user] < 5 && small > 15 && small*100/total > 90 {
 			phishers[user] = true
 		}
 	}

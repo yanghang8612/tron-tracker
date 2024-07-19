@@ -765,7 +765,7 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
-					if result.Type == 1 && amount < 100_000 {
+					if result.Fee == 0 && result.Type == 1 && amount < 100_000 {
 						if urs, ok := userStats[result.ToAddr]; ok {
 							m := urs.match(result.Timestamp)
 							if m == 1 {

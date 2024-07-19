@@ -806,7 +806,9 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 
 					amount := result.Amount.Int64()
-					if _, ok := phishers[result.ToAddr]; ok && amount > 1_000_000 {
+					_, fromOK := phishers[result.FromAddr]
+					_, toOK := phishers[result.ToAddr]
+					if !fromOK && toOK && amount > 1_000_000 {
 						if result.Type == 1 {
 							dailyTRXPhishingSuccessCount++
 							dailyTRXPhishingSuccessAmount += amount
@@ -819,14 +821,12 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
-					if _, ok := phishers[result.FromAddr]; ok {
-						if urs, ok := userStats[result.ToAddr]; ok {
-							m := urs.match(result.Timestamp)
-							if m == 1 {
-								dailyTRXPhishingCount++
-							} else if m == 2 {
-								dailyUSDTPhishingCount++
-							}
+					if urs, ok := userStats[result.ToAddr]; fromOK && ok {
+						m := urs.match(result.Timestamp)
+						if m == 1 {
+							dailyTRXPhishingCount++
+						} else if m == 2 {
+							dailyUSDTPhishingCount++
 						}
 					}
 
@@ -864,9 +864,10 @@ func (db *RawDB) countForUser(startDate string) {
 				return nil
 			})
 
-		db.logger.Infof("Daily TRX Phishing Count: %d, Daily USDT Phishing Count: %d", dailyTRXPhishingCount, dailyUSDTPhishingCount)
-		db.logger.Infof("Daily TRX Phishing Success Count: %d, Daily USDT Phishing Success Count: %d", dailyTRXPhishingSuccessCount, dailyUSDTPhishingSuccessCount)
-		db.logger.Infof("Daily TRX Phishing Success Amount: %d, Daily USDT Phishing Success Amount: %d", dailyTRXPhishingSuccessAmount, dailyUSDTPhishingSuccessAmount)
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTRXPhishingCount, dailyUSDTPhishingCount,
+			dailyTRXPhishingSuccessCount, dailyUSDTPhishingSuccessCount,
+			dailyTRXPhishingSuccessAmount, dailyUSDTPhishingSuccessAmount)
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")

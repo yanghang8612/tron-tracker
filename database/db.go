@@ -769,13 +769,17 @@ func (db *RawDB) countForUser(startDate string) {
 						if urs, ok := userStats[result.ToAddr]; ok {
 							m := urs.match(result.Timestamp)
 							if m == 1 {
-								phishers[result.FromAddr] = true
 								dailyTRXPhishingCount++
-								db.logger.Infof("Found TRX Phisher: %s", result.FromAddr)
+								if _, ok := phishers[result.FromAddr]; !ok {
+									phishers[result.FromAddr] = true
+									db.logger.Infof("Found TRX Phisher: %s", result.FromAddr)
+								}
 							} else if m == 2 {
-								phishers[result.FromAddr] = true
 								dailyUSDTPhishingCount++
-								db.logger.Infof("Found USDT Phisher: %s", result.FromAddr)
+								if _, ok := phishers[result.FromAddr]; !ok {
+									phishers[result.FromAddr] = true
+									db.logger.Infof("Found USDT Phisher: %s", result.FromAddr)
+								}
 							}
 						}
 					}

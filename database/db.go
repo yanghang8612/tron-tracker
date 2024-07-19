@@ -752,7 +752,8 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 
 					amount := result.Amount.Int64()
-					if _, ok := phishers[result.ToAddr]; ok && amount > 1_000_000 {
+					_, isNormal := userStats[result.ToAddr]
+					if _, ok := phishers[result.ToAddr]; !isNormal && ok && amount > 1_000_000 {
 						if result.Type == 1 {
 							dailyTRXPhishingSuccessCount++
 							dailyTRXPhishingSuccessAmount += amount

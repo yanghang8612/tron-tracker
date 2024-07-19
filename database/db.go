@@ -752,7 +752,7 @@ func (db *RawDB) countForUser(startDate string) {
 					amountType := len(amountStr)
 
 					if _, ok := outStats[result.FromAddr]; !ok {
-						outStats[result.FromAddr] = make([]int, 18)
+						outStats[result.FromAddr] = make([]int, 25)
 					}
 
 					outStats[result.FromAddr][amountType]++

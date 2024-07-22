@@ -748,6 +748,7 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
+					amount := result.Amount.Int64()
 					amountStr := result.Amount.String()
 					amountType := len(amountStr)
 
@@ -758,7 +759,9 @@ func (db *RawDB) countForUser(startDate string) {
 					outStats[result.FromAddr][amountType]++
 					outStats[result.FromAddr][0]++
 
-					inStats[result.ToAddr]++
+					if amount > 1_000_000 {
+						inStats[result.ToAddr]++
+					}
 				}
 
 				txCount += tx.RowsAffected

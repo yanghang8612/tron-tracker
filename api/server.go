@@ -388,6 +388,14 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		lastTotalStatistic.Merge(&dayStatistic)
 	}
 
+	withComment := c.DefaultQuery("comment", "false")
+	if withComment == "false" {
+		c.JSON(200, gin.H{
+			"total_statistic": currentTotalStatistic,
+		})
+		return
+	}
+
 	comment := strings.Builder{}
 	comment.WriteString(fmt.Sprintf(
 		"上周TRX转账: %s笔(%s), 相比上上周 %s笔\n上周低价值TRX转账: %s笔(%s), 相比上上周 %s笔\n\n",

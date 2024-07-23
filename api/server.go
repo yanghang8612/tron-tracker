@@ -54,6 +54,7 @@ type Server struct {
 
 func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig) *Server {
 	httpRouter := gin.Default()
+	httpRouter.Use(cors.Default())
 	httpsRouter := gin.Default()
 	httpsRouter.Use(cors.Default())
 

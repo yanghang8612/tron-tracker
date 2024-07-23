@@ -24,7 +24,10 @@ import (
 )
 
 type ServerConfig struct {
-	Port int `toml:"port"`
+	HttpPort  int    `toml:"http_port"`
+	HttpsPort int    `toml:"https_port"`
+	CertFile  string `toml:"cert_file"`
+	KeyFile   string `toml:"key_file"`
 }
 
 type DeFiConfig struct {
@@ -36,8 +39,11 @@ type DeFiConfig struct {
 }
 
 type Server struct {
-	router *gin.Engine
-	srv    *http.Server
+	httpRouter *gin.Engine
+	httpServer *http.Server
+
+	httpsRouter *gin.Engine
+	httpsServer *http.Server
 
 	db           *database.RawDB
 	serverConfig *ServerConfig
@@ -47,16 +53,22 @@ type Server struct {
 }
 
 func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig) *Server {
-	router := gin.Default()
-	router.Use(cors.Default())
-	srv := &http.Server{
-		Addr:    ":" + strconv.Itoa(serverConfig.Port),
-		Handler: router,
-	}
+	httpRouter := gin.Default()
+	httpsRouter := gin.Default()
+	httpsRouter.Use(cors.Default())
 
 	return &Server{
-		router: router,
-		srv:    srv,
+		httpRouter: httpRouter,
+		httpServer: &http.Server{
+			Addr:    ":" + strconv.Itoa(serverConfig.HttpPort),
+			Handler: httpRouter,
+		},
+
+		httpsRouter: httpsRouter,
+		httpsServer: &http.Server{
+			Addr:    ":" + strconv.Itoa(serverConfig.HttpsPort),
+			Handler: httpsRouter,
+		},
 
 		db:           db,
 		serverConfig: serverConfig,
@@ -67,39 +79,52 @@ func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig)
 }
 
 func (s *Server) Start() {
-	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
-	s.router.GET("/exchange_statistics", s.exchangesStatistic)
-	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
-	s.router.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
-	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
-	s.router.GET("/special_statistics", s.specialStatistic)
-	s.router.GET("/total_statistics", s.totalStatistics)
-	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
-	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
-	s.router.GET("/exchange_weekly_statistics", s.exchangesWeeklyStatistic)
-	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
-	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
-	s.router.GET("/trx_statistics", s.trxStatistics)
-	s.router.GET("/user_statistics", s.userStatistics)
-	s.router.GET("/top_users", s.topUsers)
-	s.router.GET("/token_statistics", s.tokenStatistics)
-	s.router.GET("/eth_statistics", s.ethStatistics)
-	s.router.GET("/tron_statistics", s.forward)
-	s.router.GET("/market_pair_statistics", s.marketPairStatistics)
-	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
-	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
+	s.httpRouter.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
+	s.httpRouter.GET("/exchange_statistics", s.exchangesStatistic)
+	s.httpRouter.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
+	s.httpRouter.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
+	s.httpRouter.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
+	s.httpRouter.GET("/special_statistics", s.specialStatistic)
+	s.httpRouter.GET("/total_statistics", s.totalStatistics)
+	s.httpRouter.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
+	s.httpRouter.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
+	s.httpRouter.GET("/exchange_weekly_statistics", s.exchangesWeeklyStatistic)
+	s.httpRouter.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
+	s.httpRouter.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
+	s.httpRouter.GET("/trx_statistics", s.trxStatistics)
+	s.httpRouter.GET("/user_statistics", s.userStatistics)
+	s.httpRouter.GET("/top_users", s.topUsers)
+	s.httpRouter.GET("/token_statistics", s.tokenStatistics)
+	s.httpRouter.GET("/eth_statistics", s.ethStatistics)
+	s.httpRouter.GET("/tron_statistics", s.forward)
+
+	s.httpsRouter.GET("/market_pair_statistics", s.marketPairStatistics)
+	s.httpsRouter.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
+	s.httpsRouter.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		err := s.httpServer.ListenAndServe()
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			panic(err)
 		}
 	}()
 
-	s.logger.Infof("API server started at %d", s.serverConfig.Port)
+	go func() {
+		err := s.httpsServer.ListenAndServeTLS(s.serverConfig.CertFile, s.serverConfig.KeyFile)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			panic(err)
+		}
+	}()
+
+	s.logger.Infof("API server started at %d&%d", s.serverConfig.HttpPort, s.serverConfig.HttpsPort)
 }
 
 func (s *Server) Stop() {
-	if err := s.srv.Shutdown(context.Background()); err != nil {
+	if err := s.httpServer.Shutdown(context.Background()); err != nil {
+		panic(err)
+	}
+
+	if err := s.httpsServer.Shutdown(context.Background()); err != nil {
 		panic(err)
 	}
 }

@@ -740,7 +740,8 @@ func (db *RawDB) countForUser(startDate string) {
 	)
 
 	for countingDate != time.Now().Format("060102") {
-		db.db.Table("transactions_"+countingDate).Where("type = ?", 1).
+		db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
@@ -756,7 +757,7 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 
 					outStats[result.FromAddr][0]++
-					if result.Fee >= 1_000_000 {
+					if result.Type == 1 && result.Fee >= 1_000_000 {
 						outStats[result.FromAddr][24]++
 					} else {
 						outStats[result.FromAddr][amountType]++

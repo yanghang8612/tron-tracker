@@ -740,8 +740,7 @@ func (db *RawDB) countForUser(startDate string) {
 	)
 
 	for countingDate != time.Now().Format("060102") {
-		db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+		db.db.Table("transactions_"+countingDate).Where("type = ?", 1).
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
@@ -756,8 +755,12 @@ func (db *RawDB) countForUser(startDate string) {
 						outStats[result.FromAddr] = make([]int, 25)
 					}
 
-					outStats[result.FromAddr][amountType]++
 					outStats[result.FromAddr][0]++
+					if result.Fee >= 1_000_000 {
+						outStats[result.FromAddr][24]++
+					} else {
+						outStats[result.FromAddr][amountType]++
+					}
 
 					if amount > 1_000_000 {
 						inStats[result.ToAddr]++
@@ -784,6 +787,7 @@ func (db *RawDB) countForUser(startDate string) {
 		total := stats[0]
 		if inStats[user] < 5 && small > 15 && small*100/total > 90 {
 			phishers[user] = true
+			db.logger.Infof("Phisher: %s, in: %d, out: %v", user, inStats[user], stats)
 		}
 	}
 

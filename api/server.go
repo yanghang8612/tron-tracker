@@ -98,9 +98,9 @@ func (s *Server) Start() {
 	s.httpRouter.GET("/eth_statistics", s.ethStatistics)
 	s.httpRouter.GET("/tron_statistics", s.forward)
 
-	s.httpsRouter.GET("/market_pair_statistics", s.marketPairStatistics)
-	s.httpsRouter.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
-	s.httpsRouter.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
+	s.httpRouter.GET("/market_pair_statistics", s.marketPairStatistics)
+	s.httpRouter.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
+	s.httpRouter.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 
 	go func() {
 		err := s.httpServer.ListenAndServe()

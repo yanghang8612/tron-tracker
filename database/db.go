@@ -708,10 +708,10 @@ type UserStats struct {
 	lastTRXOut  int64
 	lastUSDTIn  int64
 	lastUSDTOut int64
-	trxOut      []int
+	trxOut      map[uint8]int
 	trxIn       int
-	usdtOut     []int
-	usdtIn      []int
+	usdtOut     map[uint8]int
+	usdtIn      map[uint8]int
 }
 
 func (u *UserStats) match(ts int64) uint8 {
@@ -751,21 +751,21 @@ func (db *RawDB) countForUser(startDate string) {
 
 					amount := result.Amount.Int64()
 					amountStr := result.Amount.String()
-					amountType := len(amountStr)
+					amountType := uint8(len(amountStr))
 
 					if _, ok := userStats[result.FromAddr]; !ok {
 						userStats[result.FromAddr] = &UserStats{
-							trxOut:  make([]int, 25),
-							usdtOut: make([]int, 25),
-							usdtIn:  make([]int, 25),
+							trxOut:  make(map[uint8]int),
+							usdtOut: make(map[uint8]int),
+							usdtIn:  make(map[uint8]int),
 						}
 					}
 
 					if _, ok := userStats[result.ToAddr]; !ok {
 						userStats[result.ToAddr] = &UserStats{
-							trxOut:  make([]int, 25),
-							usdtOut: make([]int, 25),
-							usdtIn:  make([]int, 25),
+							trxOut:  make(map[uint8]int),
+							usdtOut: make(map[uint8]int),
+							usdtIn:  make(map[uint8]int),
 						}
 					}
 
@@ -816,7 +816,7 @@ func (db *RawDB) countForUser(startDate string) {
 		}
 
 		smallUSDT := 0
-		for i := 0; i < 8; i++ {
+		for i := uint8(0); i < 8; i++ {
 			smallUSDT += stats.usdtOut[i]
 			smallUSDT += stats.usdtIn[i]
 		}

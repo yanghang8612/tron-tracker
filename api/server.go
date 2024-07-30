@@ -93,6 +93,7 @@ func (s *Server) Start() {
 	s.httpRouter.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.httpRouter.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 	s.httpRouter.GET("/trx_statistics", s.trxStatistics)
+	s.httpRouter.GET("/usdt_statistics", s.usdtStatistics)
 	s.httpRouter.GET("/user_statistics", s.userStatistics)
 	s.httpRouter.GET("/top_users", s.topUsers)
 	s.httpRouter.GET("/token_statistics", s.tokenStatistics)
@@ -765,6 +766,57 @@ func (s *Server) trxStatistics(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"sorted_by_trx":       resStatsSortedByTRX,
 		"sorted_by_small_trx": resStatsSortedBySmallTRX,
+	})
+}
+
+func (s *Server) usdtStatistics(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	n, ok := getIntParam(c, "n")
+	if !ok {
+		return
+	}
+
+	usdtStatsMap := s.db.GetUserTokenStatisticsByDateAndDaysAndToken(startDate, days, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+
+	usdtStats := make([]*models.UserTokenStatistic, 0)
+	for _, stats := range usdtStatsMap {
+		usdtStats = append(usdtStats, stats)
+	}
+
+	sort.Slice(usdtStats, func(i, j int) bool {
+		return usdtStats[i].FromTXCount > usdtStats[j].FromTXCount
+	})
+
+	var topNFrom []*models.UserTokenStatistic
+	if len(usdtStats) > n {
+		topNFrom = usdtStats[:n]
+	} else {
+		topNFrom = usdtStats
+	}
+
+	sort.Slice(usdtStats, func(i, j int) bool {
+		return usdtStats[i].ToTXCount > usdtStats[j].ToTXCount
+	})
+
+	var topNTo []*models.UserTokenStatistic
+	if len(usdtStats) > n {
+		topNTo = usdtStats[:n]
+	} else {
+		topNTo = usdtStats
+	}
+
+	c.JSON(200, gin.H{
+		"top_from": topNFrom,
+		"top_to":   topNTo,
 	})
 }
 

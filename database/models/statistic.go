@@ -101,7 +101,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 type UserTokenStatistic struct {
 	ID                    uint   `gorm:"primaryKey" json:"-"`
 	User                  string `gorm:"size:34;index" json:"address"`
-	Token                 string `gorm:"size:34;index" json:"token"`
+	Token                 string `gorm:"size:34;index" json:"token,omitempty"`
 	FromTXCount           int64  `gorm:"index" json:"from_tx_count"`
 	FromFee               int64  `gorm:"index" json:"from_fee"`
 	FromEnergyTotal       int64  `json:"from_energy_total"`

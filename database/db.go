@@ -349,6 +349,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndToken(date time.Time, day
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {
+				dayStat.Token = ""
 				resultMap[dayStat.User] = dayStat
 			} else {
 				resultMap[dayStat.User].Merge(dayStat)

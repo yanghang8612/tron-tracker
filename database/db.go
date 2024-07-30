@@ -776,16 +776,14 @@ func (db *RawDB) countForUser(startDate string) {
 						} else {
 							userStats[result.FromAddr].trxOut[amountType]++
 						}
+
+						if amount > 1_000_000 {
+							userStats[result.ToAddr].trxIn++
+						}
 					} else {
 						userStats[result.FromAddr].usdtOut[0]++
 						userStats[result.FromAddr].usdtOut[amountType]++
-					}
 
-					if result.Type == 1 && amount > 1_000_000 {
-						userStats[result.ToAddr].trxIn++
-					}
-
-					if result.Type != 1 {
 						userStats[result.ToAddr].usdtIn[0]++
 						userStats[result.ToAddr].usdtIn[amountType]++
 					}
@@ -816,13 +814,13 @@ func (db *RawDB) countForUser(startDate string) {
 		}
 
 		smallUSDT := 0
-		for i := uint8(0); i < 8; i++ {
+		for i := uint8(1); i < 8; i++ {
 			smallUSDT += stats.usdtOut[i]
 			smallUSDT += stats.usdtIn[i]
 		}
 		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
 
-		if smallUSDT*100/totalUSDT > 90 {
+		if totalUSDT > 0 && smallUSDT*100/totalUSDT > 90 {
 			usdtPhishers[user] = true
 			db.logger.Infof("USDT Phisher: %s, in: %d, out: %v", user, stats.usdtIn, stats.usdtOut)
 			continue

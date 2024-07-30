@@ -780,7 +780,12 @@ func (db *RawDB) countForUser(startDate string) {
 						}
 					} else {
 						userStats[result.FromAddr].usdtOut[0]++
-						userStats[result.FromAddr].usdtOut[amountType]++
+						if amount == 1_000_000 ||
+							amount > 1_000_000 && amount < 10_000_000 && amount%10 != 0 {
+							userStats[result.FromAddr].usdtOut[20]++
+						} else {
+							userStats[result.FromAddr].usdtOut[amountType]++
+						}
 
 						userStats[result.ToAddr].usdtIn[0]++
 						if amount == 0 && result.OwnerAddr != result.FromAddr {
@@ -815,8 +820,8 @@ func (db *RawDB) countForUser(startDate string) {
 			continue
 		}
 
-		smallUSDT := stats.usdtIn[20]
-		for i := uint8(1); i < 8; i++ {
+		smallUSDT := stats.usdtOut[20] + stats.usdtIn[20]
+		for i := uint8(1); i < 7; i++ {
 			smallUSDT += stats.usdtOut[i]
 		}
 		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]

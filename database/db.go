@@ -703,14 +703,18 @@ func (db *RawDB) countLoop() {
 	}
 }
 
-type UserRecentStats struct {
+type UserStats struct {
 	lastTRXIn   int64
 	lastTRXOut  int64
 	lastUSDTIn  int64
 	lastUSDTOut int64
+	trxOut      []int
+	trxIn       int
+	usdtOut     []int
+	usdtIn      []int
 }
 
-func (u *UserRecentStats) match(ts int64) uint8 {
+func (u *UserStats) match(ts int64) uint8 {
 	if max(u.lastTRXIn, u.lastTRXOut) > max(u.lastUSDTIn, u.lastUSDTOut) {
 		if ts-u.lastTRXIn < 10*60 || ts-u.lastTRXOut < 10*60 {
 			return 1
@@ -730,13 +734,10 @@ func (db *RawDB) countForUser(startDate string) {
 		countingDate = startDate
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
-		userStats    = make(map[string]*UserRecentStats)
-		outStats     = make(map[string][]int)
-		inStats      = make(map[string]int)
-		phishers     = make(map[string]bool)
+		userStats    = make(map[string]*UserStats)
+		trxPhishers  = make(map[string]bool)
+		usdtPhishers = make(map[string]bool)
 		report       = make(map[int]bool)
-		// TRXStats  = make(map[string]*models.FungibleTokenStatistic)
-		// USDTStats = make(map[string]*models.FungibleTokenStatistic)
 	)
 
 	for countingDate != time.Now().Format("060102") {
@@ -752,19 +753,33 @@ func (db *RawDB) countForUser(startDate string) {
 					amountStr := result.Amount.String()
 					amountType := len(amountStr)
 
-					if _, ok := outStats[result.FromAddr]; !ok {
-						outStats[result.FromAddr] = make([]int, 25)
+					if _, ok := userStats[result.FromAddr]; !ok {
+						userStats[result.FromAddr] = &UserStats{
+							trxOut:  make([]int, 25),
+							usdtOut: make([]int, 25),
+							usdtIn:  make([]int, 25),
+						}
 					}
 
-					outStats[result.FromAddr][0]++
-					if result.Type == 1 && result.Fee >= 1_000_000 {
-						outStats[result.FromAddr][24]++
+					if result.Type == 1 {
+						userStats[result.FromAddr].trxOut[0]++
+						if result.Fee >= 1_000_000 {
+							userStats[result.FromAddr].trxOut[24]++
+						} else {
+							userStats[result.FromAddr].trxOut[amountType]++
+						}
 					} else {
-						outStats[result.FromAddr][amountType]++
+						userStats[result.FromAddr].usdtOut[0]++
+						userStats[result.FromAddr].usdtOut[amountType]++
 					}
 
-					if amount > 1_000_000 {
-						inStats[result.ToAddr]++
+					if result.Type == 1 && amount > 1_000_000 {
+						userStats[result.ToAddr].trxIn++
+					}
+
+					if result.Type != 1 {
+						userStats[result.ToAddr].usdtIn[0]++
+						userStats[result.ToAddr].usdtIn[amountType]++
 					}
 				}
 
@@ -783,12 +798,26 @@ func (db *RawDB) countForUser(startDate string) {
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 	}
 
-	for user, stats := range outStats {
-		small := stats[1] + stats[2] + stats[3]
-		total := stats[0]
-		if inStats[user] < 5 && small > 15 && small*100/total > 90 {
-			phishers[user] = true
-			db.logger.Infof("Phisher: %s, in: %d, out: %v", user, inStats[user], stats)
+	for user, stats := range userStats {
+		smallTRX := stats.trxOut[1] + stats.trxOut[2] + stats.trxOut[3]
+		totalTRX := stats.trxOut[0]
+		if stats.trxIn < 5 && smallTRX > 15 && smallTRX*100/totalTRX > 90 {
+			trxPhishers[user] = true
+			db.logger.Infof("TRX Phisher: %s, in: %d, out: %v", user, stats.trxIn, stats)
+			continue
+		}
+
+		smallUSDT := 0
+		for i := 0; i < 8; i++ {
+			smallUSDT += stats.usdtOut[i]
+			smallUSDT += stats.usdtIn[i]
+		}
+		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
+
+		if smallUSDT*100/totalUSDT > 90 {
+			usdtPhishers[user] = true
+			db.logger.Infof("USDT Phisher: %s, in: %d, out: %v", user, stats.usdtIn, stats.usdtOut)
+			continue
 		}
 	}
 
@@ -797,50 +826,61 @@ func (db *RawDB) countForUser(startDate string) {
 
 	for countingDate != time.Now().Format("060102") {
 		var (
-			dailyTRXPhishingCount          = 0
-			dailyUSDTPhishingCount         = 0
-			dailyTRXPhishingSuccessCount   = 0
-			dailyUSDTPhishingSuccessCount  = 0
-			dailyTRXPhishingSuccessAmount  = int64(0)
-			dailyUSDTPhishingSuccessAmount = int64(0)
+			dailyTTPhishingCount         = 0
+			dailyTUPhishingCount         = 0
+			dailyUUPhishingCount         = 0
+			dailyTTPhishingSuccessCount  = 0
+			dailyTUPhishingSuccessCount  = 0
+			dailyUUPhishingSuccessCount  = 0
+			dailyTTPhishingSuccessAmount = int64(0)
+			dailyTUPhishingSuccessAmount = int64(0)
+			dailyUUPhishingSuccessAmount = int64(0)
 		)
 
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
-					if len(result.ToAddr) == 0 {
+					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
 						continue
 					}
 
 					amount := result.Amount.Int64()
-					_, fromOK := phishers[result.FromAddr]
-					_, toOK := phishers[result.ToAddr]
-					if !fromOK && toOK && amount > 1_000_000 {
+					_, trxFromOK := trxPhishers[result.FromAddr]
+					_, trxToOK := trxPhishers[result.ToAddr]
+					if !trxFromOK && trxToOK && amount > 1_000_000 {
 						if result.Type == 1 {
-							dailyTRXPhishingSuccessCount++
-							dailyTRXPhishingSuccessAmount += amount
-							db.logger.Infof("[%s] Phish TRX success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+							dailyTTPhishingSuccessCount++
+							dailyTTPhishingSuccessAmount += amount
+							db.logger.Infof("[%s] Phish TRX by TRX success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
 						} else {
-							dailyUSDTPhishingSuccessCount++
-							dailyUSDTPhishingSuccessAmount += amount
-							db.logger.Infof("[%s] Phish USDT success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+							dailyTUPhishingSuccessCount++
+							dailyTUPhishingSuccessAmount += amount
+							db.logger.Infof("[%s] Phish USDT by TRX success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
 						}
 						continue
 					}
 
-					if urs, ok := userStats[result.ToAddr]; fromOK && ok {
+					_, usdtToOK := usdtPhishers[result.ToAddr]
+
+					if usdtToOK && amount > 10_000_000 {
+						dailyTTPhishingSuccessCount++
+						dailyTTPhishingSuccessAmount += amount
+						db.logger.Infof("[%s] Phish USDT by USDT success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+					}
+
+					if urs, ok := userStats[result.ToAddr]; trxFromOK && ok {
 						m := urs.match(result.Timestamp)
 						if m == 1 {
-							dailyTRXPhishingCount++
+							dailyTTPhishingCount++
 						} else if m == 2 {
-							dailyUSDTPhishingCount++
+							dailyTUPhishingCount++
 						}
 					}
 
 					if amount > 1_000_000 {
 						if _, ok := userStats[result.FromAddr]; !ok {
-							userStats[result.FromAddr] = &UserRecentStats{}
+							userStats[result.FromAddr] = &UserStats{}
 						}
 
 						if result.Type == 1 {
@@ -850,7 +890,7 @@ func (db *RawDB) countForUser(startDate string) {
 						}
 
 						if _, ok := userStats[result.ToAddr]; !ok {
-							userStats[result.ToAddr] = &UserRecentStats{}
+							userStats[result.ToAddr] = &UserStats{}
 						}
 
 						if result.Type == 1 {
@@ -872,10 +912,10 @@ func (db *RawDB) countForUser(startDate string) {
 				return nil
 			})
 
-		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d", countingDate,
-			dailyTRXPhishingCount, dailyUSDTPhishingCount,
-			dailyTRXPhishingSuccessCount, dailyUSDTPhishingSuccessCount,
-			dailyTRXPhishingSuccessAmount, dailyUSDTPhishingSuccessAmount)
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTTPhishingCount, dailyTUPhishingCount, dailyUUPhishingCount,
+			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount, dailyUUPhishingSuccessCount,
+			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount, dailyUUPhishingSuccessAmount)
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")

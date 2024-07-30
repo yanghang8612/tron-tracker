@@ -796,12 +796,12 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return usdtStats[i].FromTXCount > usdtStats[j].FromTXCount
 	})
 
-	var topNFrom []*models.UserTokenStatistic
-	if len(usdtStats) > n {
-		topNFrom = usdtStats[:n]
-	} else {
-		topNFrom = usdtStats
+	fromLen := n
+	if len(usdtStats) < n {
+		fromLen = len(usdtStats)
 	}
+	topNFrom := make([]*models.UserTokenStatistic, fromLen)
+	copy(topNFrom, usdtStats)
 
 	sort.Slice(usdtStats, func(i, j int) bool {
 		return usdtStats[i].ToTXCount > usdtStats[j].ToTXCount

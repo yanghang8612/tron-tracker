@@ -761,6 +761,14 @@ func (db *RawDB) countForUser(startDate string) {
 						}
 					}
 
+					if _, ok := userStats[result.ToAddr]; !ok {
+						userStats[result.ToAddr] = &UserStats{
+							trxOut:  make([]int, 25),
+							usdtOut: make([]int, 25),
+							usdtIn:  make([]int, 25),
+						}
+					}
+
 					if result.Type == 1 {
 						userStats[result.FromAddr].trxOut[0]++
 						if result.Fee >= 1_000_000 {

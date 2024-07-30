@@ -771,9 +771,7 @@ func (db *RawDB) countForUser(startDate string) {
 
 					if result.Type == 1 {
 						userStats[result.FromAddr].trxOut[0]++
-						if result.Fee >= 1_000_000 {
-							userStats[result.FromAddr].trxOut[24]++
-						} else {
+						if result.Fee == 0 {
 							userStats[result.FromAddr].trxOut[amountType]++
 						}
 
@@ -785,7 +783,11 @@ func (db *RawDB) countForUser(startDate string) {
 						userStats[result.FromAddr].usdtOut[amountType]++
 
 						userStats[result.ToAddr].usdtIn[0]++
-						userStats[result.ToAddr].usdtIn[amountType]++
+						if amount == 0 && result.OwnerAddr != result.FromAddr {
+							userStats[result.ToAddr].usdtIn[20]++
+						} else {
+							userStats[result.ToAddr].usdtIn[amountType]++
+						}
 					}
 				}
 
@@ -813,10 +815,9 @@ func (db *RawDB) countForUser(startDate string) {
 			continue
 		}
 
-		smallUSDT := 0
+		smallUSDT := stats.usdtIn[20]
 		for i := uint8(1); i < 8; i++ {
 			smallUSDT += stats.usdtOut[i]
-			smallUSDT += stats.usdtIn[i]
 		}
 		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
 
@@ -881,8 +882,8 @@ func (db *RawDB) countForUser(startDate string) {
 						}
 
 						if _, ok := usdtPhishers[result.ToAddr]; ok && amount > 10_000_000 {
-							dailyTTPhishingSuccessCount++
-							dailyTTPhishingSuccessAmount += amount
+							dailyUUPhishingSuccessCount++
+							dailyUUPhishingSuccessAmount += amount
 							db.logger.Infof("[%s] Phish USDT by USDT success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
 						}
 					}

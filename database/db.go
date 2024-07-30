@@ -832,6 +832,8 @@ func (db *RawDB) countForUser(startDate string) {
 
 	for countingDate != time.Now().Format("060102") {
 		var (
+			dailyTTotalCount             = 0
+			dailyUTotalCount             = 0
 			dailyTTPhishingCount         = 0
 			dailyTUPhishingCount         = 0
 			dailyUUPhishingCount         = 0
@@ -847,6 +849,12 @@ func (db *RawDB) countForUser(startDate string) {
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
+					if result.Type == 1 {
+						dailyTTotalCount++
+					} else {
+						dailyUTotalCount++
+					}
+
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
 						continue
 					}
@@ -867,12 +875,16 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
-					_, usdtToOK := usdtPhishers[result.ToAddr]
+					if result.Type != 1 {
+						if _, ok := usdtPhishers[result.FromAddr]; ok || amount == 0 {
+							dailyUUPhishingCount++
+						}
 
-					if usdtToOK && amount > 10_000_000 {
-						dailyTTPhishingSuccessCount++
-						dailyTTPhishingSuccessAmount += amount
-						db.logger.Infof("[%s] Phish USDT by USDT success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+						if _, ok := usdtPhishers[result.ToAddr]; ok && amount > 10_000_000 {
+							dailyTTPhishingSuccessCount++
+							dailyTTPhishingSuccessAmount += amount
+							db.logger.Infof("[%s] Phish USDT by USDT success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+						}
 					}
 
 					if urs, ok := userStats[result.ToAddr]; trxFromOK && ok {
@@ -918,7 +930,8 @@ func (db *RawDB) countForUser(startDate string) {
 				return nil
 			})
 
-		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTTotalCount, dailyUTotalCount,
 			dailyTTPhishingCount, dailyTUPhishingCount, dailyUUPhishingCount,
 			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount, dailyUUPhishingSuccessCount,
 			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount, dailyUUPhishingSuccessAmount)

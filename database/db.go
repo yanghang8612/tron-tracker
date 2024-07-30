@@ -820,7 +820,7 @@ func (db *RawDB) countForUser(startDate string) {
 		}
 		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
 
-		if totalUSDT > 0 && smallUSDT*100/totalUSDT > 90 {
+		if stats.usdtOut[0] > 0 && totalUSDT > 0 && smallUSDT*100/totalUSDT > 90 {
 			usdtPhishers[user] = true
 			db.logger.Infof("USDT Phisher: %s, in: %d, out: %v", user, stats.usdtIn, stats.usdtOut)
 			continue

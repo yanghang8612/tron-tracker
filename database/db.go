@@ -704,14 +704,16 @@ func (db *RawDB) countLoop() {
 }
 
 type UserStats struct {
-	lastTRXIn   int64
-	lastTRXOut  int64
-	lastUSDTIn  int64
-	lastUSDTOut int64
-	trxOut      map[uint8]int
-	trxIn       int
-	usdtOut     map[uint8]int
-	usdtIn      map[uint8]int
+	lastTRXIn    int64
+	lastTRXOut   int64
+	lastUSDTIn   int64
+	lastUSDTOut  int64
+	trxOut       map[int8]int
+	trxIn        int
+	usdtOut      map[int8]int
+	usdtIn       map[int8]int
+	interactWith string
+	isCharger    bool
 }
 
 func (u *UserStats) match(ts int64) uint8 {
@@ -751,21 +753,28 @@ func (db *RawDB) countForUser(startDate string) {
 
 					amount := result.Amount.Int64()
 					amountStr := result.Amount.String()
-					amountType := uint8(len(amountStr))
+					amountType := int8(len(amountStr))
 
 					if _, ok := userStats[result.FromAddr]; !ok {
 						userStats[result.FromAddr] = &UserStats{
-							trxOut:  make(map[uint8]int),
-							usdtOut: make(map[uint8]int),
-							usdtIn:  make(map[uint8]int),
+							trxOut:       make(map[int8]int),
+							usdtOut:      make(map[int8]int),
+							usdtIn:       make(map[int8]int),
+							interactWith: result.ToAddr,
+							isCharger:    true,
 						}
+					}
+
+					if result.ToAddr != userStats[result.FromAddr].interactWith {
+						userStats[result.FromAddr].isCharger = false
 					}
 
 					if _, ok := userStats[result.ToAddr]; !ok {
 						userStats[result.ToAddr] = &UserStats{
-							trxOut:  make(map[uint8]int),
-							usdtOut: make(map[uint8]int),
-							usdtIn:  make(map[uint8]int),
+							trxOut:    make(map[int8]int),
+							usdtOut:   make(map[int8]int),
+							usdtIn:    make(map[int8]int),
+							isCharger: true,
 						}
 					}
 
@@ -782,14 +791,14 @@ func (db *RawDB) countForUser(startDate string) {
 						userStats[result.FromAddr].usdtOut[0]++
 						if amount == 1_000_000 ||
 							amount > 1_000_000 && amount < 10_000_000 && amount%10 != 0 {
-							userStats[result.FromAddr].usdtOut[20]++
+							userStats[result.FromAddr].usdtOut[-1]++
 						} else {
 							userStats[result.FromAddr].usdtOut[amountType]++
 						}
 
 						userStats[result.ToAddr].usdtIn[0]++
 						if amount == 0 && result.OwnerAddr != result.FromAddr {
-							userStats[result.ToAddr].usdtIn[20]++
+							userStats[result.ToAddr].usdtIn[-1]++
 						} else {
 							userStats[result.ToAddr].usdtIn[amountType]++
 						}
@@ -814,17 +823,18 @@ func (db *RawDB) countForUser(startDate string) {
 	for user, stats := range userStats {
 		smallTRX := stats.trxOut[1] + stats.trxOut[2] + stats.trxOut[3]
 		totalTRX := stats.trxOut[0]
-		if stats.trxIn < 5 && smallTRX > 15 && smallTRX*100/totalTRX > 90 {
+
+		smallUSDT := stats.usdtOut[-1] + stats.usdtIn[-1]
+		for i := int8(1); i < 7; i++ {
+			smallUSDT += stats.usdtOut[i]
+		}
+		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
+
+		if !stats.isCharger && stats.trxIn < 5 && smallTRX > 15 && smallTRX*100/totalTRX > 90 && totalUSDT < 10 {
 			trxPhishers[user] = true
 			db.logger.Infof("TRX Phisher: %s, in: %d, out: %v", user, stats.trxIn, stats)
 			continue
 		}
-
-		smallUSDT := stats.usdtOut[20] + stats.usdtIn[20]
-		for i := uint8(1); i < 7; i++ {
-			smallUSDT += stats.usdtOut[i]
-		}
-		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
 
 		if stats.usdtOut[0] > 0 && totalUSDT > 0 && smallUSDT*100/totalUSDT > 90 {
 			usdtPhishers[user] = true

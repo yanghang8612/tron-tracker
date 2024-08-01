@@ -1000,20 +1000,16 @@ func (db *RawDB) countForDate(date string) {
 type USDTStatistic struct {
 	transferIn      map[string]int64
 	inFingerPoints  map[string]string
-	inTxHashes      map[string]string
 	transferOut     map[string]int64
 	outFingerPoints map[string]string
-	outTxHashes     map[string]string
 }
 
 func newUSDTStatistic() *USDTStatistic {
 	return &USDTStatistic{
 		transferIn:      make(map[string]int64),
 		inFingerPoints:  make(map[string]string),
-		inTxHashes:      make(map[string]string),
 		transferOut:     make(map[string]int64),
 		outFingerPoints: make(map[string]string),
-		outTxHashes:     make(map[string]string),
 	}
 }
 
@@ -1099,11 +1095,9 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 
 					fromFp := getFp(fromAddr)
 					in := USDTStats[toAddr].inFingerPoints[fromFp]
-					inHash := USDTStats[toAddr].inTxHashes[fromFp]
 					out := USDTStats[toAddr].outFingerPoints[fromFp]
-					outHash := USDTStats[toAddr].outTxHashes[fromFp]
-					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] in_hash-[%s] imitated_out-[%s] out_hash-[%s] hash-[%s] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, inHash, out, outHash, result.Hash, float64(result.Amount.Int64())/1e6)
+					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
+						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
 					continue
 				}
 
@@ -1115,11 +1109,9 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 
 					toFp := getFp(toAddr)
 					in := USDTStats[fromAddr].inFingerPoints[toFp]
-					inHash := USDTStats[fromAddr].inTxHashes[toFp]
 					out := USDTStats[fromAddr].outFingerPoints[toFp]
-					outHash := USDTStats[fromAddr].outTxHashes[toFp]
-					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] in_hash-[%s] imitated_out-[%s] out_hash-[%s] hash-[%s] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, inHash, out, outHash, result.Hash, float64(result.Amount.Int64())/1e6)
+					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
+						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
 					db.logger.Infof("Success: %s %s %s %s %f", countingDate, fromAddr, toAddr, result.Hash, float64(result.Amount.Int64())/1e6)
 					continue
 				}
@@ -1128,10 +1120,8 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 				if len(amountStr) >= 7 && amountStr[len(amountStr)-1] == '0' {
 					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
 					USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
-					USDTStats[fromAddr].outTxHashes[getFp(toAddr)] = fmt.Sprintf("%s %s %s", time.Unix(result.Timestamp, 0).Format("01-02"), result.Hash, amountStr)
 					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
 					USDTStats[toAddr].inFingerPoints[getFp(fromAddr)] = fromAddr
-					USDTStats[toAddr].inTxHashes[getFp(fromAddr)] = fmt.Sprintf("%s %s %s", time.Unix(result.Timestamp, 0).Format("01-02"), result.Hash, amountStr)
 				}
 			}
 

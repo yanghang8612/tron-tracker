@@ -149,12 +149,12 @@ func (t *Tracker) doTrackBlock() {
 					txToDB.Method = data[:8]
 				}
 
-				if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
+				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
 				}
 
-				if txToDB.Method == "23b872dd" && len(data) == 8+64*3 {
+				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
 				}

@@ -116,21 +116,20 @@ func (t *Tracker) doTrackBlock() {
 	t.db.SetLastTrackedBlock(block)
 	for idx, tx := range block.Transactions {
 		var txToDB = &models.Transaction{
-			Hash:      tx.TxID,
-			OwnerAddr: utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Height:    block.BlockHeader.RawData.Number,
+			Index:     uint16(idx),
 			Timestamp: block.BlockHeader.RawData.Timestamp,
+			OwnerAddr: utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Type:      types.ConvertType(tx.RawData.Contract[0].Type),
 			Fee:       txInfoList[idx].Fee,
 		}
 
 		txToDB.NetUsage = txInfoList[idx].Receipt.NetUsage
 		txToDB.NetFee = txInfoList[idx].Receipt.NetFee
-		txToDB.Result = txInfoList[idx].Receipt.Result
+		txToDB.Result = types.ConvertResult(txInfoList[idx].Receipt.Result)
 		txToDB.SigCount = uint8(len(tx.Signature))
 		if txToDB.Type == 1 {
 			txToDB.Name = "TRX"
-			txToDB.FromAddr = txToDB.OwnerAddr
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
@@ -142,7 +141,6 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 2 {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
 			txToDB.Name = string(name)
-			txToDB.FromAddr = txToDB.OwnerAddr
 			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64)))
 		} else if txToDB.Type == 12 {
@@ -157,13 +155,12 @@ func (t *Tracker) doTrackBlock() {
 					txToDB.Method = data[:8]
 				}
 
-				if txToDB.Method == "a9059cbb" && len(data) == 8+64*2 {
-					txToDB.FromAddr = txToDB.OwnerAddr
+				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
 				}
 
-				if txToDB.Method == "23b872dd" && len(data) == 8+64*3 {
+				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
 					txToDB.FromAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))

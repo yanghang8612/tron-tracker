@@ -118,6 +118,43 @@ type Receipt struct {
 	Result            string `json:"result"`
 }
 
+func ConvertResult(contractResult string) uint8 {
+	switch contractResult {
+	case "SUCCESS":
+		return 1
+	case "REVERT":
+		return 2
+	case "BAD_JUMP_DESTINATION":
+		return 3
+	case "OUT_OF_MEMORY":
+		return 4
+	case "PRECOMPILED_CONTRACT":
+		return 5
+	case "STACK_TOO_SMALL":
+		return 6
+	case "STACK_TOO_LARGE":
+		return 7
+	case "ILLEGAL_OPERATION":
+		return 8
+	case "STACK_OVERFLOW":
+		return 9
+	case "OUT_OF_ENERGY":
+		return 10
+	case "OUT_OF_TIME":
+		return 11
+	case "JVM_STACK_OVER_FLOW":
+		return 12
+	case "UNKNOWN":
+		return 13
+	case "TRANSFER_FAILED":
+		return 14
+	case "INVALID_CODE":
+		return 15
+	default:
+		return 1
+	}
+}
+
 type Log struct {
 	Address string   `json:"address"`
 	Topics  []string `json:"topics"`

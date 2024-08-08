@@ -694,11 +694,11 @@ func (db *RawDB) countLoop() {
 			// 		db.countedWeek = db.countForWeek(db.countedWeek)
 			// 	}
 			// }
-			db.countForUser(db.countedDate)
-			db.countUSDTPhishing(db.countedDate)
-			os.Exit(15)
+			// db.countForUser(db.countedDate)
+			// db.countUSDTPhishing(db.countedDate)
+			// os.Exit(15)
 
-			// time.Sleep(1 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -746,7 +746,7 @@ func (db *RawDB) countForUser(startDate string) {
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
-					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
+					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
 						continue
 					}
 
@@ -858,7 +858,7 @@ func (db *RawDB) countForUser(startDate string) {
 						dailyTTotalCount++
 					}
 
-					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != "SUCCESS" {
+					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
 						continue
 					}
 
@@ -869,11 +869,11 @@ func (db *RawDB) countForUser(startDate string) {
 						if result.Type == 1 {
 							dailyTTPhishingSuccessCount++
 							dailyTTPhishingSuccessAmount += amount
-							db.logger.Infof("[%s] Phish TRX by TRX success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+							db.logger.Infof("[%s] Phish TRX by TRX success: %d-%d, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Height, result.Index, amount)
 						} else {
 							dailyTUPhishingSuccessCount++
 							dailyTUPhishingSuccessAmount += amount
-							db.logger.Infof("[%s] Phish USDT by TRX success: %s, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Hash, amount)
+							db.logger.Infof("[%s] Phish USDT by TRX success: %d-%d, amount %d", time.Unix(result.Timestamp, 0).Format("060102"), result.Height, result.Index, amount)
 						}
 						continue
 					}
@@ -957,7 +957,7 @@ func (db *RawDB) countForDate(date string) {
 
 	result := db.db.Table("transactions_"+date).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 		for _, result := range results {
-			if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+			if len(result.ToAddr) == 0 || result.Result != 1 {
 				continue
 			}
 
@@ -1046,7 +1046,7 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 
 		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
-				if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+				if len(result.ToAddr) == 0 || result.Result != 1 {
 					continue
 				}
 
@@ -1077,8 +1077,8 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 						db.usdtPhishingRelations[fromAddr+toAddr] = true
 
 						imitator := USDTStats[fromAddr].outFingerPoints[getFp(toAddr)]
-						db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] hash-[%s] amount-[%s]",
-							countingDate, fromAddr, toAddr, imitator, result.Hash, amountStr)
+						db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] tx_index-[%d-%d] amount-[%s]",
+							countingDate, fromAddr, toAddr, imitator, result.Height, result.Index, amountStr)
 					}
 					continue
 				}
@@ -1096,8 +1096,8 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 					fromFp := getFp(fromAddr)
 					in := USDTStats[toAddr].inFingerPoints[fromFp]
 					out := USDTStats[toAddr].outFingerPoints[fromFp]
-					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
+					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+						countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
 					continue
 				}
 
@@ -1110,9 +1110,9 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 					toFp := getFp(toAddr)
 					in := USDTStats[fromAddr].inFingerPoints[toFp]
 					out := USDTStats[fromAddr].outFingerPoints[toFp]
-					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] hash-[%s] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, out, result.Hash, float64(result.Amount.Int64())/1e6)
-					db.logger.Infof("Success: %s %s %s %s %f", countingDate, fromAddr, toAddr, result.Hash, float64(result.Amount.Int64())/1e6)
+					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+						countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+					db.logger.Infof("Success: %s %s %s %d-%d %f", countingDate, fromAddr, toAddr, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
 					continue
 				}
 
@@ -1213,7 +1213,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
-				if len(result.ToAddr) == 0 || result.Result != "SUCCESS" {
+				if len(result.ToAddr) == 0 || result.Result != 1 {
 					continue
 				}
 

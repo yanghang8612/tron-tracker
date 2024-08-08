@@ -3,15 +3,15 @@ package models
 import "math/big"
 
 type Transaction struct {
-	ID                uint   `gorm:"primaryKey"`
-	Hash              string `gorm:"size:64"`
-	FromAddr          string `gorm:"size:34;index:addr"`
-	ToAddr            string `gorm:"size:34;index:addr"`
+	ID                uint `gorm:"primaryKey"`
 	Height            uint
-	Timestamp         int64
+	Index             uint16
 	Type              uint8  `gorm:"index"`
-	Name              string `gorm:"size:34;index"`
-	Amount            BigInt `gorm:"size:80;index"`
+	Name              string `gorm:"size:34"`
+	OwnerAddr         string `gorm:"size:34"`
+	FromAddr          string `gorm:"size:34"`
+	ToAddr            string `gorm:"size:34"`
+	Amount            BigInt `gorm:"size:80"`
 	Fee               int64
 	EnergyTotal       int64
 	EnergyFee         int64
@@ -19,7 +19,7 @@ type Transaction struct {
 	EnergyOriginUsage int64
 	NetUsage          int64
 	NetFee            int64
-	Result            string
+	Result            uint8
 	SigCount          uint8
 	Method            string `gorm:"size:8;index"`
 }

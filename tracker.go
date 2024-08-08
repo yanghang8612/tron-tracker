@@ -110,17 +110,16 @@ func (t *Tracker) doTrackBlock() {
 	t.db.SetLastTrackedBlock(block)
 	for idx, tx := range block.Transactions {
 		var txToDB = &models.Transaction{
-			Hash:      tx.TxID,
-			FromAddr:  utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
+			Index:     uint16(idx),
+			OwnerAddr: utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Height:    block.BlockHeader.RawData.Number,
-			Timestamp: block.BlockHeader.RawData.Timestamp,
 			Type:      types.ConvertType(tx.RawData.Contract[0].Type),
 			Fee:       txInfoList[idx].Fee,
 		}
 
 		txToDB.NetUsage = txInfoList[idx].Receipt.NetUsage
 		txToDB.NetFee = txInfoList[idx].Receipt.NetFee
-		txToDB.Result = txInfoList[idx].Receipt.Result
+		txToDB.Result = types.ConvertResult(txInfoList[idx].Receipt.Result)
 		txToDB.SigCount = uint8(len(tx.Signature))
 		if txToDB.Type == 1 {
 			txToDB.Name = "TRX"
@@ -155,6 +154,7 @@ func (t *Tracker) doTrackBlock() {
 				}
 
 				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
+					txToDB.FromAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
 					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
 				}
@@ -189,7 +189,7 @@ func (t *Tracker) doTrackBlock() {
 		}
 
 		transactions = append(transactions, txToDB)
-		t.db.UpdateStatistics(txToDB)
+		t.db.UpdateStatistics(block.BlockHeader.RawData.Timestamp, txToDB)
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {

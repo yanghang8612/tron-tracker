@@ -102,16 +102,16 @@ type UserTokenStatistic struct {
 	ID                    uint   `gorm:"primaryKey" json:"-"`
 	User                  string `gorm:"size:34;index" json:"address"`
 	Token                 string `gorm:"size:34;index" json:"token,omitempty"`
-	FromTXCount           int64  `gorm:"index" json:"from_tx_count"`
-	FromFee               int64  `gorm:"index" json:"from_fee"`
+	FromTXCount           int64  `json:"from_tx_count"`
+	FromFee               int64  `json:"from_fee"`
 	FromEnergyTotal       int64  `json:"from_energy_total"`
 	FromEnergyFee         int64  `json:"from_energy_fee"`
 	FromEnergyUsage       int64  `json:"from_energy_usage"`
 	FromEnergyOriginUsage int64  `json:"from_energy_origin_usage"`
 	FromNetUsage          int64  `json:"from_net_usage"`
 	FromNetFee            int64  `json:"from_net_fee"`
-	ToTXCount             int64  `gorm:"index" json:"to_tx_count"`
-	ToFee                 int64  `gorm:"index" json:"to_fee"`
+	ToTXCount             int64  `json:"to_tx_count"`
+	ToFee                 int64  `json:"to_fee"`
 	ToEnergyTotal         int64  `json:"to_energy_total"`
 	ToEnergyFee           int64  `json:"to_energy_fee"`
 	ToEnergyUsage         int64  `json:"to_energy_usage"`

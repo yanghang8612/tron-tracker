@@ -633,12 +633,12 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 	db.db.Table(dbName).Create(transactions)
 }
 
-func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
-	db.updateUserStatistic(tx.FromAddr, tx, db.cache.fromStats)
-	db.updateUserStatistic("total", tx, db.cache.fromStats)
+func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
+	db.updateUserStatistic(tx.FromAddr, ts, tx, db.cache.fromStats)
+	db.updateUserStatistic("total", ts, tx, db.cache.fromStats)
 
 	if len(tx.ToAddr) > 0 {
-		db.updateUserStatistic(tx.ToAddr, tx, db.cache.toStats)
+		db.updateUserStatistic(tx.ToAddr, ts, tx, db.cache.toStats)
 	}
 
 	if len(tx.Name) > 0 {
@@ -647,8 +647,8 @@ func (db *RawDB) UpdateStatistics(tx *models.Transaction) {
 	}
 }
 
-func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
-	db.cache.date = generateDate(tx.Timestamp)
+func (db *RawDB) updateUserStatistic(user string, ts int64, tx *models.Transaction, stats map[string]*models.UserStatistic) {
+	db.cache.date = generateDate(ts)
 	if _, ok := stats[user]; !ok {
 		stats[user] = &models.UserStatistic{
 			Address: user,

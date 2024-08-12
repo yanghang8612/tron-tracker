@@ -408,19 +408,27 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		currentTotalStatistic.Merge(&dayStatistic)
 	}
 
+	currentPhishingStatistic := &models.PhishingStatistic{}
+	for i := 0; i < days; i++ {
+		dayPhishingStatistic := s.db.GetPhishingStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		currentPhishingStatistic.Merge(&dayPhishingStatistic)
+	}
+	currentPhishingStatistic.Date = ""
+
+	withComment := c.DefaultQuery("comment", "false")
+	if withComment == "false" {
+		c.JSON(200, gin.H{
+			"total_statistic":    currentTotalStatistic,
+			"phishing_statistic": currentPhishingStatistic,
+		})
+		return
+	}
+
 	startDate = startDate.AddDate(0, 0, -days)
 	lastTotalStatistic := &models.UserStatistic{}
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		lastTotalStatistic.Merge(&dayStatistic)
-	}
-
-	withComment := c.DefaultQuery("comment", "false")
-	if withComment == "false" {
-		c.JSON(200, gin.H{
-			"total_statistic": currentTotalStatistic,
-		})
-		return
 	}
 
 	comment := strings.Builder{}
@@ -442,8 +450,9 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		humanize.Comma(currentTotalStatistic.SmallUSDTTotal-lastTotalStatistic.SmallUSDTTotal)))
 
 	c.JSON(200, gin.H{
-		"total_statistic": currentTotalStatistic,
-		"comment":         comment.String(),
+		"total_statistic":    currentTotalStatistic,
+		"phishing_statistic": currentPhishingStatistic,
+		"comment":            comment.String(),
 	})
 }
 

@@ -101,6 +101,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.PhishingStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 
@@ -494,13 +499,20 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
+	actualDays := days
 	for i := 1; i <= days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
 		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume", "percent").
+		result := db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume", "percent").
 			Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
+
+		if result.Error != nil {
+			actualDays -= 1
+			db.logger.Errorf("Failed to query market pair statistics for date [%s], error: %v", queryDate.Format("060102"), result.Error)
+			continue
+		}
 
 		for _, dayStat := range todayStats {
 			if dayStat.Percent == 0 {
@@ -517,15 +529,19 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 		}
 	}
 
+	if actualDays == 0 {
+		return resultMap
+	}
+
 	for key, stat := range resultMap {
-		if stat.Reputation/float64(days) < 0.76 {
+		if stat.Reputation/float64(actualDays) < 0.76 {
 			delete(resultMap, key)
 			continue
 		}
 
 		stat.Percent = 0
 		stat.Reputation = 0
-		stat.Volume /= float64(days)
+		stat.Volume /= float64(actualDays)
 	}
 
 	return resultMap
@@ -535,13 +551,20 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 	mpsMap := make(map[string]*models.MarketPairStatistic)
 	dateMap := make(map[string]bool)
 
+	actualDays := days
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 		dbNameSuffix := queryDate.Format("0601")
 		todayDBName := "market_pair_statistics_" + dbNameSuffix
 
 		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Where("datetime like ?", queryDate.Format("02")+"%").Find(&todayStats)
+		result := db.db.Table(todayDBName).Where("datetime like ?", queryDate.Format("02")+"%").Find(&todayStats)
+
+		if result.Error != nil {
+			actualDays -= 1
+			db.logger.Errorf("Failed to query market pair statistics for date [%s], error: %v", queryDate.Format("060102"), result.Error)
+			continue
+		}
 
 		for _, dayStat := range todayStats {
 			if dayStat.Percent == 0 || dayStat.Token != token {
@@ -564,8 +587,13 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 	}
 
 	resultMap := make(map[string]*models.MarketPairStatistic)
+
+	if actualDays == 0 {
+		return resultMap
+	}
+
 	for key, stat := range mpsMap {
-		if stat.Reputation/float64(days) < 0.76 {
+		if stat.Reputation/float64(actualDays) < 0.76 {
 			continue
 		}
 
@@ -578,6 +606,12 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 	}
 
 	return resultMap
+}
+
+func (db *RawDB) GetPhishingStatisticsByDate(date string) models.PhishingStatistic {
+	var phishingStatistic models.PhishingStatistic
+	db.db.Where("date = ?", date).Limit(1).Find(&phishingStatistic)
+	return phishingStatistic
 }
 
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {

@@ -368,3 +368,39 @@ type MarketPairStatistic struct {
 	DepthUsdPositiveTwo float64 `json:"depth_usd_positive_two,omitempty"`
 	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two,omitempty"`
 }
+
+type PhishingStatistic struct {
+	ID                        uint   `gorm:"primaryKey" json:"-"`
+	Date                      string `gorm:"size:6;index" json:"date,omitempty"`
+	TotalTxWithTRX            uint   `json:"total_tx_with_trx"`
+	TotalCostWithTRX          uint64 `json:"total_cost_with_trx"`
+	TRXSuccessTxWithTRX       uint   `json:"trx_success_tx_with_trx"`
+	TRXSuccessAmountWithTRX   uint64 `json:"trx_success_amount_with_trx"`
+	USDTSuccessTXWithTRX      uint   `json:"usdt_success_tx_with_trx"`
+	USDTSuccessAmountWithTRX  uint64 `json:"usdt_success_amount_with_trx"`
+	TotalTxWithUSDT           uint   `json:"total_tx_with_usdt"`
+	TotalCostWithUSDT         uint64 `json:"total_cost_with_usdt"`
+	TRXSuccessTxWithUSDT      uint   `json:"trx_success_tx_with_usdt"`
+	TRXSuccessAmountWithUSDT  uint64 `json:"trx_success_amount_with_usdt"`
+	USDTSuccessTXWithUSDT     uint   `json:"usdt_success_tx_with_usdt"`
+	USDTSuccessAmountWithUSDT uint64 `json:"usdt_success_amount_with_usdt"`
+}
+
+func (o *PhishingStatistic) Merge(other *PhishingStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.TotalTxWithTRX += other.TotalTxWithTRX
+	o.TotalCostWithTRX += other.TotalCostWithTRX
+	o.TRXSuccessTxWithTRX += other.TRXSuccessTxWithTRX
+	o.TRXSuccessAmountWithTRX += other.TRXSuccessAmountWithTRX
+	o.USDTSuccessTXWithTRX += other.USDTSuccessTXWithTRX
+	o.USDTSuccessAmountWithTRX += other.USDTSuccessAmountWithTRX
+	o.TotalTxWithUSDT += other.TotalTxWithUSDT
+	o.TotalCostWithUSDT += other.TotalCostWithUSDT
+	o.TRXSuccessTxWithUSDT += other.TRXSuccessTxWithUSDT
+	o.TRXSuccessAmountWithUSDT += other.TRXSuccessAmountWithUSDT
+	o.USDTSuccessTXWithUSDT += other.USDTSuccessTXWithUSDT
+	o.USDTSuccessAmountWithUSDT += other.USDTSuccessAmountWithUSDT
+}

@@ -668,7 +668,7 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 }
 
 func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
-	db.updateUserStatistic(tx.FromAddr, ts, tx, db.cache.fromStats)
+	db.updateUserStatistic(tx.OwnerAddr, ts, tx, db.cache.fromStats)
 	db.updateUserStatistic("total", ts, tx, db.cache.fromStats)
 
 	if len(tx.ToAddr) > 0 {
@@ -677,7 +677,9 @@ func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
 
 	if len(tx.Name) > 0 {
 		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
-		db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
+			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+		}
 	}
 }
 
@@ -815,7 +817,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		results := make([]*models.Transaction, 0)
 		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
 			for _, result := range results {
-				user := result.FromAddr
+				user := result.OwnerAddr
 				if _, ok := users[user]; !ok {
 					continue
 				}

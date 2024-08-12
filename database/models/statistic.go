@@ -64,9 +64,14 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	o.EnergyOriginUsage += tx.EnergyOriginUsage
 	o.NetUsage += tx.NetUsage
 	o.NetFee += tx.NetFee
+	o.TXTotal += 1
 
-	o.TXTotal++
-	switch tx.Type {
+	txType := tx.Type
+	if txType > 100 {
+		txType -= 100
+	}
+
+	switch txType {
 	case 1:
 		o.TRXTotal++
 		if tx.Amount.Int64() < 100000 {

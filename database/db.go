@@ -825,10 +825,10 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 				if db.el.Contains(user) {
 					withdrawFee += result.Fee
 					withdrawEnergy += result.EnergyTotal
-				} else if _, ok := db.chargers[user]; ok {
+				} else if _, ok := db.isCharger(user); ok {
 					collectFee += result.Fee
 					collectEnergy += result.EnergyTotal
-				} else if _, ok := db.chargers[result.ToAddr]; ok {
+				} else if _, ok := db.isCharger(result.ToAddr); ok {
 					chargeFee += result.Fee
 					chargeEnergy += result.EnergyTotal
 				} else {
@@ -886,6 +886,17 @@ func (db *RawDB) DoMarketPairStatistics() {
 	db.db.Table(statsDBName).Save(steemMarketPairs)
 
 	db.logger.Infof("Finish doing market pair statistics")
+}
+
+func (db *RawDB) isCharger(address string) (*models.Charger, bool) {
+	db.chargersLock.RLock()
+	defer db.chargersLock.RUnlock()
+
+	if c, ok := db.chargers[address]; ok && !c.IsFake {
+		return c, true
+	}
+
+	return nil, false
 }
 
 func (db *RawDB) saveMarketPairOriginData(token, data string) {
@@ -969,11 +980,7 @@ func (db *RawDB) countForDate(date string) {
 			from := result.FromAddr
 			to := result.ToAddr
 
-			db.chargersLock.RLock()
-			charger, ok := db.chargers[to]
-			db.chargersLock.RUnlock()
-
-			if ok && db.el.Contains(from) {
+			if charger, ok := db.isCharger(to); ok && db.el.Contains(from) {
 				exchange := db.el.Get(from)
 				if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
 					ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{
@@ -1181,13 +1188,9 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 				exchangeStats[exchange.Name][stats.Token].AddWithdraw(stats)
 			} else {
 				db.chargersLock.RLock()
-				charger, ok := db.chargers[stats.User]
-				db.chargersLock.RUnlock()
-				if ok {
-					if charger.IsFake {
-						continue
-					}
+				charger, isCharger := db.isCharger(stats.User)
 
+				if isCharger {
 					if db.el.Contains(charger.Address) {
 						charger.IsFake = true
 						db.db.Save(charger)

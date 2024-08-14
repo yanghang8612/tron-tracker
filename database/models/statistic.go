@@ -181,7 +181,7 @@ type TokenStatistic struct {
 	EnergyOriginUsage int64  `json:"energy_origin_usage"`
 	NetUsage          int64  `json:"net_usage"`
 	NetFee            int64  `json:"net_fee"`
-	TXTotal           int64  `json:"tx_total"`
+	TxTotal           int64  `json:"tx_total"`
 }
 
 func (o *TokenStatistic) Merge(other *TokenStatistic) {
@@ -196,7 +196,7 @@ func (o *TokenStatistic) Merge(other *TokenStatistic) {
 	o.EnergyOriginUsage += other.EnergyOriginUsage
 	o.NetUsage += other.NetUsage
 	o.NetFee += other.NetFee
-	o.TXTotal += other.TXTotal
+	o.TxTotal += other.TxTotal
 }
 
 func (o *TokenStatistic) Add(tx *Transaction) {
@@ -211,7 +211,7 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 	o.EnergyOriginUsage += tx.EnergyOriginUsage
 	o.NetUsage += tx.NetUsage
 	o.NetFee += tx.NetFee
-	o.TXTotal++
+	o.TxTotal++
 }
 
 type ExchangeStatistic struct {
@@ -414,4 +414,43 @@ func (o *PhishingStatistic) Merge(other *PhishingStatistic) {
 	o.TRXSuccessAmountWithUSDT += other.TRXSuccessAmountWithUSDT
 	o.USDTSuccessTXWithUSDT += other.USDTSuccessTXWithUSDT
 	o.USDTSuccessAmountWithUSDT += other.USDTSuccessAmountWithUSDT
+}
+
+type USDTStorageStatistic struct {
+	ID                     uint   `gorm:"primaryKey" json:"-"`
+	Date                   string `gorm:"size:6;index" json:"date,omitempty"`
+	SetTxCount             uint   `json:"set_tx_count"`
+	SetEnergyTotal         uint64 `json:"set_energy_total"`
+	SetEnergyFee           uint64 `json:"set_energy_fee"`
+	SetEnergyUsage         uint64 `json:"set_energy_usage"`
+	SetEnergyOriginUsage   uint64 `json:"set_energy_origin_usage"`
+	SetNetUsage            uint64 `json:"set_net_usage"`
+	SetNetFee              uint64 `json:"set_net_fee"`
+	ResetTxCount           uint   `json:"reset_tx_count"`
+	ResetEnergyTotal       uint64 `json:"reset_energy_total"`
+	ResetEnergyFee         uint64 `json:"reset_energy_fee"`
+	ResetEnergyUsage       uint64 `json:"reset_energy_usage"`
+	ResetEnergyOriginUsage uint64 `json:"reset_energy_origin_usage"`
+	ResetNetUsage          uint64 `json:"reset_net_usage"`
+	ResetNetFee            uint64 `json:"reset_net_fee"`
+}
+
+func (o *USDTStorageStatistic) Add(tx *Transaction) {
+	if tx.EnergyTotal < 50000 {
+		o.SetTxCount++
+		o.SetEnergyTotal += uint64(tx.EnergyTotal)
+		o.SetEnergyFee += uint64(tx.EnergyFee)
+		o.SetEnergyUsage += uint64(tx.EnergyUsage)
+		o.SetEnergyOriginUsage += uint64(tx.EnergyOriginUsage)
+		o.SetNetUsage += uint64(tx.NetUsage)
+		o.SetNetFee += uint64(tx.NetFee)
+	} else {
+		o.ResetTxCount++
+		o.ResetEnergyTotal += uint64(tx.EnergyTotal)
+		o.ResetEnergyFee += uint64(tx.EnergyFee)
+		o.ResetEnergyUsage += uint64(tx.EnergyUsage)
+		o.ResetEnergyOriginUsage += uint64(tx.EnergyOriginUsage)
+		o.ResetNetUsage += uint64(tx.NetUsage)
+		o.ResetNetFee += uint64(tx.NetFee)
+	}
 }

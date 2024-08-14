@@ -106,6 +106,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.USDTStorageStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 
@@ -966,6 +971,7 @@ func (db *RawDB) countForDate(date string) {
 		results              = make([]*models.Transaction, 0)
 		TRXStats             = make(map[string]*models.FungibleTokenStatistic)
 		USDTStats            = make(map[string]*models.FungibleTokenStatistic)
+		USDTStorageStat      = &models.USDTStorageStatistic{}
 		ExchangeSpecialStats = make(map[string]*models.ExchangeStatistic)
 	)
 
@@ -989,6 +995,10 @@ func (db *RawDB) countForDate(date string) {
 						USDTStats[typeName] = models.NewFungibleTokenStatistic(date, "USDT", typeName, result)
 					} else {
 						USDTStats[typeName].Add(result)
+					}
+
+					if result.Method == "a9059cbb" || result.Method == "23b872dd" {
+						USDTStorageStat.Add(result)
 					}
 				}
 
@@ -1025,6 +1035,8 @@ func (db *RawDB) countForDate(date string) {
 	for _, stats := range USDTStats {
 		db.db.Create(stats)
 	}
+
+	db.db.Create(USDTStorageStat)
 
 	for _, stats := range ExchangeSpecialStats {
 		db.db.Create(stats)

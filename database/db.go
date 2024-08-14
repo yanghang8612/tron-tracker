@@ -619,6 +619,21 @@ func (db *RawDB) GetPhishingStatisticsByDate(date string) models.PhishingStatist
 	return phishingStatistic
 }
 
+func (db *RawDB) GetUSDTStorageStatisticsByDateAndDays(date time.Time, days int) models.USDTStorageStatistic {
+	result := models.USDTStorageStatistic{}
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
+
+		var dayStat models.USDTStorageStatistic
+		db.db.Where("date = ?", queryDate.Format("060102")).Limit(1).Find(&dayStat)
+
+		result.Merge(&dayStat)
+	}
+
+	return result
+}
+
 func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.updateExchanges()
 

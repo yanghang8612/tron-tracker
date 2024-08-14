@@ -454,3 +454,24 @@ func (o *USDTStorageStatistic) Add(tx *Transaction) {
 		o.ResetNetFee += uint64(tx.NetFee)
 	}
 }
+
+func (o *USDTStorageStatistic) Merge(other *USDTStorageStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.SetTxCount += other.SetTxCount
+	o.SetEnergyTotal += other.SetEnergyTotal
+	o.SetEnergyFee += other.SetEnergyFee
+	o.SetEnergyUsage += other.SetEnergyUsage
+	o.SetEnergyOriginUsage += other.SetEnergyOriginUsage
+	o.SetNetUsage += other.SetNetUsage
+	o.SetNetFee += other.SetNetFee
+	o.ResetTxCount += other.ResetTxCount
+	o.ResetEnergyTotal += other.ResetEnergyTotal
+	o.ResetEnergyFee += other.ResetEnergyFee
+	o.ResetEnergyUsage += other.ResetEnergyUsage
+	o.ResetEnergyOriginUsage += other.ResetEnergyOriginUsage
+	o.ResetNetUsage += other.ResetNetUsage
+	o.ResetNetFee += other.ResetNetFee
+}

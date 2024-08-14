@@ -94,6 +94,7 @@ func (s *Server) Start() {
 	s.httpRouter.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
 	s.httpRouter.GET("/trx_statistics", s.trxStatistics)
 	s.httpRouter.GET("/usdt_statistics", s.usdtStatistics)
+	s.httpRouter.GET("/usdt_statistics_by_storage", s.usdtStatistics)
 	s.httpRouter.GET("/user_statistics", s.userStatistics)
 	s.httpRouter.GET("/top_users", s.topUsers)
 	s.httpRouter.GET("/token_statistics", s.tokenStatistics)
@@ -827,6 +828,20 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		"top_from": topNFrom,
 		"top_to":   topNTo,
 	})
+}
+
+func (s *Server) usdtStatisticsByStorage(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	c.JSON(200, s.db.GetUSDTStorageStatisticsByDateAndDays(startDate, days))
 }
 
 func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {

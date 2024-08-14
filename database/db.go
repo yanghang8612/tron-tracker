@@ -49,6 +49,7 @@ func newCache() *dbCache {
 }
 
 type RawDB struct {
+	config      *Config
 	db          *gorm.DB
 	el          *types.ExchangeList
 	elUpdatedAt time.Time
@@ -130,6 +131,7 @@ func New(config *Config) *RawDB {
 	validTokens["TRX"] = "TRX"
 
 	rawDB := &RawDB{
+		config:      config,
 		db:          db,
 		el:          net.GetExchanges(),
 		elUpdatedAt: time.Now(),
@@ -799,6 +801,15 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	}
 	db.logger.Infof("Total users: %d, read [%d] lines from file", len(users), lineCount)
 
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", db.config.User, db.config.Password, db.config.Host, "tracker")
+	txDB, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
+		SkipDefaultTransaction: true,
+		Logger:                 logger.Discard,
+	})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var (
 		totalFee       int64
 		totalEnergy    int64
@@ -815,7 +826,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 
 		txCount := 0
 		results := make([]*models.Transaction, 0)
-		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
+		result := txDB.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
 			for _, result := range results {
 				user := result.OwnerAddr
 				if _, ok := users[user]; !ok {

@@ -1225,7 +1225,6 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 				exchangeStats[exchange.Name][stats.Token].AddCollect(stats)
 				exchangeStats[exchange.Name][stats.Token].AddWithdraw(stats)
 			} else {
-				db.chargersLock.RLock()
 				charger, isCharger := db.isCharger(stats.User)
 
 				if isCharger {

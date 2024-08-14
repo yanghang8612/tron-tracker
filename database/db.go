@@ -965,45 +965,64 @@ func (db *RawDB) countForDate(date string) {
 		txCount              = int64(0)
 		results              = make([]*models.Transaction, 0)
 		TRXStats             = make(map[string]*models.FungibleTokenStatistic)
+		USDTStats            = make(map[string]*models.FungibleTokenStatistic)
 		ExchangeSpecialStats = make(map[string]*models.ExchangeStatistic)
 	)
 
-	result := db.db.Table("transactions_"+date).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
-		for _, result := range results {
-			typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
-			if _, ok := TRXStats[typeName]; !ok {
-				TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
-			} else {
-				TRXStats[typeName].Add(result)
-			}
-
-			from := result.FromAddr
-			to := result.ToAddr
-
-			if charger, ok := db.isCharger(to); ok && db.el.Contains(from) {
-				exchange := db.el.Get(from)
-				if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
-					ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{
-						Date:  date,
-						Name:  charger.ExchangeName,
-						Token: "Special",
-					}
-
-					ExchangeSpecialStats[exchange.Name].AddWithdrawFromTx(result)
+	result := db.db.Table("transactions_"+date).
+		Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+		FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+			for _, result := range results {
+				if len(result.ToAddr) == 0 || result.Result != 1 {
+					continue
 				}
+
+				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+				if result.Type == 1 {
+					if _, ok := TRXStats[typeName]; !ok {
+						TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
+					} else {
+						TRXStats[typeName].Add(result)
+					}
+				} else {
+					if _, ok := USDTStats[typeName]; !ok {
+						USDTStats[typeName] = models.NewFungibleTokenStatistic(date, "USDT", typeName, result)
+					} else {
+						USDTStats[typeName].Add(result)
+					}
+				}
+
+				from := result.FromAddr
+				to := result.ToAddr
+
+				if charger, ok := db.isCharger(to); ok && db.el.Contains(from) {
+					exchange := db.el.Get(from)
+					if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
+						ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{
+							Date:  date,
+							Name:  charger.ExchangeName,
+							Token: "Special",
+						}
+
+						ExchangeSpecialStats[exchange.Name].AddWithdrawFromTx(result)
+					}
+				}
+
+			}
+			txCount += tx.RowsAffected
+
+			if txCount%500_000 == 0 {
+				db.logger.Infof("Counting Transactions for date [%s], current counted txs [%d]", date, txCount)
 			}
 
-		}
-		txCount += tx.RowsAffected
-
-		if txCount%500_000 == 0 {
-			db.logger.Infof("Counting Transactions for date [%s], current counted txs [%d]", date, txCount)
-		}
-
-		return nil
-	})
+			return nil
+		})
 
 	for _, stats := range TRXStats {
+		db.db.Create(stats)
+	}
+
+	for _, stats := range USDTStats {
 		db.db.Create(stats)
 	}
 
@@ -1024,26 +1043,41 @@ func (db *RawDB) countForWeek(startDate string) string {
 		txCount      = int64(0)
 		results      = make([]*models.Transaction, 0)
 		TRXStats     = make(map[string]*models.FungibleTokenStatistic)
+		USDTStats    = make(map[string]*models.FungibleTokenStatistic)
 	)
 
 	for generateWeek(countingDate) == week {
-		result := db.db.Table("transactions_"+countingDate).Where("type = ?", 1).FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
-			for _, result := range results {
-				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
-				if _, ok := TRXStats[typeName]; !ok {
-					TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
-				} else {
-					TRXStats[typeName].Add(result)
+		result := db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if len(result.ToAddr) == 0 || result.Result != 1 {
+						continue
+					}
+
+					typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
+					if result.Type == 1 {
+						if _, ok := TRXStats[typeName]; !ok {
+							TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
+						} else {
+							TRXStats[typeName].Add(result)
+						}
+					} else {
+						if _, ok := USDTStats[typeName]; !ok {
+							USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
+						} else {
+							USDTStats[typeName].Add(result)
+						}
+					}
 				}
-			}
-			txCount += tx.RowsAffected
+				txCount += tx.RowsAffected
 
-			if txCount%500_000 == 0 {
-				db.logger.Infof("Counting Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
-			}
+				if txCount%500_000 == 0 {
+					db.logger.Infof("Counting Transactions for week [%s], current counting date [%s], counted txs [%d]", week, countingDate, txCount)
+				}
 
-			return nil
-		})
+				return nil
+			})
 
 		if result.Error != nil {
 			db.logger.Errorf("Counting Transactions for week [%s], error [%v]", week, result.Error)
@@ -1054,6 +1088,10 @@ func (db *RawDB) countForWeek(startDate string) string {
 	}
 
 	for _, stats := range TRXStats {
+		db.db.Create(stats)
+	}
+
+	for _, stats := range USDTStats {
 		db.db.Create(stats)
 	}
 

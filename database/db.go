@@ -1051,6 +1051,7 @@ func (db *RawDB) countForDate(date string) {
 		db.db.Create(stats)
 	}
 
+	USDTStorageStat.Date = date
 	db.db.Create(USDTStorageStat)
 
 	for _, stats := range ExchangeSpecialStats {

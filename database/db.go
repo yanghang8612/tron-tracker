@@ -750,6 +750,10 @@ func (db *RawDB) countForUser(startDate string) {
 						continue
 					}
 
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
+					}
+
 					amount := result.Amount.Int64()
 					amountStr := result.Amount.String()
 					amountType := int8(len(amountStr))
@@ -861,6 +865,10 @@ func (db *RawDB) countForUser(startDate string) {
 
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
 						continue
+					}
+
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
 					}
 
 					amount := result.Amount.Int64()
@@ -1047,96 +1055,102 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 			dayStat = &models.TokenStatistic{}
 		)
 
-		result := db.db.Table("transactions_"+countingDate).Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
-			for _, result := range results {
-				if len(result.ToAddr) == 0 || result.Result != 1 {
-					continue
-				}
+		result := db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if len(result.ToAddr) == 0 || result.Result != 1 {
+						continue
+					}
 
-				fromAddr := result.FromAddr
-				toAddr := result.ToAddr
-				amountStr := result.Amount.String()
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
+					}
 
-				dayFromMap[fromAddr] = true
-				dayToMap[toAddr] = true
-				dayTotalCount += 1
+					fromAddr := result.FromAddr
+					toAddr := result.ToAddr
+					amountStr := result.Amount.String()
 
-				if _, ok := USDTStats[fromAddr]; !ok {
-					USDTStats[fromAddr] = newUSDTStatistic()
-				}
+					dayFromMap[fromAddr] = true
+					dayToMap[toAddr] = true
+					dayTotalCount += 1
 
-				if _, ok := USDTStats[toAddr]; !ok {
-					USDTStats[toAddr] = newUSDTStatistic()
-				}
+					if _, ok := USDTStats[fromAddr]; !ok {
+						USDTStats[fromAddr] = newUSDTStatistic()
+					}
 
-				if result.Method == "23b872dd" && amountStr == "0" {
-					if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr], true) {
+					if _, ok := USDTStats[toAddr]; !ok {
+						USDTStats[toAddr] = newUSDTStatistic()
+					}
+
+					if result.Method == "23b872dd" && amountStr == "0" {
+						if isPhishing(toAddr, result.Timestamp, USDTStats[fromAddr], true) {
+							dayPhishCount += 1
+							dayUSDTCost += result.Amount.Int64()
+							dayPhisherMap[toAddr] = true
+							dayVictimsMap[fromAddr] = true
+							dayStat.Add(result)
+
+							db.usdtPhishingRelations[fromAddr+toAddr] = true
+
+							imitator := USDTStats[fromAddr].outFingerPoints[getFp(toAddr)]
+							db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] tx_index-[%d-%d] amount-[%s]",
+								countingDate, fromAddr, toAddr, imitator, result.Height, result.Index, amountStr)
+						}
+						continue
+					}
+
+					if isPhishingAmount(amountStr) && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
+						isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], false)) {
 						dayPhishCount += 1
 						dayUSDTCost += result.Amount.Int64()
-						dayPhisherMap[toAddr] = true
-						dayVictimsMap[fromAddr] = true
+						dayPhisherMap[fromAddr] = true
+						dayVictimsMap[toAddr] = true
 						dayStat.Add(result)
 
-						db.usdtPhishingRelations[fromAddr+toAddr] = true
+						db.usdtPhishingRelations[toAddr+fromAddr] = true
 
-						imitator := USDTStats[fromAddr].outFingerPoints[getFp(toAddr)]
-						db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] tx_index-[%d-%d] amount-[%s]",
-							countingDate, fromAddr, toAddr, imitator, result.Height, result.Index, amountStr)
+						fromFp := getFp(fromAddr)
+						in := USDTStats[toAddr].inFingerPoints[fromFp]
+						out := USDTStats[toAddr].outFingerPoints[fromFp]
+						db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+							countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						continue
 					}
-					continue
+
+					if _, ok := db.usdtPhishingRelations[fromAddr+toAddr]; ok {
+						daySuccessPhishCount += 1
+						daySuccessVictimsMap[fromAddr] = true
+						daySuccessPhisherMap[toAddr] = true
+						daySuccessAmount += result.Amount.Int64()
+
+						toFp := getFp(toAddr)
+						in := USDTStats[fromAddr].inFingerPoints[toFp]
+						out := USDTStats[fromAddr].outFingerPoints[toFp]
+						db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+							countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						db.logger.Infof("Success: %s %s %s %d-%d %f", countingDate, fromAddr, toAddr, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						continue
+					}
+
+					// 1 000 000
+					if len(amountStr) >= 7 && amountStr[len(amountStr)-1] == '0' {
+						USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
+						USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
+						USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
+						USDTStats[toAddr].inFingerPoints[getFp(fromAddr)] = fromAddr
+					}
 				}
 
-				if isPhishingAmount(amountStr) && (isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], true) ||
-					isPhishing(fromAddr, result.Timestamp, USDTStats[toAddr], false)) {
-					dayPhishCount += 1
-					dayUSDTCost += result.Amount.Int64()
-					dayPhisherMap[fromAddr] = true
-					dayVictimsMap[toAddr] = true
-					dayStat.Add(result)
-
-					db.usdtPhishingRelations[toAddr+fromAddr] = true
-
-					fromFp := getFp(fromAddr)
-					in := USDTStats[toAddr].inFingerPoints[fromFp]
-					out := USDTStats[toAddr].outFingerPoints[fromFp]
-					db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
-					continue
+				txCount += tx.RowsAffected
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing USDT Transactions for date [%s], current counted txs [%d]", countingDate, txCount)
 				}
 
-				if _, ok := db.usdtPhishingRelations[fromAddr+toAddr]; ok {
-					daySuccessPhishCount += 1
-					daySuccessVictimsMap[fromAddr] = true
-					daySuccessPhisherMap[toAddr] = true
-					daySuccessAmount += result.Amount.Int64()
-
-					toFp := getFp(toAddr)
-					in := USDTStats[fromAddr].inFingerPoints[toFp]
-					out := USDTStats[fromAddr].outFingerPoints[toFp]
-					db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
-						countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
-					db.logger.Infof("Success: %s %s %s %d-%d %f", countingDate, fromAddr, toAddr, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
-					continue
-				}
-
-				// 1 000 000
-				if len(amountStr) >= 7 && amountStr[len(amountStr)-1] == '0' {
-					USDTStats[fromAddr].transferOut[toAddr] = result.Timestamp
-					USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
-					USDTStats[toAddr].transferIn[fromAddr] = result.Timestamp
-					USDTStats[toAddr].inFingerPoints[getFp(fromAddr)] = fromAddr
-				}
-			}
-
-			txCount += tx.RowsAffected
-			phase := int(txCount / 500_000)
-			if _, ok := report[phase]; !ok {
-				report[phase] = true
-				db.logger.Infof("Counting Phishing USDT Transactions for date [%s], current counted txs [%d]", countingDate, txCount)
-			}
-
-			return nil
-		})
+				return nil
+			})
 
 		db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", countingDate, result.RowsAffected)
 		fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s - - %d %d %d %d %d %d\n", countingDate,

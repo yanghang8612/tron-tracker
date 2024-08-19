@@ -694,11 +694,11 @@ func (db *RawDB) countLoop() {
 			// 		db.countedWeek = db.countForWeek(db.countedWeek)
 			// 	}
 			// }
-			// db.countForUser(db.countedDate)
-			// db.countUSDTPhishing(db.countedDate)
-			// os.Exit(15)
+			db.countForUser(db.countedDate)
+			db.countUSDTPhishing(db.countedDate)
+			os.Exit(15)
 
-			time.Sleep(1 * time.Second)
+			// time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -844,6 +844,7 @@ func (db *RawDB) countForUser(startDate string) {
 			dailyTTotalCount             = 0
 			dailyTTPhishingCount         = 0
 			dailyTUPhishingCount         = 0
+			dailyPhishingCost            = 0
 			dailyTTPhishingSuccessCount  = 0
 			dailyTUPhishingSuccessCount  = 0
 			dailyTTPhishingSuccessAmount = int64(0)
@@ -882,8 +883,10 @@ func (db *RawDB) countForUser(startDate string) {
 						m := urs.match(result.Timestamp)
 						if m == 1 {
 							dailyTTPhishingCount++
+							dailyPhishingCost += int(result.Amount.Int64())
 						} else if m == 2 {
 							dailyTUPhishingCount++
+							dailyPhishingCost += int(result.Amount.Int64())
 						}
 					}
 
@@ -921,8 +924,8 @@ func (db *RawDB) countForUser(startDate string) {
 				return nil
 			})
 
-		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d", countingDate,
-			dailyTTotalCount, dailyTTPhishingCount, dailyTUPhishingCount,
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTTotalCount, dailyTTPhishingCount, dailyTUPhishingCount, dailyPhishingCost,
 			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount,
 			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount)
 

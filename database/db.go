@@ -321,7 +321,7 @@ func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
 	return totalStat
 }
 
-func (db *RawDB) GetTokenStatisticsByDate(date, token string) models.TokenStatistic {
+func (db *RawDB) GetTokenStatisticsByDateAndToken(date, token string) models.TokenStatistic {
 	var tokenStat models.TokenStatistic
 	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStat)
 	return tokenStat

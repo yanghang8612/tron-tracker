@@ -568,7 +568,7 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 
 	curWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 0; i < 7; i++ {
-		dayStatistic := s.db.GetTokenStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 		curWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 
@@ -580,7 +580,7 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 
 	lastWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 1; i <= 7; i++ {
-		dayStatistic := s.db.GetTokenStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 		lastWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 
@@ -662,31 +662,31 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		}
 
 		for _, addr := range s.defiConfig.SunSwapV1 {
-			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			sunswapV1Fee += tokenStats.Fee
 			sunswapV1Energy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.defiConfig.SunSwapV2 {
-			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			sunswapV2Fee += tokenStats.Fee
 			sunswapV2Energy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.defiConfig.JustLend {
-			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			justlendFee += tokenStats.Fee
 			justlendEnergy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.defiConfig.BTTC {
-			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			bttcFee += tokenStats.Fee
 			bttcEnergy += tokenStats.EnergyTotal
 		}
 
 		for _, addr := range s.defiConfig.USDTCasino {
-			tokenStats := s.db.GetTokenStatisticsByDate(date, addr)
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			usdtcasinoFee += tokenStats.Fee
 			usdtcasinoEnergy += tokenStats.EnergyTotal
 		}
@@ -934,6 +934,19 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 
 	days, ok := getIntParam(c, "days")
 	if !ok {
+		return
+	}
+
+	token, ok := getStringParam(c, "token")
+	if ok {
+		result := &models.TokenStatistic{}
+		for i := 0; i < days; i++ {
+			queryDate := startDate.AddDate(0, 0, i)
+			dayStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), token)
+			result.Merge(&dayStat)
+		}
+
+		c.JSON(200, result)
 		return
 	}
 

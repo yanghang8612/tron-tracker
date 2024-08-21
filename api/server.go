@@ -937,7 +937,7 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		return
 	}
 
-	token, ok := getStringParam(c, "token")
+	token, ok := c.GetQuery("token")
 	if ok {
 		result := &models.TokenStatistic{}
 		for i := 0; i < days; i++ {

@@ -30,13 +30,13 @@ func (b TransferStats) Value() (driver.Value, error) {
 	return res.String(), nil
 }
 
-func (b TransferStats) Merge(other TransferStats) {
+func (b *TransferStats) Merge(other TransferStats) {
 	for i := 0; i < len(b.txCounts); i++ {
 		b.txCounts[i] += other.txCounts[i]
 	}
 }
 
-func (b TransferStats) Add(amount string) {
+func (b *TransferStats) Add(amount string) {
 	amountType := len(amount)
 	b.txCounts[amountType]++
 }

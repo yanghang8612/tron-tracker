@@ -98,7 +98,9 @@ func (o *UserStatistic) Add(tx *Transaction) {
 			o.TRC20Total++
 			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 				o.USDTTotal++
-				o.USDTStats.Add(tx.Amount.String())
+				if tx.Result == 1 {
+					o.USDTStats.Add(tx.Amount.String())
+				}
 				if tx.Amount.Int64() < 500000 {
 					o.SmallUSDTTotal++
 				}

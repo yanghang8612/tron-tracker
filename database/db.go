@@ -697,6 +697,7 @@ func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
 
 	if len(tx.Name) > 0 {
 		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
+		db.updateTokenStatistic("total", tx, db.cache.tokenStats)
 		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
 			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
 		}

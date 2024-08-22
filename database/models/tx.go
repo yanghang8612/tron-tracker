@@ -1,17 +1,21 @@
 package models
 
-import "math/big"
+import (
+	"math/big"
+
+	"tron-tracker/database/models/types"
+)
 
 type Transaction struct {
 	ID                uint `gorm:"primaryKey"`
 	Height            uint
 	Index             uint16
-	Type              uint8  `gorm:"index"`
-	Name              string `gorm:"size:34"`
-	OwnerAddr         string `gorm:"size:34"`
-	FromAddr          string `gorm:"size:34"`
-	ToAddr            string `gorm:"size:34"`
-	Amount            BigInt `gorm:"size:80"`
+	Type              uint8        `gorm:"index"`
+	Name              string       `gorm:"size:34"`
+	OwnerAddr         string       `gorm:"size:34"`
+	FromAddr          string       `gorm:"size:34"`
+	ToAddr            string       `gorm:"size:34"`
+	Amount            types.BigInt `gorm:"size:80"`
 	Fee               int64
 	EnergyTotal       int64
 	EnergyFee         int64
@@ -25,5 +29,5 @@ type Transaction struct {
 }
 
 func (tx *Transaction) SetAmount(amount int64) {
-	tx.Amount = NewBigInt(big.NewInt(amount))
+	tx.Amount = types.NewBigInt(big.NewInt(amount))
 }

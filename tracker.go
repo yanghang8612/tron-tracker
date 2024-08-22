@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
+	modeltypes "tron-tracker/database/models/types"
 	"tron-tracker/net"
 	"tron-tracker/types"
 	"tron-tracker/utils"
@@ -153,13 +154,13 @@ func (t *Tracker) doTrackBlock() {
 				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
 					txToDB.FromAddr = txToDB.OwnerAddr
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
 				}
 
 				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
 					txToDB.FromAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
-					txToDB.Amount = models.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
+					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
 				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal

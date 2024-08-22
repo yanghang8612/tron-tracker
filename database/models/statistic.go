@@ -1,29 +1,35 @@
 package models
 
-import "math/big"
+import (
+	"math/big"
+
+	"tron-tracker/database/models/types"
+)
 
 type UserStatistic struct {
-	ID                uint   `gorm:"primaryKey" json:"-"`
-	Address           string `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
-	Fee               int64  `json:"fee"`
-	EnergyTotal       int64  `json:"energy_total"`
-	EnergyFee         int64  `json:"energy_fee"`
-	EnergyUsage       int64  `json:"energy_usage"`
-	EnergyOriginUsage int64  `json:"energy_origin_usage"`
-	NetUsage          int64  `json:"net_usage"`
-	NetFee            int64  `json:"net_fee"`
-	TXTotal           int64  `json:"tx_total"`
-	TRXTotal          int64  `json:"trx_total"`
-	SmallTRXTotal     int64  `json:"small_trx_total"`
-	TRC10Total        int64  `json:"trc10_total"`
-	TRC20Total        int64  `json:"trc20_total"`
-	SCTotal           int64  `json:"sc_total"`
-	USDTTotal         int64  `json:"usdt_total"`
-	SmallUSDTTotal    int64  `json:"small_usdt_total"`
-	StakeTotal        int64  `json:"stake_total"`
-	DelegateTotal     int64  `json:"delegate_total"`
-	VoteTotal         int64  `json:"vote_total"`
-	MultiSigTotal     int64  `json:"multi_sig_total"`
+	ID                uint                `gorm:"primaryKey" json:"-"`
+	Address           string              `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
+	Fee               int64               `json:"fee"`
+	EnergyTotal       int64               `json:"energy_total"`
+	EnergyFee         int64               `json:"energy_fee"`
+	EnergyUsage       int64               `json:"energy_usage"`
+	EnergyOriginUsage int64               `json:"energy_origin_usage"`
+	NetUsage          int64               `json:"net_usage"`
+	NetFee            int64               `json:"net_fee"`
+	TxTotal           int64               `json:"tx_total"`
+	TRXTotal          int64               `json:"trx_total"`
+	SmallTRXTotal     int64               `json:"small_trx_total"`
+	TRC10Total        int64               `json:"trc10_total"`
+	TRC20Total        int64               `json:"trc20_total"`
+	SCTotal           int64               `json:"sc_total"`
+	USDTTotal         int64               `json:"usdt_total"`
+	SmallUSDTTotal    int64               `json:"small_usdt_total"`
+	StakeTotal        int64               `json:"stake_total"`
+	DelegateTotal     int64               `json:"delegate_total"`
+	VoteTotal         int64               `json:"vote_total"`
+	MultiSigTotal     int64               `json:"multi_sig_total"`
+	TRXStats          types.TransferStats `json:"trx_transfer_stats"`
+	USDTStats         types.TransferStats `json:"usdt_transfer_stats"`
 }
 
 func (o *UserStatistic) Merge(other *UserStatistic) {
@@ -38,7 +44,7 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.EnergyOriginUsage += other.EnergyOriginUsage
 	o.NetUsage += other.NetUsage
 	o.NetFee += other.NetFee
-	o.TXTotal += other.TXTotal
+	o.TxTotal += other.TxTotal
 	o.TRXTotal += other.TRXTotal
 	o.SmallTRXTotal += other.SmallTRXTotal
 	o.TRC10Total += other.TRC10Total
@@ -50,6 +56,8 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.DelegateTotal += other.DelegateTotal
 	o.VoteTotal += other.VoteTotal
 	o.MultiSigTotal += other.MultiSigTotal
+	o.TRXStats.Merge(other.TRXStats)
+	o.USDTStats.Merge(other.USDTStats)
 }
 
 func (o *UserStatistic) Add(tx *Transaction) {
@@ -64,7 +72,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	o.EnergyOriginUsage += tx.EnergyOriginUsage
 	o.NetUsage += tx.NetUsage
 	o.NetFee += tx.NetFee
-	o.TXTotal += 1
+	o.TxTotal += 1
 
 	txType := tx.Type
 	if txType > 100 {
@@ -74,6 +82,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	switch txType {
 	case 1:
 		o.TRXTotal++
+		o.TRXStats.Add(tx.Amount.String())
 		if tx.Amount.Int64() < 100000 {
 			o.SmallTRXTotal++
 		}
@@ -89,6 +98,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 			o.TRC20Total++
 			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 				o.USDTTotal++
+				o.USDTStats.Add(tx.Amount.String())
 				if tx.Amount.Int64() < 500000 {
 					o.SmallUSDTTotal++
 				}
@@ -322,7 +332,7 @@ type FungibleTokenStatistic struct {
 	Address       string          `gorm:"index" json:"address"`
 	Type          string          `json:"type"`
 	Count         int64           `json:"count"`
-	AmountSum     BigInt          `json:"amount_sum"`
+	AmountSum     types.BigInt    `json:"amount_sum"`
 	UniqueFrom    int64           `json:"unique_from"`
 	UniqueFromMap map[string]bool `gorm:"-" json:"-"`
 	UniqueTo      int64           `json:"unique_to"`
@@ -335,7 +345,7 @@ func NewFungibleTokenStatistic(date, address, token string, tx *Transaction) *Fu
 		Address:   address,
 		Type:      token,
 		Count:     1,
-		AmountSum: NewBigInt(big.NewInt(0)),
+		AmountSum: types.NewBigInt(big.NewInt(0)),
 	}
 	stat.AmountSum.Add(tx.Amount)
 	stat.UniqueFrom = 1

@@ -154,13 +154,13 @@ func (t *Tracker) doTrackBlock() {
 				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
 					txToDB.FromAddr = txToDB.OwnerAddr
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64:]))
+					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64 : 8+64*2]))
 				}
 
 				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
 					txToDB.FromAddr = utils.EncodeToBase58(data[8+24 : 8+64])
 					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
-					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2:]))
+					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2 : 8+64*3]))
 				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal

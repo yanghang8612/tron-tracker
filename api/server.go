@@ -823,19 +823,19 @@ func (s *Server) usdtStorageStatistics(c *gin.Context) {
 
 	comment := strings.Builder{}
 	comment.WriteString(fmt.Sprintf("SetStorage:\n"+
-		"Average Fee Per Tx: %.2f TRX (%s%%)\n"+
-		"Daily transactions: %s (%s%%)\n"+
-		"Daily total energy: %s (%s%%)\n"+
-		"Daily energy with staking: %s (%s%%)\n"+
-		"Daily energy fee: %s TRX (%s%%)\n"+
+		"Average Fee Per Tx: %.2f TRX (%s)\n"+
+		"Daily transactions: %s (%s)\n"+
+		"Daily total energy: %s (%s)\n"+
+		"Daily energy with staking: %s (%s)\n"+
+		"Daily energy fee: %s TRX (%s)\n"+
 		"Burn energy: %.2f%%\n"+
 		"ResetStorage:\n"+
-		"Average Fee Per Tx: %.2f TRX (%s%%)\n"+
-		"Daily transactions: %s (%s%%)\n"+
-		"Daily total energy: %s (%s%%)\n"+
-		"Daily energy with staking: %s (%s%%)\n"+
-		"Daily energy fee: %s TRX (%s%%)\n"+
-		"Burn energy: %.2f%",
+		"Average Fee Per Tx: %.2f TRX (%s)\n"+
+		"Daily transactions: %s (%s)\n"+
+		"Daily total energy: %s (%s)\n"+
+		"Daily energy with staking: %s (%s)\n"+
+		"Daily energy fee: %s TRX (%s)\n"+
+		"Burn energy: %.2f%%",
 		float64(curStats.SetEnergyFee)/float64(curStats.SetTxCount)/1e6,
 		utils.FormatChangePercent(int64(lastStats.SetEnergyFee/uint64(lastStats.SetTxCount)), int64(curStats.SetEnergyFee/uint64(curStats.SetTxCount))),
 		humanize.Comma(int64(curStats.SetTxCount/7)),

@@ -811,7 +811,55 @@ func (s *Server) usdtStorageStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, s.db.GetUSDTStorageStatisticsByDateAndDays(startDate, days))
+	curStats := s.db.GetUSDTStorageStatisticsByDateAndDays(startDate, days)
+
+	withComment := c.DefaultQuery("comment", "false")
+	if withComment == "false" {
+		c.JSON(200, curStats)
+		return
+	}
+
+	lastStats := s.db.GetUSDTStorageStatisticsByDateAndDays(startDate.AddDate(0, 0, -7), days)
+
+	comment := strings.Builder{}
+	comment.WriteString(fmt.Sprintf("SetStorage:\n"+
+		"Average Fee Per Tx: %.2f TRX (%s%%)\n"+
+		"Daily transactions: %s (%s%%)\n"+
+		"Daily total energy: %s (%s%%)\n"+
+		"Daily energy with staking: %s (%s%%)\n"+
+		"Daily energy fee: %s TRX (%s%%)\n"+
+		"Burn energy: %.2f%%\n"+
+		"ResetStorage:\n"+
+		"Average Fee Per Tx: %.2f TRX (%s%%)\n"+
+		"Daily transactions: %s (%s%%)\n"+
+		"Daily total energy: %s (%s%%)\n"+
+		"Daily energy with staking: %s (%s%%)\n"+
+		"Daily energy fee: %s TRX (%s%%)\n"+
+		"Burn energy: %.2f%",
+		float64(curStats.SetEnergyFee)/float64(curStats.SetTxCount)/1e6,
+		utils.FormatChangePercent(int64(lastStats.SetEnergyFee/uint64(lastStats.SetTxCount)), int64(curStats.SetEnergyFee/uint64(curStats.SetTxCount))),
+		humanize.Comma(int64(curStats.SetTxCount/7)),
+		utils.FormatChangePercent(int64(lastStats.SetTxCount), int64(curStats.SetTxCount)),
+		humanize.Comma(int64(curStats.SetEnergyTotal/7)),
+		utils.FormatChangePercent(int64(lastStats.SetEnergyTotal), int64(curStats.SetEnergyTotal)),
+		humanize.Comma(int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/7),
+		utils.FormatChangePercent(int64(lastStats.SetEnergyUsage+lastStats.SetEnergyOriginUsage), int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)),
+		humanize.Comma(int64(curStats.SetEnergyFee/7_000_000)),
+		utils.FormatChangePercent(int64(lastStats.SetEnergyFee), int64(curStats.SetEnergyFee)),
+		100.0-float64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/float64(curStats.SetEnergyTotal)*100,
+		float64(curStats.ResetEnergyFee)/float64(curStats.ResetTxCount)/1e6,
+		utils.FormatChangePercent(int64(lastStats.ResetEnergyFee/uint64(lastStats.ResetTxCount)), int64(curStats.ResetEnergyFee/uint64(curStats.ResetTxCount))),
+		humanize.Comma(int64(curStats.ResetTxCount/7)),
+		utils.FormatChangePercent(int64(lastStats.ResetTxCount), int64(curStats.ResetTxCount)),
+		humanize.Comma(int64(curStats.ResetEnergyTotal/7)),
+		utils.FormatChangePercent(int64(lastStats.ResetEnergyTotal), int64(curStats.ResetEnergyTotal)),
+		humanize.Comma(int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/7),
+		utils.FormatChangePercent(int64(lastStats.ResetEnergyUsage+lastStats.ResetEnergyOriginUsage), int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)),
+		humanize.Comma(int64(curStats.ResetEnergyFee/7_000_000)),
+		utils.FormatChangePercent(int64(lastStats.ResetEnergyFee), int64(curStats.ResetEnergyFee)),
+		100.0-float64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/float64(curStats.ResetEnergyTotal)*100))
+
+	c.String(200, comment.String())
 }
 
 func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {

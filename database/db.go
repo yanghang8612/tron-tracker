@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -784,16 +783,16 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	db.statsLock.Lock()
 	defer db.statsLock.Unlock()
 
-	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
+	endDay := date.AddDate(0, 0, -1).Format("20060102")
 
-	weeklyUsersFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s.txt", thisMonday))
+	weeklyUsersFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s.txt", endDay))
 	if err != nil {
 		db.logger.Info("Weekly file has`t been created yet")
 		return
 	}
 	defer weeklyUsersFile.Close()
 
-	statsResultFilePath := fmt.Sprintf("/data/tronlink/week%s_stats.txt", thisMonday)
+	statsResultFilePath := fmt.Sprintf("/data/tronlink/week%s_stats.txt", endDay)
 	if _, err := os.Stat(statsResultFilePath); err == nil && !override {
 		return
 	}
@@ -807,10 +806,10 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 
 	scanner := bufio.NewScanner(weeklyUsersFile)
 
-	db.logger.Info("Start count TronLink user fee for week " + thisMonday)
+	db.logger.Info("Start count TronLink user fee for week " + endDay)
 
-	lastMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, -6)
-	db.logger.Infof("Last Monday: %s", lastMonday.Format("2006-01-02"))
+	startDay := date.AddDate(0, 0, -7)
+	db.logger.Infof("Start Day: %s", startDay.Format("2006-01-02"))
 
 	lineCount := 0
 	users := make(map[string]bool)
@@ -831,7 +830,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		chargeEnergy   int64
 	)
 	for i := 0; i < 7; i++ {
-		queryDate := lastMonday.AddDate(0, 0, i).Format("060102")
+		queryDate := startDay.AddDate(0, 0, i).Format("060102")
 		db.logger.Infof("Start querying transactions for date: %s", queryDate)
 
 		txCount := 0
@@ -969,9 +968,9 @@ func (db *RawDB) countLoop() {
 				db.countForDate(dateToCount)
 				db.countedDate = dateToCount
 
-				// if countedDate.Weekday() == time.Saturday {
-				// 	db.countedWeek = db.countForWeek(db.countedWeek)
-				// }
+				if countedDate.Weekday() == time.Saturday {
+					db.countedWeek = db.countForWeek(db.countedWeek)
+				}
 			}
 
 			time.Sleep(1 * time.Second)
@@ -1044,20 +1043,20 @@ func (db *RawDB) countForDate(date string) {
 			return nil
 		})
 
-	// for _, stats := range TRXStats {
-	// 	db.db.Create(stats)
-	// }
-	//
-	// for _, stats := range USDTStats {
-	// 	db.db.Create(stats)
-	// }
+	for _, stats := range TRXStats {
+		db.db.Create(stats)
+	}
+
+	for _, stats := range USDTStats {
+		db.db.Create(stats)
+	}
 
 	USDTStorageStat.Date = date
 	db.db.Create(USDTStorageStat)
 
-	// for _, stats := range ExchangeSpecialStats {
-	// 	db.db.Create(stats)
-	// }
+	for _, stats := range ExchangeSpecialStats {
+		db.db.Create(stats)
+	}
 
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
 	db.logger.Infof("Finish counting Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)

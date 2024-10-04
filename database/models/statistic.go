@@ -448,7 +448,7 @@ type USDTStorageStatistic struct {
 }
 
 func (o *USDTStorageStatistic) Add(tx *Transaction) {
-	if tx.EnergyTotal < 50000 {
+	if tx.EnergyTotal < 100_000 {
 		o.SetTxCount++
 		o.SetEnergyTotal += uint64(tx.EnergyTotal)
 		o.SetEnergyFee += uint64(tx.EnergyFee)

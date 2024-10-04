@@ -969,9 +969,9 @@ func (db *RawDB) countLoop() {
 				db.countForDate(dateToCount)
 				db.countedDate = dateToCount
 
-				if countedDate.Weekday() == time.Saturday {
-					db.countedWeek = db.countForWeek(db.countedWeek)
-				}
+				// if countedDate.Weekday() == time.Saturday {
+				// 	db.countedWeek = db.countForWeek(db.countedWeek)
+				// }
 			}
 
 			time.Sleep(1 * time.Second)
@@ -1044,20 +1044,20 @@ func (db *RawDB) countForDate(date string) {
 			return nil
 		})
 
-	for _, stats := range TRXStats {
-		db.db.Create(stats)
-	}
-
-	for _, stats := range USDTStats {
-		db.db.Create(stats)
-	}
+	// for _, stats := range TRXStats {
+	// 	db.db.Create(stats)
+	// }
+	//
+	// for _, stats := range USDTStats {
+	// 	db.db.Create(stats)
+	// }
 
 	USDTStorageStat.Date = date
 	db.db.Create(USDTStorageStat)
 
-	for _, stats := range ExchangeSpecialStats {
-		db.db.Create(stats)
-	}
+	// for _, stats := range ExchangeSpecialStats {
+	// 	db.db.Create(stats)
+	// }
 
 	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
 	db.logger.Infof("Finish counting Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)

@@ -484,8 +484,12 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 			}
 
 			key := dayStat.ExchangeName + "_" + dayStat.Pair
-			resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
-			resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+			if _, ok := resultMap[key]; !ok {
+				resultMap[key] = dayStat
+			} else {
+				resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
+				resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+			}
 		}
 	}
 

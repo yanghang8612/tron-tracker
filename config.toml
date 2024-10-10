@@ -1,5 +1,7 @@
 [server]
   http_port = 8080
+[net]
+  slack_webhook = "...(your slack webhook url)"
 [log]
   log_path = "logs"
   log_file = "app.log"

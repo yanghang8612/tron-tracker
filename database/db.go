@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -787,7 +788,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	db.statsLock.Lock()
 	defer db.statsLock.Unlock()
 
-	endDay := date.AddDate(0, 0, -1).Format("20060102")
+	endDay := date.Format("20060102")
 
 	weeklyUsersFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s.txt", endDay))
 	if err != nil {
@@ -883,6 +884,13 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	statsResultFile.WriteString(strconv.FormatInt(collectEnergy, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(chargeFee, 10) + "\n")
 	statsResultFile.WriteString(strconv.FormatInt(chargeEnergy, 10) + "\n")
+
+	slackMessage := "TronLink Weekly Fee Statistics\n"
+	slackMessage += fmt.Sprintf("> Total Fee: `%s`, total energy: `%s`\n", humanize.Comma(totalFee), humanize.Comma(totalEnergy))
+	slackMessage += fmt.Sprintf("> Withdraw Fee: `%s`, withdraw energy: `%s`\n", humanize.Comma(withdrawFee), humanize.Comma(withdrawEnergy))
+	slackMessage += fmt.Sprintf("> Collect Energy: `%s`, collect energy: `%s`\n", humanize.Comma(collectFee), humanize.Comma(collectEnergy))
+	slackMessage += fmt.Sprintf("> Charge Fee: `%s`, charge energy: `%s`\n", humanize.Comma(chargeFee), humanize.Comma(chargeEnergy))
+	net.ReportToSlack(slackMessage)
 }
 
 func (db *RawDB) DoMarketPairStatistics() {

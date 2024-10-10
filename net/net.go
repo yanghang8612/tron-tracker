@@ -13,6 +13,14 @@ import (
 	"tron-tracker/utils"
 )
 
+type Config struct {
+	SlackWebhook string `toml:"slack_webhook"`
+}
+
+type slackMessage struct {
+	Text string `json:"text"`
+}
+
 const (
 	BaseUrl                    = "http://localhost:8088/"
 	GetBlockPath               = "wallet/getblockbynum?num="
@@ -20,7 +28,24 @@ const (
 	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="
 )
 
-var client = resty.New()
+var (
+	client = resty.New()
+	config *Config
+)
+
+func Init(cfg *Config) {
+	config = cfg
+}
+
+func ReportToSlack(msg string) {
+	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(config.SlackWebhook)
+	if err != nil {
+		zap.S().Error(err)
+		return
+	}
+
+	zap.S().Infof("Report to slack: %s", resp)
+}
 
 func GetNowBlock() (*types.Block, error) {
 	url := BaseUrl + GetNowBlockPath

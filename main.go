@@ -10,11 +10,13 @@ import (
 	"tron-tracker/api"
 	"tron-tracker/database"
 	"tron-tracker/log"
+	"tron-tracker/net"
 )
 
 func main() {
 	cfg := loadConfig()
 
+	net.Init(&cfg.Net)
 	log.Init(&cfg.Log)
 
 	db := database.New(&cfg.DB)

@@ -90,6 +90,7 @@ func (s *Server) Start() {
 	s.router.GET("/tron_statistics", s.forward)
 
 	s.router.GET("/market_pair_statistics", s.marketPairStatistics)
+	s.router.GET("/market_pair_volumes", s.marketPairVolumes)
 	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
 	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 
@@ -917,7 +918,12 @@ func (s *Server) topUsers(c *gin.Context) {
 		return
 	}
 
-	fromStatsMap := s.db.GetFromStatisticByDateAndDays(startDate, days)
+	orderBy, ok := getStringParam(c, "order_by")
+	if !ok {
+		return
+	}
+
+	fromStatsMap := s.db.GetTopNFromStatisticByDateAndDays(startDate, days, n, orderBy)
 
 	fromStats := make([]*models.UserStatistic, 0)
 
@@ -925,23 +931,48 @@ func (s *Server) topUsers(c *gin.Context) {
 		fromStats = append(fromStats, stats)
 	}
 
-	type ResEntity struct {
-		Address  string `json:"address"`
-		TotalFee int64  `json:"total_fee"`
-	}
-
-	sort.Slice(fromStats, func(i, j int) bool {
-		return fromStats[i].Fee > fromStats[j].Fee
-	})
-
-	resStatsSortedByFee := pickTopNAndLastN(fromStats, n, func(t *models.UserStatistic) *ResEntity {
-		return &ResEntity{
-			Address:  t.Address,
-			TotalFee: t.Fee,
+	if orderBy == "fee" {
+		type ResEntity struct {
+			Address  string `json:"address"`
+			TotalFee int64  `json:"total_fee"`
 		}
-	})
 
-	c.JSON(200, resStatsSortedByFee[:n])
+		sort.Slice(fromStats, func(i, j int) bool {
+			return fromStats[i].Fee > fromStats[j].Fee
+		})
+
+		resStatsSortedByFee := pickTopNAndLastN(fromStats, n, func(t *models.UserStatistic) *ResEntity {
+			return &ResEntity{
+				Address:  t.Address,
+				TotalFee: t.Fee,
+			}
+		})
+
+		c.JSON(200, resStatsSortedByFee[:n])
+	} else if orderBy == "delegate" {
+		type ResEntity struct {
+			Address       string `json:"address"`
+			TotalDelegate int64  `json:"total_delegate"`
+		}
+
+		sort.Slice(fromStats, func(i, j int) bool {
+			return fromStats[i].DelegateTotal > fromStats[j].DelegateTotal
+		})
+
+		resStatsSortedByDelegate := pickTopNAndLastN(fromStats, n, func(t *models.UserStatistic) *ResEntity {
+			return &ResEntity{
+				Address:       t.Address,
+				TotalDelegate: t.DelegateTotal,
+			}
+		})
+
+		c.JSON(200, resStatsSortedByDelegate[:n])
+	} else {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": orderBy + " not supported",
+		})
+	}
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {
@@ -1064,6 +1095,36 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].Percent > result[j].Percent
+	})
+
+	c.JSON(200, result)
+}
+
+func (s *Server) marketPairVolumes(c *gin.Context) {
+	startDate, ok := prepareDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days")
+	if !ok {
+		return
+	}
+
+	token, ok := getStringParam(c, "token")
+	if !ok {
+		return
+	}
+
+	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, days, token)
+
+	result := make([]*models.MarketPairStatistic, 0)
+	for _, mps := range marketPairDailyVolumes {
+		result = append(result, mps)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Volume > result[j].Volume
 	})
 
 	c.JSON(200, result)

@@ -305,6 +305,29 @@ func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user strin
 	return result
 }
 
+func (db *RawDB) GetTopNFromStatisticByDateAndDays(date time.Time, days, n int, orderByField string) map[string]*models.UserStatistic {
+	resultMap := make(map[string]*models.UserStatistic)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		dayStats := make([]*models.UserStatistic, 0)
+		db.db.Table("from_stats_" + queryDate).Find(&dayStats).Order(orderByField + " desc").Limit(n)
+
+		for _, dayStat := range dayStats {
+			user := dayStat.Address
+
+			if _, ok := resultMap[user]; !ok {
+				resultMap[user] = dayStat
+			} else {
+				resultMap[user].Merge(dayStat)
+			}
+		}
+	}
+
+	return resultMap
+}
+
 func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int64, int64) {
 	type result struct {
 		F int64

@@ -949,7 +949,7 @@ func (s *Server) topUsers(c *gin.Context) {
 		})
 
 		c.JSON(200, resStatsSortedByFee[:n])
-	} else if orderBy == "delegate" {
+	} else if orderBy == "delegate_total" {
 		type ResEntity struct {
 			Address       string `json:"address"`
 			TotalDelegate int64  `json:"total_delegate"`

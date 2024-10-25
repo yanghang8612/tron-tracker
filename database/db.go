@@ -312,7 +312,7 @@ func (db *RawDB) GetTopNFromStatisticByDateAndDays(date time.Time, days, n int, 
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		dayStats := make([]*models.UserStatistic, 0)
-		db.db.Table("from_stats_" + queryDate).Find(&dayStats).Order(orderByField + " desc").Limit(n)
+		db.db.Table("from_stats_" + queryDate).Order(orderByField + " desc").Limit(n).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			user := dayStat.Address

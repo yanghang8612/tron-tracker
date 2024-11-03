@@ -1089,8 +1089,29 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
-	for _, mps := range marketPairStats {
-		result = append(result, mps)
+
+	if _, ok = c.GetQuery("group_by"); ok {
+		exchangeStats := make(map[string]*models.MarketPairStatistic)
+		for _, mps := range marketPairStats {
+			if _, ok := exchangeStats[mps.ExchangeName]; !ok {
+				exchangeStats[mps.ExchangeName] = mps
+				exchangeStats[mps.ExchangeName].Reputation = 0
+				exchangeStats[mps.ExchangeName].Pair = ""
+			} else {
+				exchangeStats[mps.ExchangeName].Volume += mps.Volume
+				exchangeStats[mps.ExchangeName].Percent += mps.Percent
+				exchangeStats[mps.ExchangeName].DepthUsdPositiveTwo += mps.DepthUsdPositiveTwo
+				exchangeStats[mps.ExchangeName].DepthUsdNegativeTwo += mps.DepthUsdNegativeTwo
+			}
+		}
+
+		for _, es := range exchangeStats {
+			result = append(result, es)
+		}
+	} else {
+		for _, mps := range marketPairStats {
+			result = append(result, mps)
+		}
 	}
 
 	sort.Slice(result, func(i, j int) bool {

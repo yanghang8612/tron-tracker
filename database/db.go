@@ -500,7 +500,8 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 		var depthStats []*models.MarketPairStatistic
 		db.db.Table(lastDayDBName).
-			Select("AVG(depth_usd_positive_two) as depth_usd_positive_two, "+
+			Select("exchange_name", "pair",
+				"AVG(depth_usd_positive_two) as depth_usd_positive_two",
 				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
 			Where("datetime like ? and token = ? and percent > 0", lastDay.Format("02")+"%", token).
 			Group("exchange_name, pair").

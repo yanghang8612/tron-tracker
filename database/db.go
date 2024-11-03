@@ -499,20 +499,21 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		lastDay := queryDate.AddDate(0, 0, -1)
 		lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
 
-		var lastDayStats []*models.MarketPairStatistic
-		db.db.Table(lastDayDBName).Where("token = ?", token).Find(&lastDayStats)
+		var depthStats []*models.MarketPairStatistic
+		db.db.Table(lastDayDBName).
+			Select("AVG(depth_usd_positive_two) as depth_usd_positive_two, "+
+				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
+			Where("datetime like ? and token = ?", lastDay.Format("02")+"%", token).
+			Group("exchange_name, pair").
+			Find(&depthStats)
 
-		for _, dayStat := range lastDayStats {
-			if dayStat.Percent == 0 {
-				continue
-			}
-
-			key := dayStat.ExchangeName + "_" + dayStat.Pair
+		for _, depthStat := range depthStats {
+			key := depthStat.ExchangeName + "_" + depthStat.Pair
 			if _, ok := resultMap[key]; !ok {
-				resultMap[key] = dayStat
+				resultMap[key] = depthStat
 			} else {
-				resultMap[key].DepthUsdPositiveTwo += dayStat.DepthUsdPositiveTwo
-				resultMap[key].DepthUsdNegativeTwo += dayStat.DepthUsdNegativeTwo
+				resultMap[key].DepthUsdPositiveTwo += depthStat.DepthUsdPositiveTwo
+				resultMap[key].DepthUsdNegativeTwo += depthStat.DepthUsdNegativeTwo
 			}
 		}
 	}
@@ -523,8 +524,8 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		stat.Token = ""
 		stat.Volume /= float64(days)
 		stat.Percent = stat.Volume / totalVolume
-		stat.DepthUsdPositiveTwo /= float64(24 * 6 * days)
-		stat.DepthUsdNegativeTwo /= float64(24 * 6 * days)
+		stat.DepthUsdPositiveTwo /= float64(days)
+		stat.DepthUsdNegativeTwo /= float64(days)
 	}
 
 	return resultMap

@@ -517,10 +517,11 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		}
 	}
 
+	totalVolume /= float64(days)
 	for _, stat := range resultMap {
 		stat.Datetime = ""
 		stat.Token = ""
-		stat.Percent /= float64(days)
+		stat.Volume /= float64(days)
 		stat.Percent = stat.Volume / totalVolume
 		stat.DepthUsdPositiveTwo /= float64(24 * 6 * days)
 		stat.DepthUsdNegativeTwo /= float64(24 * 6 * days)

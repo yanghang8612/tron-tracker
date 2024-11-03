@@ -475,17 +475,16 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 	var totalVolume float64
 	for i := 0; i < days; i++ {
-		queryDate := date.AddDate(0, 0, i)
-		todayDBName := "market_pair_statistics_" + queryDate.Format("0601")
+		today := date.AddDate(0, 0, i)
+		todayDBName := "market_pair_statistics_" + today.Format("0601")
 
-		var todayStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
+		var volumeStats []*models.MarketPairStatistic
+		db.db.Table(todayDBName).
+			Select("exchange_name", "pair", "volume").
+			Where("datetime = ? and token = ? and percent > 0", today.Format("02")+"0000", token).
+			Find(&volumeStats)
 
-		for _, dayStat := range todayStats {
-			if dayStat.Percent == 0 {
-				continue
-			}
-
+		for _, dayStat := range volumeStats {
 			key := dayStat.ExchangeName + "_" + dayStat.Pair
 			if _, ok := resultMap[key]; !ok {
 				resultMap[key] = dayStat
@@ -496,14 +495,14 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 			totalVolume += dayStat.Volume
 		}
 
-		lastDay := queryDate.AddDate(0, 0, -1)
+		lastDay := today.AddDate(0, 0, -1)
 		lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
 
 		var depthStats []*models.MarketPairStatistic
 		db.db.Table(lastDayDBName).
 			Select("AVG(depth_usd_positive_two) as depth_usd_positive_two, "+
 				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
-			Where("datetime like ? and token = ?", lastDay.Format("02")+"%", token).
+			Where("datetime like ? and token = ? and percent > 0", lastDay.Format("02")+"%", token).
 			Group("exchange_name, pair").
 			Find(&depthStats)
 

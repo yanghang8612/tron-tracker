@@ -1018,7 +1018,7 @@ func (db *RawDB) countLoop() {
 
 			if !done {
 				db.countForUser("241028")
-				db.countUSDTPhishing("241028")
+				// db.countUSDTPhishing("241028")
 				done = true
 			}
 
@@ -1070,7 +1070,7 @@ func (db *RawDB) countForUser(startDate string) {
 	for countingDate != time.Now().Format("060102") {
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
-			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+			FindInBatches(&results, 1000, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
 						continue
@@ -1161,13 +1161,15 @@ func (db *RawDB) countForUser(startDate string) {
 
 		if !stats.isCharger && stats.trxIn < 5 && smallTRX > 15 && smallTRX*100/totalTRX > 90 && totalUSDT < 10 {
 			trxPhishers[user] = true
-			db.logger.Infof("TRX Phisher: %s, in: %d, out: %v", user, stats.trxIn, stats)
+			// db.logger.Infof("TRX Phisher: %s, in: %d, out: %v", user, stats.trxIn, stats)
 			continue
 		}
 	}
 
 	countingDate = startDate
 	txCount = 0
+
+	USDTStats := make(map[string]*USDTStatistic)
 
 	for countingDate != time.Now().Format("060102") {
 		var (
@@ -1179,11 +1181,27 @@ func (db *RawDB) countForUser(startDate string) {
 			dailyTUPhishingSuccessCount  = 0
 			dailyTTPhishingSuccessAmount = int64(0)
 			dailyTUPhishingSuccessAmount = int64(0)
+
+			dayFromMap    = make(map[string]bool)
+			dayToMap      = make(map[string]bool)
+			dayTotalCount = int64(0)
+
+			dayPhisherMap = make(map[string]bool)
+			dayVictimsMap = make(map[string]bool)
+			dayPhishCount = int64(0)
+			dayUSDTCost   = int64(0)
+
+			daySuccessPhisherMap = make(map[string]bool)
+			daySuccessVictimsMap = make(map[string]bool)
+			daySuccessPhishCount = int64(0)
+			daySuccessAmount     = int64(0)
+
+			dayStat = &models.TokenStatistic{}
 		)
 
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
-			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+			FindInBatches(&results, 1000, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if result.Type == 1 {
 						dailyTTotalCount++
@@ -1247,93 +1265,8 @@ func (db *RawDB) countForUser(startDate string) {
 					}
 				}
 
-				txCount += tx.RowsAffected
-
-				phase := int(txCount / 500_000)
-				if _, ok := report[phase]; !ok {
-					report[phase] = true
-					db.logger.Infof("Counting Phishing TRX&USDT Transactions, current counting date [%s], counted txs [%d]", countingDate, txCount)
-				}
-
-				return nil
-			})
-
-		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
-			dailyTTotalCount, dailyTTPhishingCount, dailyTUPhishingCount, dailyPhishingCost,
-			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount,
-			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount)
-
-		date, _ := time.Parse("060102", countingDate)
-		countingDate = date.AddDate(0, 0, 1).Format("060102")
-	}
-
-	// db.logger.Infof("Start saving userStats, total size [%d]", len(userStats))
-	//
-	// saveCount := 0
-	// for _, stat := range userStats {
-	// 	db.db.Create(stat)
-	//
-	// 	saveCount++
-	// 	if saveCount%100_000 == 0 {
-	// 		db.logger.Infof("Saved [%d] userStats", saveCount)
-	// 	}
-	// }
-
-	db.logger.Infof("Finish counting TRX&USDT Transactions from date [%s] to [%s], total counted txs [%d]", startDate, time.Now().Format("060102"), txCount)
-}
-
-type USDTStatistic struct {
-	transferIn      map[string]uint
-	inFingerPoints  map[string]string
-	transferOut     map[string]uint
-	outFingerPoints map[string]string
-}
-
-func newUSDTStatistic() *USDTStatistic {
-	return &USDTStatistic{
-		transferIn:      make(map[string]uint),
-		inFingerPoints:  make(map[string]string),
-		transferOut:     make(map[string]uint),
-		outFingerPoints: make(map[string]string),
-	}
-}
-
-func (db *RawDB) countUSDTPhishing(startDate string) {
-	db.logger.Infof("Start counting Phishing USDT Transactions, start date [%s]", startDate)
-
-	var (
-		countingDate = startDate
-		txCount      = int64(0)
-		results      = make([]*models.Transaction, 0)
-		report       = make(map[int]bool)
-
-		USDTStats = make(map[string]*USDTStatistic)
-	)
-
-	for countingDate != time.Now().Format("060102") {
-		var (
-			dayFromMap    = make(map[string]bool)
-			dayToMap      = make(map[string]bool)
-			dayTotalCount = int64(0)
-
-			dayPhisherMap = make(map[string]bool)
-			dayVictimsMap = make(map[string]bool)
-			dayPhishCount = int64(0)
-			dayUSDTCost   = int64(0)
-
-			daySuccessPhisherMap = make(map[string]bool)
-			daySuccessVictimsMap = make(map[string]bool)
-			daySuccessPhishCount = int64(0)
-			daySuccessAmount     = int64(0)
-
-			dayStat = &models.TokenStatistic{}
-		)
-
-		result := db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
-			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
-					if len(result.ToAddr) == 0 || result.Result != 1 {
+					if result.Type == 1 || len(result.ToAddr) == 0 || result.Result != 1 {
 						continue
 					}
 
@@ -1417,6 +1350,98 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 				}
 
 				txCount += tx.RowsAffected
+
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing TRX&USDT Transactions, current counting date [%s], counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTTotalCount, dailyTTPhishingCount, dailyTUPhishingCount, dailyPhishingCost,
+			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount,
+			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount)
+
+		db.logger.Infof("USDTDaily %s %d %d %s %d %d %s %d %d %s - - %d %d %d %d %d %d\n", countingDate,
+			len(dayFromMap), len(dayPhisherMap), utils.FormatOfPercent(int64(len(dayFromMap)), int64(len(dayPhisherMap))),
+			len(dayToMap), len(dayVictimsMap), utils.FormatOfPercent(int64(len(dayToMap)), int64(len(dayVictimsMap))),
+			dayTotalCount, dayPhishCount, utils.FormatOfPercent(dayTotalCount, dayPhishCount),
+			dayUSDTCost/1e6, dayStat.Fee, dayStat.EnergyTotal-dayStat.EnergyFee/420,
+			daySuccessPhishCount, len(daySuccessVictimsMap), daySuccessAmount/1e6)
+
+		var phishingStats = &models.PhishingStatistic{
+			Date:                        countingDate,
+			TotalTxWithTRX:              uint(dailyTTPhishingCount + dailyTUPhishingCount),
+			TotalCostWithTRX:            uint64(dailyPhishingCost),
+			TRXSuccessTxWithTRX:         uint(dailyTTPhishingSuccessCount),
+			TRXSuccessAmountWithTRX:     uint64(dailyTTPhishingSuccessAmount),
+			USDTSuccessTXWithTRX:        uint(dailyTUPhishingSuccessCount),
+			USDTSuccessAmountWithTRX:    uint64(dailyTUPhishingSuccessAmount),
+			TotalTxWithUSDT:             uint(dayPhishCount),
+			TotalCostWithUSDT:           uint64(dayUSDTCost),
+			TotalTxFeeWithUSDT:          uint64(dayStat.Fee),
+			TotalTxFrozenEnergyWithUSDT: uint64(dayStat.EnergyTotal - dayStat.EnergyFee/210),
+			USDTSuccessTXWithUSDT:       uint(daySuccessPhishCount),
+			USDTSuccessAmountWithUSDT:   uint64(daySuccessAmount),
+		}
+		db.db.Save(phishingStats)
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	// db.logger.Infof("Start saving userStats, total size [%d]", len(userStats))
+	//
+	// saveCount := 0
+	// for _, stat := range userStats {
+	// 	db.db.Create(stat)
+	//
+	// 	saveCount++
+	// 	if saveCount%100_000 == 0 {
+	// 		db.logger.Infof("Saved [%d] userStats", saveCount)
+	// 	}
+	// }
+
+	db.logger.Infof("Finish counting TRX&USDT Transactions from date [%s] to [%s], total counted txs [%d]", startDate, time.Now().Format("060102"), txCount)
+}
+
+type USDTStatistic struct {
+	transferIn      map[string]uint
+	inFingerPoints  map[string]string
+	transferOut     map[string]uint
+	outFingerPoints map[string]string
+}
+
+func newUSDTStatistic() *USDTStatistic {
+	return &USDTStatistic{
+		transferIn:      make(map[string]uint),
+		inFingerPoints:  make(map[string]string),
+		transferOut:     make(map[string]uint),
+		outFingerPoints: make(map[string]string),
+	}
+}
+
+func (db *RawDB) countUSDTPhishing(startDate string) {
+	db.logger.Infof("Start counting Phishing USDT Transactions, start date [%s]", startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		report       = make(map[int]bool)
+	)
+
+	for countingDate != time.Now().Format("060102") {
+		var ()
+
+		result := db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+
+				txCount += tx.RowsAffected
 				phase := int(txCount / 500_000)
 				if _, ok := report[phase]; !ok {
 					report[phase] = true
@@ -1427,12 +1452,6 @@ func (db *RawDB) countUSDTPhishing(startDate string) {
 			})
 
 		db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", countingDate, result.RowsAffected)
-		fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s - - %d %d %d %d %d %d\n", countingDate,
-			len(dayFromMap), len(dayPhisherMap), utils.FormatOfPercent(int64(len(dayFromMap)), int64(len(dayPhisherMap))),
-			len(dayToMap), len(dayVictimsMap), utils.FormatOfPercent(int64(len(dayToMap)), int64(len(dayVictimsMap))),
-			dayTotalCount, dayPhishCount, utils.FormatOfPercent(dayTotalCount, dayPhishCount),
-			dayUSDTCost/1e6, dayStat.Fee, dayStat.EnergyTotal-dayStat.EnergyFee/420,
-			daySuccessPhishCount, len(daySuccessVictimsMap), daySuccessAmount/1e6)
 
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")

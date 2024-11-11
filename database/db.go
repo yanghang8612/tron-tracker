@@ -1017,7 +1017,7 @@ func (db *RawDB) countLoop() {
 			}
 
 			if !done {
-				db.countForUser("241028")
+				db.countForUser("241001", "241028")
 				// db.countUSDTPhishing("241028")
 				done = true
 			}
@@ -1055,7 +1055,7 @@ func (u *UserStats) match(height uint) uint8 {
 	return 0
 }
 
-func (db *RawDB) countForUser(startDate string) {
+func (db *RawDB) countForUser(startDate, endDate string) {
 	db.logger.Infof("Start counting TRX&USDT Transactions from date [%s]", startDate)
 
 	var (
@@ -1067,7 +1067,7 @@ func (db *RawDB) countForUser(startDate string) {
 		report       = make(map[int]bool)
 	)
 
-	for countingDate != time.Now().Format("060102") {
+	for countingDate != endDate {
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
 			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
@@ -1171,7 +1171,7 @@ func (db *RawDB) countForUser(startDate string) {
 
 	USDTStats := make(map[string]*USDTStatistic)
 
-	for countingDate != time.Now().Format("060102") {
+	for countingDate != endDate {
 		var (
 			dailyTTotalCount             = 0
 			dailyTTPhishingCount         = 0

@@ -1070,7 +1070,7 @@ func (db *RawDB) countForUser(startDate string) {
 	for countingDate != time.Now().Format("060102") {
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
-			FindInBatches(&results, 1000, func(tx *gorm.DB, _ int) error {
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
 						continue
@@ -1201,7 +1201,7 @@ func (db *RawDB) countForUser(startDate string) {
 
 		db.db.Table("transactions_"+countingDate).
 			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
-			FindInBatches(&results, 1000, func(tx *gorm.DB, _ int) error {
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if result.Type == 1 {
 						dailyTTotalCount++

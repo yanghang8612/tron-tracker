@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,6 +63,8 @@ type RawDB struct {
 	chargers             map[string]*models.Charger
 	chargersLock         sync.RWMutex
 	chargersToSave       map[string]*models.Charger
+
+	usdtPhishingRelations map[string]bool
 
 	trackingDate string
 	flushCh      chan *dbCache
@@ -144,6 +147,8 @@ func New(config *Config) *RawDB {
 		isTableMigrated:     make(map[string]bool),
 		chargers:            make(map[string]*models.Charger),
 		chargersToSave:      make(map[string]*models.Charger),
+
+		usdtPhishingRelations: make(map[string]bool),
 
 		flushCh:     make(chan *dbCache),
 		cache:       newCache(),
@@ -1011,9 +1016,477 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
+			if !done {
+				db.countForUser("241028")
+				db.countUSDTPhishing("241028")
+				done = true
+			}
+
 			time.Sleep(1 * time.Second)
 		}
 	}
+}
+
+var done = false
+
+type UserStats struct {
+	lastTRXIn    uint
+	lastTRXOut   uint
+	lastUSDTIn   uint
+	lastUSDTOut  uint
+	trxOut       map[int8]int
+	trxIn        int
+	usdtOut      map[int8]int
+	usdtIn       map[int8]int
+	interactWith string
+	isCharger    bool
+}
+
+func (u *UserStats) match(height uint) uint8 {
+	if max(u.lastTRXIn, u.lastTRXOut) > max(u.lastUSDTIn, u.lastUSDTOut) {
+		if height-u.lastTRXIn < 10*60/3 || height-u.lastTRXOut < 10*60/3 {
+			return 1
+		}
+	} else {
+		if height-u.lastUSDTIn < 10*60/3 || height-u.lastUSDTOut < 10*60/3 {
+			return 2
+		}
+	}
+	return 0
+}
+
+func (db *RawDB) countForUser(startDate string) {
+	db.logger.Infof("Start counting TRX&USDT Transactions from date [%s]", startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		userStats    = make(map[string]*UserStats)
+		trxPhishers  = make(map[string]bool)
+		report       = make(map[int]bool)
+	)
+
+	for countingDate != time.Now().Format("060102") {
+		db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
+						continue
+					}
+
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
+					}
+
+					amount := result.Amount.Int64()
+					amountStr := result.Amount.String()
+					amountType := int8(len(amountStr))
+
+					if _, ok := userStats[result.FromAddr]; !ok {
+						userStats[result.FromAddr] = &UserStats{
+							trxOut:       make(map[int8]int),
+							usdtOut:      make(map[int8]int),
+							usdtIn:       make(map[int8]int),
+							interactWith: result.ToAddr,
+							isCharger:    true,
+						}
+					}
+
+					if result.ToAddr != userStats[result.FromAddr].interactWith {
+						userStats[result.FromAddr].isCharger = false
+					}
+
+					if _, ok := userStats[result.ToAddr]; !ok {
+						userStats[result.ToAddr] = &UserStats{
+							trxOut:    make(map[int8]int),
+							usdtOut:   make(map[int8]int),
+							usdtIn:    make(map[int8]int),
+							isCharger: true,
+						}
+					}
+
+					if result.Type == 1 {
+						userStats[result.FromAddr].trxOut[0]++
+						if result.Fee == 0 {
+							userStats[result.FromAddr].trxOut[amountType]++
+						}
+
+						if amount > 1_000_000 {
+							userStats[result.ToAddr].trxIn++
+						}
+					} else {
+						userStats[result.FromAddr].usdtOut[0]++
+						if amount == 1_000_000 ||
+							amount > 1_000_000 && amount < 10_000_000 && amount%10 != 0 {
+							userStats[result.FromAddr].usdtOut[-1]++
+						} else {
+							userStats[result.FromAddr].usdtOut[amountType]++
+						}
+
+						userStats[result.ToAddr].usdtIn[0]++
+						if amount == 0 && result.OwnerAddr != result.FromAddr {
+							userStats[result.ToAddr].usdtIn[-1]++
+						} else {
+							userStats[result.ToAddr].usdtIn[amountType]++
+						}
+					}
+				}
+
+				txCount += tx.RowsAffected
+
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing TRX&USDT Transactions, current counting date [%s], counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	for user, stats := range userStats {
+		smallTRX := stats.trxOut[1] + stats.trxOut[2] + stats.trxOut[3]
+		totalTRX := stats.trxOut[0]
+
+		smallUSDT := stats.usdtOut[-1] + stats.usdtIn[-1]
+		for i := int8(1); i < 7; i++ {
+			smallUSDT += stats.usdtOut[i]
+		}
+		totalUSDT := stats.usdtOut[0] + stats.usdtIn[0]
+
+		if !stats.isCharger && stats.trxIn < 5 && smallTRX > 15 && smallTRX*100/totalTRX > 90 && totalUSDT < 10 {
+			trxPhishers[user] = true
+			db.logger.Infof("TRX Phisher: %s, in: %d, out: %v", user, stats.trxIn, stats)
+			continue
+		}
+	}
+
+	countingDate = startDate
+	txCount = 0
+
+	for countingDate != time.Now().Format("060102") {
+		var (
+			dailyTTotalCount             = 0
+			dailyTTPhishingCount         = 0
+			dailyTUPhishingCount         = 0
+			dailyPhishingCost            = 0
+			dailyTTPhishingSuccessCount  = 0
+			dailyTUPhishingSuccessCount  = 0
+			dailyTTPhishingSuccessAmount = int64(0)
+			dailyTUPhishingSuccessAmount = int64(0)
+		)
+
+		db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if result.Type == 1 {
+						dailyTTotalCount++
+					}
+
+					if len(result.ToAddr) == 0 || result.Type != 1 && result.Result != 1 {
+						continue
+					}
+
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
+					}
+
+					amount := result.Amount.Int64()
+					_, trxFromOK := trxPhishers[result.FromAddr]
+					_, trxToOK := trxPhishers[result.ToAddr]
+					if !trxFromOK && trxToOK && amount > 1_000_000 {
+						if result.Type == 1 {
+							dailyTTPhishingSuccessCount++
+							dailyTTPhishingSuccessAmount += amount
+							db.logger.Infof("[%s] Phish TRX by TRX success: %d-%d, amount %d", countingDate, result.Height, result.Index, amount)
+						} else {
+							dailyTUPhishingSuccessCount++
+							dailyTUPhishingSuccessAmount += amount
+							db.logger.Infof("[%s] Phish USDT by TRX success: %d-%d, amount %d", countingDate, result.Height, result.Index, amount)
+						}
+						continue
+					}
+
+					if urs, ok := userStats[result.ToAddr]; trxFromOK && ok {
+						m := urs.match(result.Height)
+						if m == 1 {
+							dailyTTPhishingCount++
+							dailyPhishingCost += int(result.Amount.Int64())
+						} else if m == 2 {
+							dailyTUPhishingCount++
+							dailyPhishingCost += int(result.Amount.Int64())
+						}
+					}
+
+					if amount > 1_000_000 {
+						if _, ok := userStats[result.FromAddr]; !ok {
+							userStats[result.FromAddr] = &UserStats{}
+						}
+
+						if result.Type == 1 {
+							userStats[result.FromAddr].lastTRXOut = result.Height
+						} else {
+							userStats[result.FromAddr].lastUSDTOut = result.Height
+						}
+
+						if _, ok := userStats[result.ToAddr]; !ok {
+							userStats[result.ToAddr] = &UserStats{}
+						}
+
+						if result.Type == 1 {
+							userStats[result.ToAddr].lastTRXIn = result.Height
+						} else {
+							userStats[result.ToAddr].lastUSDTIn = result.Height
+						}
+					}
+				}
+
+				txCount += tx.RowsAffected
+
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing TRX&USDT Transactions, current counting date [%s], counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		db.logger.Infof("Daily TRX Phishing: %s, %d, %d, %d, %d, %d, %d, %d, %d", countingDate,
+			dailyTTotalCount, dailyTTPhishingCount, dailyTUPhishingCount, dailyPhishingCost,
+			dailyTTPhishingSuccessCount, dailyTUPhishingSuccessCount,
+			dailyTTPhishingSuccessAmount, dailyTUPhishingSuccessAmount)
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	// db.logger.Infof("Start saving userStats, total size [%d]", len(userStats))
+	//
+	// saveCount := 0
+	// for _, stat := range userStats {
+	// 	db.db.Create(stat)
+	//
+	// 	saveCount++
+	// 	if saveCount%100_000 == 0 {
+	// 		db.logger.Infof("Saved [%d] userStats", saveCount)
+	// 	}
+	// }
+
+	db.logger.Infof("Finish counting TRX&USDT Transactions from date [%s] to [%s], total counted txs [%d]", startDate, time.Now().Format("060102"), txCount)
+}
+
+type USDTStatistic struct {
+	transferIn      map[string]uint
+	inFingerPoints  map[string]string
+	transferOut     map[string]uint
+	outFingerPoints map[string]string
+}
+
+func newUSDTStatistic() *USDTStatistic {
+	return &USDTStatistic{
+		transferIn:      make(map[string]uint),
+		inFingerPoints:  make(map[string]string),
+		transferOut:     make(map[string]uint),
+		outFingerPoints: make(map[string]string),
+	}
+}
+
+func (db *RawDB) countUSDTPhishing(startDate string) {
+	db.logger.Infof("Start counting Phishing USDT Transactions, start date [%s]", startDate)
+
+	var (
+		countingDate = startDate
+		txCount      = int64(0)
+		results      = make([]*models.Transaction, 0)
+		report       = make(map[int]bool)
+
+		USDTStats = make(map[string]*USDTStatistic)
+	)
+
+	for countingDate != time.Now().Format("060102") {
+		var (
+			dayFromMap    = make(map[string]bool)
+			dayToMap      = make(map[string]bool)
+			dayTotalCount = int64(0)
+
+			dayPhisherMap = make(map[string]bool)
+			dayVictimsMap = make(map[string]bool)
+			dayPhishCount = int64(0)
+			dayUSDTCost   = int64(0)
+
+			daySuccessPhisherMap = make(map[string]bool)
+			daySuccessVictimsMap = make(map[string]bool)
+			daySuccessPhishCount = int64(0)
+			daySuccessAmount     = int64(0)
+
+			dayStat = &models.TokenStatistic{}
+		)
+
+		result := db.db.Table("transactions_"+countingDate).
+			Where("type = ? or name = ?", 31, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if len(result.ToAddr) == 0 || result.Result != 1 {
+						continue
+					}
+
+					if len(result.FromAddr) == 0 {
+						result.FromAddr = result.OwnerAddr
+					}
+
+					fromAddr := result.FromAddr
+					toAddr := result.ToAddr
+					amountStr := result.Amount.String()
+
+					dayFromMap[fromAddr] = true
+					dayToMap[toAddr] = true
+					dayTotalCount += 1
+
+					if _, ok := USDTStats[fromAddr]; !ok {
+						USDTStats[fromAddr] = newUSDTStatistic()
+					}
+
+					if _, ok := USDTStats[toAddr]; !ok {
+						USDTStats[toAddr] = newUSDTStatistic()
+					}
+
+					if result.Method == "23b872dd" && amountStr == "0" {
+						if isPhishing(toAddr, result.Height, USDTStats[fromAddr], true) {
+							dayPhishCount += 1
+							dayUSDTCost += result.Amount.Int64()
+							dayPhisherMap[toAddr] = true
+							dayVictimsMap[fromAddr] = true
+							dayStat.Add(result)
+
+							db.usdtPhishingRelations[fromAddr+toAddr] = true
+
+							imitator := USDTStats[fromAddr].outFingerPoints[getFp(toAddr)]
+							db.logger.Infof("Phishing Zero USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitator-[%s] tx_index-[%d-%d] amount-[%s]",
+								countingDate, fromAddr, toAddr, imitator, result.Height, result.Index, amountStr)
+						}
+						continue
+					}
+
+					if isPhishingAmount(amountStr) && (isPhishing(fromAddr, result.Height, USDTStats[toAddr], true) ||
+						isPhishing(fromAddr, result.Height, USDTStats[toAddr], false)) {
+						dayPhishCount += 1
+						dayUSDTCost += result.Amount.Int64()
+						dayPhisherMap[fromAddr] = true
+						dayVictimsMap[toAddr] = true
+						dayStat.Add(result)
+
+						db.usdtPhishingRelations[toAddr+fromAddr] = true
+
+						fromFp := getFp(fromAddr)
+						in := USDTStats[toAddr].inFingerPoints[fromFp]
+						out := USDTStats[toAddr].outFingerPoints[fromFp]
+						db.logger.Infof("Phishing Normal USDT Transfer: date-[%s] phisher-[%s] victim-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+							countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						continue
+					}
+
+					if _, ok := db.usdtPhishingRelations[fromAddr+toAddr]; ok {
+						daySuccessPhishCount += 1
+						daySuccessVictimsMap[fromAddr] = true
+						daySuccessPhisherMap[toAddr] = true
+						daySuccessAmount += result.Amount.Int64()
+
+						toFp := getFp(toAddr)
+						in := USDTStats[fromAddr].inFingerPoints[toFp]
+						out := USDTStats[fromAddr].outFingerPoints[toFp]
+						db.logger.Infof("Phishing success USDT Transfer: date-[%s] victim-[%s] phisher-[%s] imitated_in-[%s] imitated_out-[%s] tx_index-[%d-%d] amount-[%f]",
+							countingDate, fromAddr, toAddr, in, out, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						db.logger.Infof("Success: %s %s %s %d-%d %f", countingDate, fromAddr, toAddr, result.Height, result.Index, float64(result.Amount.Int64())/1e6)
+						continue
+					}
+
+					// 1 000 000
+					if len(amountStr) >= 7 && amountStr[len(amountStr)-1] == '0' {
+						USDTStats[fromAddr].transferOut[toAddr] = result.Height
+						USDTStats[fromAddr].outFingerPoints[getFp(toAddr)] = toAddr
+						USDTStats[toAddr].transferIn[fromAddr] = result.Height
+						USDTStats[toAddr].inFingerPoints[getFp(fromAddr)] = fromAddr
+					}
+				}
+
+				txCount += tx.RowsAffected
+				phase := int(txCount / 500_000)
+				if _, ok := report[phase]; !ok {
+					report[phase] = true
+					db.logger.Infof("Counting Phishing USDT Transactions for date [%s], current counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		db.logger.Infof("Finish counting Phishing USDT Transactions for date [%s], total counted txs [%d]", countingDate, result.RowsAffected)
+		fmt.Printf("USDTDaily %s %d %d %s %d %d %s %d %d %s - - %d %d %d %d %d %d\n", countingDate,
+			len(dayFromMap), len(dayPhisherMap), utils.FormatOfPercent(int64(len(dayFromMap)), int64(len(dayPhisherMap))),
+			len(dayToMap), len(dayVictimsMap), utils.FormatOfPercent(int64(len(dayToMap)), int64(len(dayVictimsMap))),
+			dayTotalCount, dayPhishCount, utils.FormatOfPercent(dayTotalCount, dayPhishCount),
+			dayUSDTCost/1e6, dayStat.Fee, dayStat.EnergyTotal-dayStat.EnergyFee/420,
+			daySuccessPhishCount, len(daySuccessVictimsMap), daySuccessAmount/1e6)
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
+	}
+
+	db.logger.Infof("Finish counting Phishing USDT Transactions, total counted txs [%d]", txCount)
+}
+
+func isPhishingAmount(amount string) bool {
+	if len(amount) <= 7 {
+		return true
+	}
+
+	return false
+}
+
+func isPhishing(addr string, height uint, stat *USDTStatistic, isPhishingOut bool) bool {
+	fp := getFp(addr)
+
+	if isPhishingOut {
+		if _, ok := stat.outFingerPoints[fp]; !ok {
+			return false
+		}
+
+		interactedAddr := stat.outFingerPoints[fp]
+
+		gap := height - stat.transferOut[interactedAddr]
+
+		_, hasIn := stat.transferIn[addr]
+
+		return addr != interactedAddr && gap < 7*24*60*60/3 && !hasIn
+	} else {
+		if _, ok := stat.inFingerPoints[fp]; !ok {
+			return false
+		}
+
+		interactedAddr := stat.inFingerPoints[fp]
+
+		gap := height - stat.transferIn[interactedAddr]
+
+		_, hasOut := stat.transferOut[addr]
+
+		return addr != interactedAddr && gap < 7*24*60*60/3 && !hasOut
+	}
+}
+
+const FpSize = 5
+
+func getFp(addr string) string {
+	fp := []byte(addr[34-FpSize:])
+	sort.Slice(fp, func(i, j int) bool {
+		return fp[i] < fp[j]
+	})
+	return string(fp)
 }
 
 func (db *RawDB) countForDate(date string) {

@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -1046,14 +1047,21 @@ func (db *RawDB) countFromStats(startDate, endDate string) {
 				return nil
 			})
 
+		for user, curStat := range userStats {
+			var preStat models.UserStatistic
+			result := db.db.Find(&curStat, "address = ?", user)
+			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				db.db.Create(curStat)
+			} else {
+				preStat.Merge(curStat)
+				db.db.Save(&preStat)
+			}
+		}
+
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 
 		db.logger.Infof("Counting From Stats, current counting date [%s], current user [%d]", countingDate, len(userStats))
-	}
-
-	for _, stats := range userStats {
-		db.db.Create(stats)
 	}
 }
 

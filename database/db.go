@@ -1063,6 +1063,7 @@ func (db *RawDB) countFromStats(startDate, endDate string) {
 			statsToSave = append(statsToSave, curStat)
 			if len(statsToSave) == 500 {
 				db.db.Save(statsToSave)
+				statsToSave = make([]*models.UserStatistic, 0)
 			}
 		}
 		if len(statsToSave) > 0 {

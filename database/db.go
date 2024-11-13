@@ -2,7 +2,6 @@ package database
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -1030,50 +1029,38 @@ func (db *RawDB) countLoop() {
 }
 
 func (db *RawDB) countFromStats(startDate, endDate string) {
-	dbErr := db.db.AutoMigrate(&models.UserStatistic{})
+	dbErr := db.db.AutoMigrate(&models.TransferStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
 
 	countingDate := startDate
 	results := make([]*models.UserStatistic, 0)
-	userStats := make(map[string]*models.UserStatistic)
+	transferStats := make(map[string]*models.TransferStatistic)
 
 	for countingDate != endDate {
 		db.db.Table("from_stats_"+countingDate).
 			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
-					if _, ok := userStats[result.Address]; !ok {
-						userStats[result.Address] = result
-					} else {
-						userStats[result.Address].Merge(result)
+					if _, ok := transferStats[result.Address]; !ok {
+						transferStats[result.Address] = &models.TransferStatistic{
+							Address: result.Address,
+						}
 					}
+
+					transferStats[result.Address].Merge(result)
 				}
 				return nil
 			})
 
-		statsToSave := make([]*models.UserStatistic, 0)
-		for user, curStat := range userStats {
-			var preStat models.UserStatistic
-			result := db.db.Where("address = ?", user).First(&preStat)
-			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				curStat.Merge(&preStat)
-			}
-
-			statsToSave = append(statsToSave, curStat)
-			if len(statsToSave) == 500 {
-				db.db.Save(statsToSave)
-				statsToSave = make([]*models.UserStatistic, 0)
-			}
-		}
-		if len(statsToSave) > 0 {
-			db.db.Save(statsToSave)
-		}
-
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 
-		db.logger.Infof("Counting From Stats, current counting date [%s], current user [%d]", countingDate, len(userStats))
+		db.logger.Infof("Counting From Stats, current counting date [%s], current user [%d]", countingDate, len(transferStats))
+	}
+
+	for _, stat := range transferStats {
+		db.db.Save(stat)
 	}
 }
 

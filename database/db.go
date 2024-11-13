@@ -1030,6 +1030,11 @@ func (db *RawDB) countLoop() {
 }
 
 func (db *RawDB) countFromStats(startDate, endDate string) {
+	dbErr := db.db.AutoMigrate(&models.UserStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	countingDate := startDate
 	results := make([]*models.UserStatistic, 0)
 	userStats := make(map[string]*models.UserStatistic)
@@ -1049,7 +1054,7 @@ func (db *RawDB) countFromStats(startDate, endDate string) {
 
 		for user, curStat := range userStats {
 			var preStat models.UserStatistic
-			result := db.db.Find(&curStat, "address = ?", user)
+			result := db.db.Where("address = ?", user).First(&preStat)
 			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 				db.db.Create(curStat)
 			} else {

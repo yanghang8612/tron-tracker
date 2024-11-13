@@ -1049,7 +1049,7 @@ func (db *RawDB) countFromStats(startDate, endDate string) {
 		date, _ := time.Parse("060102", countingDate)
 		countingDate = date.AddDate(0, 0, 1).Format("060102")
 
-		db.logger.Infof("Counting From Stats, current counting date [%s]", countingDate)
+		db.logger.Infof("Counting From Stats, current counting date [%s], current user [%d]", countingDate, len(userStats))
 	}
 
 	for _, stats := range userStats {

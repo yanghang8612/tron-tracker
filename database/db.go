@@ -1052,15 +1052,21 @@ func (db *RawDB) countFromStats(startDate, endDate string) {
 				return nil
 			})
 
+		statsToSave := make([]*models.UserStatistic, 0)
 		for user, curStat := range userStats {
 			var preStat models.UserStatistic
 			result := db.db.Where("address = ?", user).First(&preStat)
-			if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-				db.db.Create(curStat)
-			} else {
-				preStat.Merge(curStat)
-				db.db.Save(&preStat)
+			if !errors.Is(result.Error, gorm.ErrRecordNotFound) {
+				curStat.Merge(&preStat)
 			}
+
+			statsToSave = append(statsToSave, curStat)
+			if len(statsToSave) == 500 {
+				db.db.Save(statsToSave)
+			}
+		}
+		if len(statsToSave) > 0 {
+			db.db.Save(statsToSave)
 		}
 
 		date, _ := time.Parse("060102", countingDate)

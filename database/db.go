@@ -259,6 +259,23 @@ func (db *RawDB) GetTokenName(addr string) string {
 	return db.vt[addr]
 }
 
+func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days int, contract string, result int) []*models.Transaction {
+	var results []*models.Transaction
+
+	for i := 0; i < days; i++ {
+		var txs []*models.Transaction
+
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+		db.db.Table("transactions_"+queryDate).Where("contract = ? and result = ?", contract, result).Find(&txs)
+
+		if len(txs) != 0 {
+			results = append(results, txs...)
+		}
+	}
+
+	return results
+}
+
 func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 

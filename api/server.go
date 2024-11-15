@@ -366,7 +366,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		return
 	}
 
-	currentTotalStatistic := &models.UserStatistic{}
+	currentTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		currentTotalStatistic.Merge(&dayStatistic)
@@ -389,7 +389,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	}
 
 	startDate = startDate.AddDate(0, 0, -days)
-	lastTotalStatistic := &models.UserStatistic{}
+	lastTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		lastTotalStatistic.Merge(&dayStatistic)
@@ -523,7 +523,7 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 		return
 	}
 
-	curWeekTotalStatistic := &models.UserStatistic{}
+	curWeekTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		curWeekTotalStatistic.Merge(&dayStatistic)
@@ -535,7 +535,7 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 		curWeekUSDTStatistic.Merge(&dayStatistic)
 	}
 
-	lastWeekTotalStatistic := &models.UserStatistic{}
+	lastWeekTotalStatistic := models.NewUserStatistic("")
 	for i := 1; i <= 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"))
 		lastWeekTotalStatistic.Merge(&dayStatistic)
@@ -574,7 +574,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	}
 
 	curWeekStats := s.getOneWeekRevenueStatistics(startDate)
-	totalWeekStats := &models.UserStatistic{}
+	totalWeekStats := models.NewUserStatistic("")
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
 		totalWeekStats.Merge(&dayStatistic)
@@ -885,6 +885,9 @@ func (s *Server) userStatistics(c *gin.Context) {
 
 func (s *Server) topUsers(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c)
+	if !ok {
+		return
+	}
 
 	n, ok := getIntParam(c, "n", 50)
 	if !ok {
@@ -947,6 +950,9 @@ func (s *Server) topUsers(c *gin.Context) {
 
 func (s *Server) tokenStatistics(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c)
+	if !ok {
+		return
+	}
 
 	token, ok := c.GetQuery("token")
 	if ok {
@@ -1218,7 +1224,7 @@ func (s *Server) txAnalyze(c *gin.Context) {
 		return
 	}
 
-	contract := c.DefaultQuery("contract", "<>")
+	contract := c.DefaultQuery("contract", "")
 
 	result, ok := getIntParam(c, "result", 11)
 	if !ok {

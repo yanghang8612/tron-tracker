@@ -38,3 +38,7 @@ func (b BigInt) Add(other BigInt) {
 func (b BigInt) String() string {
 	return b.val.String()
 }
+
+func (b BigInt) Length() int {
+	return len(b.val.String())
+}

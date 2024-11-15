@@ -32,6 +32,14 @@ type UserStatistic struct {
 	USDTStats         types.TransferStats `json:"usdt_transfer_stats"`
 }
 
+func NewUserStatistic(address string) *UserStatistic {
+	return &UserStatistic{
+		Address:   address,
+		TRXStats:  types.NewTransferStats(),
+		USDTStats: types.NewTransferStats(),
+	}
+}
+
 func (o *UserStatistic) Merge(other *UserStatistic) {
 	if other == nil {
 		return
@@ -56,8 +64,8 @@ func (o *UserStatistic) Merge(other *UserStatistic) {
 	o.DelegateTotal += other.DelegateTotal
 	o.VoteTotal += other.VoteTotal
 	o.MultiSigTotal += other.MultiSigTotal
-	o.TRXStats.Merge(other.TRXStats)
-	o.USDTStats.Merge(other.USDTStats)
+	o.TRXStats.Merge(&other.TRXStats)
+	o.USDTStats.Merge(&other.USDTStats)
 }
 
 func (o *UserStatistic) Add(tx *Transaction) {
@@ -82,7 +90,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	switch txType {
 	case 1:
 		o.TRXTotal++
-		o.TRXStats.Add(tx.Amount.String())
+		o.TRXStats.Add(tx.Amount.Length(), 1)
 		if tx.Amount.Int64() < 100000 {
 			o.SmallTRXTotal++
 		}
@@ -99,7 +107,7 @@ func (o *UserStatistic) Add(tx *Transaction) {
 			if tx.Name == "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
 				o.USDTTotal++
 				if tx.Result == 1 {
-					o.USDTStats.Add(tx.Amount.String())
+					o.USDTStats.Add(tx.Amount.Length(), 1)
 				}
 				if tx.Amount.Int64() < 500000 {
 					o.SmallUSDTTotal++

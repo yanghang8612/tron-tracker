@@ -6,6 +6,34 @@ import (
 	"tron-tracker/database/models/types"
 )
 
+type TransferStatistic struct {
+	ID        uint                `gorm:"primaryKey" json:"-"`
+	Address   string              `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
+	Fee       int64               `json:"fee"`
+	TxTotal   int64               `json:"tx_total"`
+	TRXStats  types.TransferStats `json:"trx_transfer_stats"`
+	USDTStats types.TransferStats `json:"usdt_transfer_stats"`
+}
+
+func NewTransferStatistic(address string) *TransferStatistic {
+	return &TransferStatistic{
+		Address:   address,
+		TRXStats:  types.NewTransferStats(),
+		USDTStats: types.NewTransferStats(),
+	}
+}
+
+func (o *TransferStatistic) Merge(other *UserStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.Fee += other.Fee
+	o.TxTotal += other.TxTotal
+	o.TRXStats.Merge(&other.TRXStats)
+	o.USDTStats.Merge(&other.USDTStats)
+}
+
 type UserStatistic struct {
 	ID                uint                `gorm:"primaryKey" json:"-"`
 	Address           string              `gorm:"size:34;uniqueIndex" json:"address,omitempty"`

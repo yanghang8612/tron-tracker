@@ -1245,7 +1245,7 @@ func (s *Server) txAnalyze(c *gin.Context) {
 		transactions = append(transactions, &Transaction{
 			Height:   tx.Height,
 			Index:    tx.Index,
-			Contract: tx.ToAddr,
+			Contract: tx.Name,
 			Fee:      tx.Fee,
 		})
 	}

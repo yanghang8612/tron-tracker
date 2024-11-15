@@ -267,7 +267,7 @@ func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days in
 
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 		if len(contract) > 0 {
-			db.db.Table("transactions_"+queryDate).Where("type = 31 and contract = ? and result = ?", contract, result).Find(&txs)
+			db.db.Table("transactions_"+queryDate).Where("type = 31 and name = ? and result = ?", contract, result).Find(&txs)
 		} else {
 			db.db.Table("transactions_"+queryDate).Where("type = 31 and result = ?", result).Find(&txs)
 		}

@@ -173,7 +173,9 @@ func New(config *Config) *RawDB {
 			files := strings.Split(folders[len(folders)-1], ".")
 			time := files[0]
 			date := folders[len(folders)-2]
-			loadOriginData(rawDB, path, date[0:4], date[4:]+time, "tron")
+			if len(time) > 2 {
+				loadOriginData(rawDB, path, date[0:4], date[4:]+time, "tron")
+			}
 		}
 
 		return nil
@@ -191,7 +193,9 @@ func New(config *Config) *RawDB {
 			files := strings.Split(folders[len(folders)-1], ".")
 			time := files[0]
 			date := folders[len(folders)-2]
-			loadOriginData(rawDB, path, date[0:4], date[4:]+time, "steem")
+			if len(time) > 2 {
+				loadOriginData(rawDB, path, date[0:4], date[4:]+time, "steem")
+			}
 		}
 
 		return nil
@@ -215,7 +219,8 @@ func loadOriginData(rawDB *RawDB, path, month, date, token string) {
 	var response net.MarketPairsResponse
 	err = json.Unmarshal(bytes, &response)
 	if err != nil {
-		log.Fatalf("Unmarshal error: [%s]", err.Error())
+		log.Printf("Unmarshal error: [%s]", err.Error())
+		return
 	}
 
 	var marketPairs = make([]*models.MarketPairStatistic, 0)

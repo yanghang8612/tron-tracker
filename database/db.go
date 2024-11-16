@@ -227,6 +227,7 @@ func loadOriginData(rawDB *RawDB, path, month, date, token string) {
 			ExchangeName:        marketPair.ExchangeName,
 			Pair:                marketPair.MarketPair,
 			Reputation:          marketPair.MarketReputation,
+			Price:               marketPair.Price,
 			Volume:              marketPair.VolumeUsd,
 			Percent:             marketPair.VolumePercent,
 			DepthUsdPositiveTwo: marketPair.DepthUsdPositiveTwo,
@@ -234,6 +235,7 @@ func loadOriginData(rawDB *RawDB, path, month, date, token string) {
 		})
 	}
 
+	rawDB.createTableIfNotExist("market_pair_statistics_"+month, models.MarketPairStatistic{})
 	rawDB.db.Table("market_pair_statistics_" + month).Save(marketPairs)
 }
 

@@ -2,9 +2,12 @@ package database
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,7 +160,81 @@ func New(config *Config) *RawDB {
 
 	rawDB.loadChargers()
 
+	fmt.Println("Start loading market pair statistics")
+	filepath.Walk("/data/market_pairs/tron", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Println("Error accessing path:", path, "Error:", err)
+			return err
+		}
+
+		fmt.Println(path)
+		if strings.Contains(path, ".json") {
+			folders := strings.Split(path, string(filepath.Separator))
+			files := strings.Split(folders[len(folders)-1], ".")
+			time := files[0]
+			date := folders[len(folders)-2]
+			loadOriginData(rawDB, path, date[0:4], date[4:]+time, "tron")
+		}
+
+		return nil
+	})
+
+	filepath.Walk("/data/market_pairs/steem", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Println("Error accessing path:", path, "Error:", err)
+			return err
+		}
+
+		fmt.Println(path)
+		if strings.Contains(path, ".json") {
+			folders := strings.Split(path, string(filepath.Separator))
+			files := strings.Split(folders[len(folders)-1], ".")
+			time := files[0]
+			date := folders[len(folders)-2]
+			loadOriginData(rawDB, path, date[0:4], date[4:]+time, "steem")
+		}
+
+		return nil
+	})
+
 	return rawDB
+}
+
+func loadOriginData(rawDB *RawDB, path, month, date, token string) {
+	file, err := os.Open(path)
+	if err != nil {
+		log.Fatalf("Open file error: [%s]", err.Error())
+	}
+	defer file.Close()
+
+	bytes, err := io.ReadAll(file)
+	if err != nil {
+		log.Fatalf("Read file error: [%s]", err.Error())
+	}
+
+	var response net.MarketPairsResponse
+	err = json.Unmarshal(bytes, &response)
+	if err != nil {
+		log.Fatalf("Unmarshal error: [%s]", err.Error())
+	}
+
+	var marketPairs = make([]*models.MarketPairStatistic, 0)
+
+	for _, marketPair := range response.Data.MarketPairs {
+		marketPairs = append(marketPairs, &models.MarketPairStatistic{
+			Datetime:            date,
+			Token:               token,
+			ExchangeName:        marketPair.ExchangeName,
+			Pair:                marketPair.MarketPair,
+			Reputation:          marketPair.MarketReputation,
+			Volume:              marketPair.VolumeUsd,
+			Percent:             marketPair.VolumePercent,
+			DepthUsdPositiveTwo: marketPair.DepthUsdPositiveTwo,
+			DepthUsdNegativeTwo: marketPair.DepthUsdNegativeTwo,
+		})
+	}
+
+	rawDB.db.Table("market_pair_statistics_" + month).Save(marketPairs)
 }
 
 func (db *RawDB) loadChargers() {

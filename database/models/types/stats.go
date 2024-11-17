@@ -20,9 +20,9 @@ func (ts *TransferStats) Scan(value interface{}) error {
 	vals := strings.Split(string(value.([]byte)), ",")
 
 	if strings.HasPrefix(valStr, ",") {
-		for i, val := range vals[1:] {
+		for _, val := range vals[1:] {
 			count, _ := strconv.Atoi(val)
-			ts.vals[i] = uint(count)
+			ts.vals = append(ts.vals, uint(count))
 		}
 	} else {
 		ts.vals = []uint{0}

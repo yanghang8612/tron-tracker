@@ -80,6 +80,7 @@ func (s *Server) Start() {
 	s.router.GET("/exchange_weekly_statistics", s.exchangesWeeklyStatistic)
 	s.router.GET("/tron_weekly_statistics", s.tronWeeklyStatistics)
 	s.router.GET("/revenue_weekly_statistics", s.revenueWeeklyStatistics)
+	s.router.GET("/revenue_ppt_data", s.revenuePPTData)
 	s.router.GET("/trx_statistics", s.trxStatistics)
 	s.router.GET("/usdt_statistics", s.usdtStatistics)
 	s.router.GET("/usdt_storage_statistics", s.usdtStorageStatistics)
@@ -671,6 +672,25 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		"usdtcasino_fee":    usdtcasinoFee / 7_000_000,
 		"usdtcasino_energy": usdtcasinoEnergy / 7,
 	}
+}
+
+func (s *Server) revenuePPTData(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c)
+	if !ok {
+		return
+	}
+
+	result := strings.Builder{}
+	for i := 0; i < days; i++ {
+		totalStat := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
+		usdtStat := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+
+		result.WriteString(fmt.Sprintf("%d %d %d %d %d %d %d %d\n",
+			totalStat.EnergyFee, totalStat.NetFee, totalStat.EnergyUsage+totalStat.EnergyOriginUsage, totalStat.NetUsage,
+			usdtStat.EnergyFee, usdtStat.NetFee, usdtStat.EnergyUsage+usdtStat.EnergyOriginUsage, usdtStat.NetUsage))
+	}
+
+	c.String(200, result.String())
 }
 
 func (s *Server) trxStatistics(c *gin.Context) {

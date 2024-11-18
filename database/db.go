@@ -1034,50 +1034,13 @@ func (db *RawDB) countLoop() {
 			}
 
 			if !done {
-				// db.countForUser("240901", "241001")
+				db.countForUser("241104", "241118")
 				// db.countUSDTPhishing("241028")
-				db.countFromStats("240404", "241112")
 				done = true
 			}
 
 			time.Sleep(1 * time.Second)
 		}
-	}
-}
-
-func (db *RawDB) countFromStats(startDate, endDate string) {
-	dbErr := db.db.AutoMigrate(&models.TransferStatistic{})
-	if dbErr != nil {
-		panic(dbErr)
-	}
-
-	countingDate := startDate
-	results := make([]*models.UserStatistic, 0)
-	transferStats := make(map[string]*models.TransferStatistic)
-
-	for countingDate != endDate {
-		db.db.Table("from_stats_"+countingDate).
-			FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
-				for _, result := range results {
-					if _, ok := transferStats[result.Address]; !ok {
-						transferStats[result.Address] = &models.TransferStatistic{
-							Address: result.Address,
-						}
-					}
-
-					transferStats[result.Address].Merge(result)
-				}
-				return nil
-			})
-
-		date, _ := time.Parse("060102", countingDate)
-		countingDate = date.AddDate(0, 0, 1).Format("060102")
-
-		db.logger.Infof("Counting From Stats, current counting date [%s], current user [%d]", countingDate, len(transferStats))
-	}
-
-	for _, stat := range transferStats {
-		db.db.Save(stat)
 	}
 }
 

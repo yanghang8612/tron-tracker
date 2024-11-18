@@ -132,6 +132,7 @@ func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error)
 			ExchangeName:        marketPair.ExchangeName,
 			Pair:                marketPair.MarketPair,
 			Reputation:          marketPair.MarketReputation,
+			Price:               marketPair.Price,
 			Volume:              marketPair.VolumeUsd,
 			Percent:             marketPair.VolumePercent,
 			DepthUsdPositiveTwo: marketPair.DepthUsdPositiveTwo,

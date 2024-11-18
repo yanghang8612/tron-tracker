@@ -264,6 +264,27 @@ func (db *RawDB) GetTokenName(addr string) string {
 	return db.vt[addr]
 }
 
+func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days int, contract string, result int) []*models.Transaction {
+	var results []*models.Transaction
+
+	for i := 0; i < days; i++ {
+		var txs []*models.Transaction
+
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+		if len(contract) > 0 {
+			db.db.Table("transactions_"+queryDate).Where("type = 31 and name = ? and result = ?", contract, result).Find(&txs)
+		} else {
+			db.db.Table("transactions_"+queryDate).Where("type = 31 and result = ?", result).Find(&txs)
+		}
+
+		if len(txs) != 0 {
+			results = append(results, txs...)
+		}
+	}
+
+	return results
+}
+
 func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 
@@ -293,10 +314,8 @@ func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[str
 	return resultMap
 }
 
-func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user string, days int) models.UserStatistic {
-	result := models.UserStatistic{
-		Address: user,
-	}
+func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user string, days int) *models.UserStatistic {
+	result := models.NewUserStatistic(user)
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
@@ -742,9 +761,7 @@ func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
 func (db *RawDB) updateUserStatistic(user string, ts int64, tx *models.Transaction, stats map[string]*models.UserStatistic) {
 	db.cache.date = generateDate(ts)
 	if _, ok := stats[user]; !ok {
-		stats[user] = &models.UserStatistic{
-			Address: user,
-		}
+		stats[user] = models.NewUserStatistic(user)
 	}
 	stats[user].Add(tx)
 }

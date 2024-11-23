@@ -489,6 +489,17 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
 
+func (db *RawDB) GetTokenPriceByDate(date time.Time, token string) float64 {
+	queryDateDBName := "market_pair_statistics_" + date.Format("0601")
+
+	var stats models.MarketPairStatistic
+	db.db.Table(queryDateDBName).
+		Where("datetime = ? and token = ?", date.Format("02")+"0010", token).
+		Find(&stats)
+
+	return stats.Price
+}
+
 func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 

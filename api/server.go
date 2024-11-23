@@ -682,10 +682,12 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 
 	result := strings.Builder{}
 	for i := 0; i < days; i++ {
-		totalStat := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		usdtStat := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+		queryDate := startDate.AddDate(0, 0, i)
+		trxPrice := s.db.GetTokenPriceByDate(queryDate, "TRX")
+		totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
+		usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 
-		result.WriteString(fmt.Sprintf("%d %d %d %d %d %d %d %d\n",
+		result.WriteString(fmt.Sprintf("%f %d %d %d %d %d %d %d %d\n", trxPrice,
 			totalStat.EnergyFee, totalStat.NetFee, totalStat.EnergyUsage+totalStat.EnergyOriginUsage, totalStat.NetUsage,
 			usdtStat.EnergyFee, usdtStat.NetFee, usdtStat.EnergyUsage+usdtStat.EnergyOriginUsage, usdtStat.NetUsage))
 	}

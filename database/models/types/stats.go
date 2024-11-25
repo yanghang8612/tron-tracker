@@ -2,6 +2,7 @@ package types
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"slices"
 	"strconv"
 	"strings"
@@ -15,9 +16,19 @@ func NewTransferStats() TransferStats {
 	return TransferStats{vals: []uint{0}}
 }
 
+func (ts *TransferStats) MarshalJSON() ([]byte, error) {
+	valsForMarshal := make([]uint, 0, 18)
+	for i := 0; i < 18; i++ {
+		if ts.isMarked(i) {
+			valsForMarshal[i] = ts.Get(i)
+		}
+	}
+	return json.Marshal(valsForMarshal)
+}
+
 func (ts *TransferStats) Scan(value interface{}) error {
 	valStr := string(value.([]byte))
-	vals := strings.Split(string(value.([]byte)), ",")
+	vals := strings.Split(valStr, ",")
 
 	if strings.HasPrefix(valStr, ",") {
 		for _, val := range vals[1:] {

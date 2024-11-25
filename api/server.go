@@ -883,7 +883,7 @@ func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
 }
 
 func (s *Server) userStatistics(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "start_date")
 	if !ok {
 		return
 	}

@@ -17,7 +17,7 @@ func NewTransferStats() TransferStats {
 }
 
 func (ts *TransferStats) MarshalJSON() ([]byte, error) {
-	valsForMarshal := make([]uint, 0, 18)
+	valsForMarshal := make([]uint, 18)
 	for i := 0; i < 18; i++ {
 		if ts.isMarked(i) {
 			valsForMarshal[i] = ts.Get(i)

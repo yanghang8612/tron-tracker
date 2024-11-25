@@ -370,7 +370,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	currentTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		currentTotalStatistic.Merge(&dayStatistic)
+		currentTotalStatistic.Merge(dayStatistic)
 	}
 
 	currentPhishingStatistic := &models.PhishingStatistic{}
@@ -393,7 +393,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	lastTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < days; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		lastTotalStatistic.Merge(&dayStatistic)
+		lastTotalStatistic.Merge(dayStatistic)
 	}
 
 	comment := strings.Builder{}
@@ -527,25 +527,25 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 	curWeekTotalStatistic := models.NewUserStatistic("")
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		curWeekTotalStatistic.Merge(&dayStatistic)
+		curWeekTotalStatistic.Merge(dayStatistic)
 	}
 
 	curWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
-		curWeekUSDTStatistic.Merge(&dayStatistic)
+		curWeekUSDTStatistic.Merge(dayStatistic)
 	}
 
 	lastWeekTotalStatistic := models.NewUserStatistic("")
 	for i := 1; i <= 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"))
-		lastWeekTotalStatistic.Merge(&dayStatistic)
+		lastWeekTotalStatistic.Merge(dayStatistic)
 	}
 
 	lastWeekUSDTStatistic := &models.TokenStatistic{}
 	for i := 1; i <= 7; i++ {
 		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
-		lastWeekUSDTStatistic.Merge(&dayStatistic)
+		lastWeekUSDTStatistic.Merge(dayStatistic)
 	}
 
 	c.JSON(200, gin.H{
@@ -578,7 +578,7 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 	totalWeekStats := models.NewUserStatistic("")
 	for i := 0; i < 7; i++ {
 		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		totalWeekStats.Merge(&dayStatistic)
+		totalWeekStats.Merge(dayStatistic)
 	}
 	lastWeekStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
 
@@ -982,7 +982,7 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
 			dayStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), token)
-			result.Merge(&dayStat)
+			result.Merge(dayStat)
 		}
 
 		c.JSON(200, result)

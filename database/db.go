@@ -357,16 +357,16 @@ func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int
 	return res.F, res.E
 }
 
-func (db *RawDB) GetTotalStatisticsByDate(date string) models.UserStatistic {
-	var totalStat models.UserStatistic
-	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(&totalStat)
+func (db *RawDB) GetTotalStatisticsByDate(date string) *models.UserStatistic {
+	totalStat := models.NewUserStatistic("")
+	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(totalStat)
 	return totalStat
 }
 
-func (db *RawDB) GetTokenStatisticsByDateAndToken(date, token string) models.TokenStatistic {
+func (db *RawDB) GetTokenStatisticsByDateAndToken(date, token string) *models.TokenStatistic {
 	var tokenStat models.TokenStatistic
 	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStat)
-	return tokenStat
+	return &tokenStat
 }
 
 func (db *RawDB) GetTokenStatisticsByDateAndDays(date time.Time, days int) map[string]*models.TokenStatistic {

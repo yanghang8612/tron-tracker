@@ -315,10 +315,10 @@ func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user strin
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
-		var dayStat models.UserStatistic
-		db.db.Table("from_stats_"+queryDate).Where("address = ?", user).Limit(1).Find(&dayStat)
+		dayStat := models.NewUserStatistic("")
+		db.db.Table("from_stats_"+queryDate).Where("address = ?", user).Limit(1).Find(dayStat)
 
-		result.Merge(&dayStat)
+		result.Merge(dayStat)
 	}
 
 	return result

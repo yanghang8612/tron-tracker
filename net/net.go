@@ -14,6 +14,7 @@ import (
 )
 
 type Config struct {
+	FullNode     string `toml:"full_node"`
 	SlackWebhook string `toml:"slack_webhook"`
 }
 
@@ -22,10 +23,9 @@ type slackMessage struct {
 }
 
 const (
-	BaseUrl                    = "http://localhost:8088/"
-	GetBlockPath               = "wallet/getblockbynum?num="
-	GetNowBlockPath            = "wallet/getnowblock"
-	GetTransactionInfoListPath = "wallet/gettransactioninfobyblocknum?num="
+	GetBlockPath               = "/wallet/getblockbynum?num="
+	GetNowBlockPath            = "/wallet/getnowblock"
+	GetTransactionInfoListPath = "/wallet/gettransactioninfobyblocknum?num="
 )
 
 var (
@@ -48,21 +48,21 @@ func ReportToSlack(msg string) {
 }
 
 func GetNowBlock() (*types.Block, error) {
-	url := BaseUrl + GetNowBlockPath
+	url := config.FullNode + GetNowBlockPath
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetBlockByHeight(height uint) (*types.Block, error) {
-	url := BaseUrl + GetBlockPath + strconv.FormatInt(int64(height), 10)
+	url := config.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
-	url := BaseUrl + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
+	url := config.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
 	_, err := client.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err

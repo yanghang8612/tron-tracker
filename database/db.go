@@ -1045,7 +1045,7 @@ func (db *RawDB) countLoop() {
 			}
 
 			if !done {
-				db.countForUser("241111", "241125")
+				db.countForUser("241118", "241202")
 				// db.countUSDTPhishing("241028")
 				done = true
 			}

@@ -135,6 +135,11 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 			totalEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
+
+			if es.Name == "bybit" {
+				es.Name = "Bybit"
+			}
+
 			if _, ok := resultMap[es.Name]; !ok {
 				resultMap[es.Name] = &models.ExchangeStatistic{
 					Date: dateRangeStr,

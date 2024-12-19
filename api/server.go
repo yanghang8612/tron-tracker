@@ -626,8 +626,7 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i)) {
 			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
 			exchangeFee += fee
-			exchangeEnergy += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-			exchangeEnergy += fee / 420
+			exchangeEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
 		}
 
 		for _, addr := range s.defiConfig.SunSwapV1 {
@@ -1073,31 +1072,67 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "tron")
 
-	marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
-
-	result := make([]*models.MarketPairStatistic, 0)
+	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
+	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
 
 	if _, ok = c.GetQuery("group_by"); ok {
-		exchangeStats := make(map[string]*models.MarketPairStatistic)
-		for _, mps := range marketPairStats {
-			if _, ok := exchangeStats[mps.ExchangeName]; !ok {
-				exchangeStats[mps.ExchangeName] = mps
-				exchangeStats[mps.ExchangeName].Reputation = 0
-				exchangeStats[mps.ExchangeName].Pair = ""
-			} else {
-				exchangeStats[mps.ExchangeName].Volume += mps.Volume
-				exchangeStats[mps.ExchangeName].Percent += mps.Percent
-				exchangeStats[mps.ExchangeName].DepthUsdPositiveTwo += mps.DepthUsdPositiveTwo
-				exchangeStats[mps.ExchangeName].DepthUsdNegativeTwo += mps.DepthUsdNegativeTwo
-			}
+		curMarketPairStats = s.dealWithGroupByTag(curMarketPairStats)
+		lastMarketPairStats = s.dealWithGroupByTag(lastMarketPairStats)
+	}
+
+	type JsonStat struct {
+		ExchangeName              string `json:"exchange_name,omitempty"`
+		Pair                      string `json:"pair,omitempty"`
+		Volume                    string `json:"volume,omitempty"`
+		VolumeChange              string `json:"volume_change,omitempty"`
+		Percent                   string `json:"percent,omitempty"`
+		PercentChange             string `json:"percent_change,omitempty"`
+		DepthUsdPositiveTwo       string `json:"depth_usd_positive_two,omitempty"`
+		DepthUsdPositiveTwoChange string `json:"depth_usd_positive_two_change,omitempty"`
+		DepthUsdNegativeTwo       string `json:"depth_usd_negative_two,omitempty"`
+		DepthUsdNegativeTwoChange string `json:"depth_usd_negative_two_change,omitempty"`
+	}
+
+	result := make([]*JsonStat, 0)
+	for key, curStat := range curMarketPairStats {
+		jsonStat := &JsonStat{
+			ExchangeName:        curStat.ExchangeName,
+			Pair:                curStat.Pair,
+			Volume:              humanize.SI(curStat.Volume, ""),
+			Percent:             fmt.Sprintf("%.2f%%", curStat.Percent*100),
+			DepthUsdPositiveTwo: humanize.SI(curStat.DepthUsdPositiveTwo, ""),
+			DepthUsdNegativeTwo: humanize.SI(curStat.DepthUsdNegativeTwo, ""),
 		}
 
-		for _, es := range exchangeStats {
-			result = append(result, es)
+		if lastStat, ok := lastMarketPairStats[key]; ok {
+			jsonStat.VolumeChange = utils.FormatChangePercent(int64(lastStat.Volume), int64(curStat.Volume))
+			jsonStat.PercentChange = fmt.Sprintf("%.2f%%", (curStat.Percent-lastStat.Percent)*100)
+			jsonStat.DepthUsdPositiveTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdPositiveTwo), int64(curStat.DepthUsdPositiveTwo))
+			jsonStat.DepthUsdNegativeTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdNegativeTwo), int64(curStat.DepthUsdNegativeTwo))
+		} else {
+			jsonStat.VolumeChange = "+∞%"
+			jsonStat.PercentChange = fmt.Sprintf("%.2f%%", curStat.Percent*100)
+			jsonStat.DepthUsdPositiveTwoChange = "+∞%"
+			jsonStat.DepthUsdNegativeTwoChange = "+∞%"
 		}
-	} else {
-		for _, mps := range marketPairStats {
-			result = append(result, mps)
+
+		result = append(result, jsonStat)
+	}
+
+	for key, lastStat := range lastMarketPairStats {
+		if _, ok := curMarketPairStats[key]; !ok {
+			jsonStat := &JsonStat{
+				ExchangeName:        lastStat.ExchangeName,
+				Pair:                lastStat.Pair,
+				Volume:              "0",
+				VolumeChange:        "-100%",
+				Percent:             "0%",
+				PercentChange:       fmt.Sprintf("%.2f%%", -lastStat.Percent*100),
+				DepthUsdPositiveTwo: "-100%",
+				DepthUsdNegativeTwo: "-100%",
+			}
+
+			result = append(result, jsonStat)
 		}
 	}
 
@@ -1106,6 +1141,25 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	})
 
 	c.JSON(200, result)
+}
+
+func (s *Server) dealWithGroupByTag(stats map[string]*models.MarketPairStatistic) map[string]*models.MarketPairStatistic {
+	result := make(map[string]*models.MarketPairStatistic)
+
+	for _, stat := range stats {
+		if _, ok := result[stat.ExchangeName]; !ok {
+			result[stat.ExchangeName] = stat
+			result[stat.ExchangeName].Reputation = 0
+			result[stat.ExchangeName].Pair = ""
+		} else {
+			result[stat.ExchangeName].Volume += stat.Volume
+			result[stat.ExchangeName].Percent += stat.Percent
+			result[stat.ExchangeName].DepthUsdPositiveTwo += stat.DepthUsdPositiveTwo
+			result[stat.ExchangeName].DepthUsdNegativeTwo += stat.DepthUsdNegativeTwo
+		}
+	}
+
+	return result
 }
 
 func (s *Server) marketPairVolumes(c *gin.Context) {

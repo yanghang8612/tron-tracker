@@ -1081,21 +1081,23 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	}
 
 	type JsonStat struct {
-		ExchangeName              string `json:"exchange_name,omitempty"`
-		Pair                      string `json:"pair,omitempty"`
-		Volume                    string `json:"volume,omitempty"`
-		VolumeChange              string `json:"volume_change,omitempty"`
-		Percent                   string `json:"percent,omitempty"`
-		PercentChange             string `json:"percent_change,omitempty"`
-		DepthUsdPositiveTwo       string `json:"depth_usd_positive_two,omitempty"`
-		DepthUsdPositiveTwoChange string `json:"depth_usd_positive_two_change,omitempty"`
-		DepthUsdNegativeTwo       string `json:"depth_usd_negative_two,omitempty"`
-		DepthUsdNegativeTwoChange string `json:"depth_usd_negative_two_change,omitempty"`
+		ID                        float64 `json:"-"`
+		ExchangeName              string  `json:"exchange_name,omitempty"`
+		Pair                      string  `json:"pair,omitempty"`
+		Volume                    string  `json:"volume,omitempty"`
+		VolumeChange              string  `json:"volume_change,omitempty"`
+		Percent                   string  `json:"percent,omitempty"`
+		PercentChange             string  `json:"percent_change,omitempty"`
+		DepthUsdPositiveTwo       string  `json:"depth_usd_positive_two,omitempty"`
+		DepthUsdPositiveTwoChange string  `json:"depth_usd_positive_two_change,omitempty"`
+		DepthUsdNegativeTwo       string  `json:"depth_usd_negative_two,omitempty"`
+		DepthUsdNegativeTwoChange string  `json:"depth_usd_negative_two_change,omitempty"`
 	}
 
 	result := make([]*JsonStat, 0)
 	for key, curStat := range curMarketPairStats {
 		jsonStat := &JsonStat{
+			ID:                  curStat.Percent,
 			ExchangeName:        curStat.ExchangeName,
 			Pair:                curStat.Pair,
 			Volume:              humanize.SIWithDigits(curStat.Volume, 2, ""),
@@ -1122,6 +1124,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	for key, lastStat := range lastMarketPairStats {
 		if _, ok := curMarketPairStats[key]; !ok {
 			jsonStat := &JsonStat{
+				ID:                  -lastStat.Percent,
 				ExchangeName:        lastStat.ExchangeName,
 				Pair:                lastStat.Pair,
 				Volume:              "0",
@@ -1137,7 +1140,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	}
 
 	sort.Slice(result, func(i, j int) bool {
-		return result[i].Percent > result[j].Percent
+		return result[i].ID > result[j].ID
 	})
 
 	c.JSON(200, result)

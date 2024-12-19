@@ -1073,7 +1073,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	token := c.DefaultQuery("token", "tron")
 
 	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
-	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
+	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate.AddDate(0, 0, -days), days, token)
 
 	if _, ok = c.GetQuery("group_by"); ok {
 		curMarketPairStats = s.dealWithGroupByTag(curMarketPairStats)
@@ -1098,10 +1098,10 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		jsonStat := &JsonStat{
 			ExchangeName:        curStat.ExchangeName,
 			Pair:                curStat.Pair,
-			Volume:              humanize.SI(curStat.Volume, ""),
+			Volume:              humanize.SIWithDigits(curStat.Volume, 2, ""),
 			Percent:             fmt.Sprintf("%.2f%%", curStat.Percent*100),
-			DepthUsdPositiveTwo: humanize.SI(curStat.DepthUsdPositiveTwo, ""),
-			DepthUsdNegativeTwo: humanize.SI(curStat.DepthUsdNegativeTwo, ""),
+			DepthUsdPositiveTwo: humanize.SIWithDigits(curStat.DepthUsdPositiveTwo, 2, ""),
+			DepthUsdNegativeTwo: humanize.SIWithDigits(curStat.DepthUsdNegativeTwo, 2, ""),
 		}
 
 		if lastStat, ok := lastMarketPairStats[key]; ok {

@@ -1015,9 +1015,28 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		resultArray = append(resultArray, ts)
 	}
 
-	sort.Slice(resultArray, func(i, j int) bool {
-		return resultArray[i].Fee > resultArray[j].Fee
-	})
+	orderBy := c.DefaultQuery("order_by", "fee")
+
+	switch orderBy {
+	case "fee":
+		sort.Slice(resultArray, func(i, j int) bool {
+			return resultArray[i].Fee > resultArray[j].Fee
+		})
+	case "tx":
+		sort.Slice(resultArray, func(i, j int) bool {
+			return resultArray[i].TxTotal > resultArray[j].TxTotal
+		})
+	case "energy":
+		sort.Slice(resultArray, func(i, j int) bool {
+			return resultArray[i].EnergyTotal > resultArray[j].EnergyTotal
+		})
+	default:
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": orderBy + " not supported",
+		})
+		return
+	}
 
 	if len(resultArray) > n {
 		resultArray = resultArray[:n]

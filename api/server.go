@@ -774,6 +774,8 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
+	orderBy := c.DefaultQuery("order_by", "fee")
+
 	usdtStatsMap := s.db.GetUserTokenStatisticsByDateAndDaysAndToken(startDate, days, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 
 	usdtStats := make([]*models.UserTokenStatistic, 0)
@@ -781,9 +783,26 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		usdtStats = append(usdtStats, stats)
 	}
 
-	sort.Slice(usdtStats, func(i, j int) bool {
-		return usdtStats[i].FromTXCount > usdtStats[j].FromTXCount
-	})
+	switch orderBy {
+	case "fee":
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].FromFee > usdtStats[j].FromFee
+		})
+	case "tx":
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].FromTXCount > usdtStats[j].FromTXCount
+		})
+	case "energy":
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].FromEnergyTotal > usdtStats[j].FromEnergyTotal
+		})
+	default:
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": orderBy + " not supported",
+		})
+		return
+	}
 
 	fromLen := n
 	if len(usdtStats) < n {
@@ -792,9 +811,20 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 	topNFrom := make([]*models.UserTokenStatistic, fromLen)
 	copy(topNFrom, usdtStats)
 
-	sort.Slice(usdtStats, func(i, j int) bool {
-		return usdtStats[i].ToTXCount > usdtStats[j].ToTXCount
-	})
+	switch orderBy {
+	case "fee":
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].ToFee > usdtStats[j].ToFee
+		})
+	case "tx":
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].ToTXCount > usdtStats[j].ToTXCount
+		})
+	default:
+		sort.Slice(usdtStats, func(i, j int) bool {
+			return usdtStats[i].ToEnergyTotal > usdtStats[j].ToEnergyTotal
+		})
+	}
 
 	var topNTo []*models.UserTokenStatistic
 	if len(usdtStats) > n {

@@ -40,7 +40,9 @@ func TopN[T any](items []T, n int, cmp func(a, b T) bool) []T {
 
 	quickSelect[T](items, 0, len(items)-1, n-1, cmp)
 
-	topItems := items[:n]
+	topItems := make([]T, n)
+	copy(topItems, items[:n])
+
 	sort.Slice(topItems, func(i, j int) bool {
 		return cmp(topItems[i], topItems[j])
 	})

@@ -783,18 +783,19 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		usdtStats = append(usdtStats, stats)
 	}
 
+	var topNFrom []*models.UserTokenStatistic
 	switch orderBy {
 	case "fee":
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].FromFee > usdtStats[j].FromFee
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.FromFee > b.FromFee
 		})
 	case "tx":
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].FromTXCount > usdtStats[j].FromTXCount
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.FromTXCount > b.FromTXCount
 		})
 	case "energy":
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].FromEnergyTotal > usdtStats[j].FromEnergyTotal
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.FromEnergyTotal > b.FromEnergyTotal
 		})
 	default:
 		c.JSON(200, gin.H{
@@ -804,25 +805,18 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
-	fromLen := n
-	if len(usdtStats) < n {
-		fromLen = len(usdtStats)
-	}
-	topNFrom := make([]*models.UserTokenStatistic, fromLen)
-	copy(topNFrom, usdtStats)
-
 	switch orderBy {
 	case "fee":
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].ToFee > usdtStats[j].ToFee
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.ToFee > b.ToFee
 		})
 	case "tx":
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].ToTXCount > usdtStats[j].ToTXCount
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.ToTXCount > b.ToTXCount
 		})
 	default:
-		sort.Slice(usdtStats, func(i, j int) bool {
-			return usdtStats[i].ToEnergyTotal > usdtStats[j].ToEnergyTotal
+		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+			return a.ToEnergyTotal > b.ToEnergyTotal
 		})
 	}
 

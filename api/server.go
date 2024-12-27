@@ -805,26 +805,20 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
+	var topNTo []*models.UserTokenStatistic
 	switch orderBy {
 	case "fee":
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToFee > b.ToFee
 		})
 	case "tx":
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToTXCount > b.ToTXCount
 		})
 	default:
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToEnergyTotal > b.ToEnergyTotal
 		})
-	}
-
-	var topNTo []*models.UserTokenStatistic
-	if len(usdtStats) > n {
-		topNTo = usdtStats[:n]
-	} else {
-		topNTo = usdtStats
 	}
 
 	c.JSON(200, gin.H{

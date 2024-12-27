@@ -1,5 +1,7 @@
 package utils
 
+import "sort"
+
 func partition[T any](arr []T, low, high int, cmp func(a, b T) bool) int {
 	pivot := arr[high]
 	i := low
@@ -30,26 +32,18 @@ func TopN[T any](items []T, n int, cmp func(a, b T) bool) []T {
 	if len(items) <= n {
 		result := make([]T, len(items))
 		copy(result, items)
-		for i := 0; i < len(result); i++ {
-			for j := i + 1; j < len(result); j++ {
-				if !cmp(result[i], result[j]) {
-					result[i], result[j] = result[j], result[i]
-				}
-			}
-		}
+		sort.Slice(result, func(i, j int) bool {
+			return cmp(result[i], result[j])
+		})
 		return result
 	}
 
 	quickSelect[T](items, 0, len(items)-1, n-1, cmp)
 
 	topItems := items[:n]
-	for i := 0; i < len(topItems); i++ {
-		for j := i + 1; j < len(topItems); j++ {
-			if !cmp(topItems[i], topItems[j]) {
-				topItems[i], topItems[j] = topItems[j], topItems[i]
-			}
-		}
-	}
+	sort.Slice(topItems, func(i, j int) bool {
+		return cmp(topItems[i], topItems[j])
+	})
 
 	return topItems
 }

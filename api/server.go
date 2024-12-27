@@ -774,14 +774,19 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
-	orderBy := c.DefaultQuery("order_by", "fee")
-
 	usdtStatsMap := s.db.GetUserTokenStatisticsByDateAndDaysAndToken(startDate, days, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+
+	filterExchange := c.GetBool("filter_exchange")
 
 	usdtStats := make([]*models.UserTokenStatistic, 0)
 	for _, stats := range usdtStatsMap {
+		if filterExchange && s.db.IsExchange(stats.User) {
+			continue
+		}
 		usdtStats = append(usdtStats, stats)
 	}
+
+	orderBy := c.DefaultQuery("order_by", "fee")
 
 	var topNFrom []*models.UserTokenStatistic
 	switch orderBy {

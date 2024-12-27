@@ -247,6 +247,10 @@ func (db *RawDB) Report() {
 	db.logger.Infof("Status report, chargers size [%d]", len(db.chargers))
 }
 
+func (db *RawDB) IsExchange(addr string) bool {
+	return db.el.Contains(addr)
+}
+
 func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
 }

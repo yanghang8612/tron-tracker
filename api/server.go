@@ -776,11 +776,11 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 
 	usdtStatsMap := s.db.GetUserTokenStatisticsByDateAndDaysAndToken(startDate, days, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 
-	filterExchange := c.GetBool("filter_exchange")
+	filterExchange := c.DefaultQuery("filter_exchange", "false")
 
 	usdtStats := make([]*models.UserTokenStatistic, 0)
 	for _, stats := range usdtStatsMap {
-		if filterExchange && s.db.IsExchange(stats.User) {
+		if filterExchange == "true" && s.db.IsExchange(stats.User) {
 			continue
 		}
 		usdtStats = append(usdtStats, stats)

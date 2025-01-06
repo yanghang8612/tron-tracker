@@ -124,25 +124,27 @@ func (o *UserStatistic) Add(tx *Transaction) {
 }
 
 type UserTokenStatistic struct {
-	ID                    uint   `gorm:"primaryKey" json:"-"`
-	User                  string `gorm:"size:34;index" json:"address"`
-	Token                 string `gorm:"size:34;index" json:"token,omitempty"`
-	FromTXCount           int64  `json:"from_tx_count"`
-	FromFee               int64  `json:"from_fee"`
-	FromEnergyTotal       int64  `json:"from_energy_total"`
-	FromEnergyFee         int64  `json:"from_energy_fee"`
-	FromEnergyUsage       int64  `json:"from_energy_usage"`
-	FromEnergyOriginUsage int64  `json:"from_energy_origin_usage"`
-	FromNetUsage          int64  `json:"from_net_usage"`
-	FromNetFee            int64  `json:"from_net_fee"`
-	ToTXCount             int64  `json:"to_tx_count"`
-	ToFee                 int64  `json:"to_fee"`
-	ToEnergyTotal         int64  `json:"to_energy_total"`
-	ToEnergyFee           int64  `json:"to_energy_fee"`
-	ToEnergyUsage         int64  `json:"to_energy_usage"`
-	ToEnergyOriginUsage   int64  `json:"to_energy_origin_usage"`
-	ToNetUsage            int64  `json:"to_net_usage"`
-	ToNetFee              int64  `json:"to_net_fee"`
+	ID                    uint         `gorm:"primaryKey" json:"-"`
+	User                  string       `gorm:"size:34;index" json:"address"`
+	Token                 string       `gorm:"size:34;index" json:"token,omitempty"`
+	FromTXCount           int64        `json:"from_tx_count"`
+	FromAmount            types.BigInt `json:"from_amount"`
+	FromFee               int64        `json:"from_fee"`
+	FromEnergyTotal       int64        `json:"from_energy_total"`
+	FromEnergyFee         int64        `json:"from_energy_fee"`
+	FromEnergyUsage       int64        `json:"from_energy_usage"`
+	FromEnergyOriginUsage int64        `json:"from_energy_origin_usage"`
+	FromNetUsage          int64        `json:"from_net_usage"`
+	FromNetFee            int64        `json:"from_net_fee"`
+	ToTXCount             int64        `json:"to_tx_count"`
+	ToAmount              types.BigInt `json:"to_amount"`
+	ToFee                 int64        `json:"to_fee"`
+	ToEnergyTotal         int64        `json:"to_energy_total"`
+	ToEnergyFee           int64        `json:"to_energy_fee"`
+	ToEnergyUsage         int64        `json:"to_energy_usage"`
+	ToEnergyOriginUsage   int64        `json:"to_energy_origin_usage"`
+	ToNetUsage            int64        `json:"to_net_usage"`
+	ToNetFee              int64        `json:"to_net_fee"`
 }
 
 func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
@@ -151,6 +153,7 @@ func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
 	}
 
 	o.FromTXCount += other.FromTXCount
+	o.FromAmount.Add(other.FromAmount)
 	o.FromFee += other.FromFee
 	o.FromEnergyTotal += other.FromEnergyTotal
 	o.FromEnergyFee += other.FromEnergyFee
@@ -160,6 +163,7 @@ func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
 	o.FromNetFee += other.FromNetFee
 
 	o.ToTXCount += other.ToTXCount
+	o.ToAmount.Add(other.ToAmount)
 	o.ToFee += other.ToFee
 	o.ToEnergyTotal += other.ToEnergyTotal
 	o.ToEnergyFee += other.ToEnergyFee
@@ -171,6 +175,7 @@ func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
 
 func (o *UserTokenStatistic) AddFrom(tx *Transaction) {
 	o.FromTXCount++
+	o.FromAmount.Add(tx.Amount)
 	o.FromFee += tx.Fee
 	o.FromEnergyTotal += tx.EnergyTotal
 	o.FromEnergyFee += tx.EnergyFee
@@ -182,6 +187,7 @@ func (o *UserTokenStatistic) AddFrom(tx *Transaction) {
 
 func (o *UserTokenStatistic) AddTo(tx *Transaction) {
 	o.ToTXCount++
+	o.ToAmount.Add(tx.Amount)
 	o.ToFee += tx.Fee
 	o.ToEnergyTotal += tx.EnergyTotal
 	o.ToEnergyFee += tx.EnergyFee
@@ -235,32 +241,35 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 }
 
 type ExchangeStatistic struct {
-	ID                  uint   `gorm:"primaryKey" json:"-"`
-	Date                string `gorm:"size:6;index" json:"date,omitempty"`
-	Name                string `json:"name,omitempty"`
-	Token               string `gorm:"index;" json:"token,omitempty"`
-	TotalFee            int64  `json:"total_fee"`
-	ChargeTxCount       int64  `json:"charge_tx_count"`
-	ChargeFee           int64  `json:"charge_fee"`
-	ChargeNetFee        int64  `json:"charge_net_fee"`
-	ChargeNetUsage      int64  `json:"charge_net_usage"`
-	ChargeEnergyTotal   int64  `json:"charge_energy_total"`
-	ChargeEnergyFee     int64  `json:"charge_energy_fee"`
-	ChargeEnergyUsage   int64  `json:"charge_energy_usage"`
-	CollectTxCount      int64  `json:"collect_tx_count"`
-	CollectFee          int64  `json:"collect_fee"`
-	CollectNetFee       int64  `json:"collect_net_fee"`
-	CollectNetUsage     int64  `json:"collect_net_usage"`
-	CollectEnergyTotal  int64  `json:"collect_energy_total"`
-	CollectEnergyFee    int64  `json:"collect_energy_fee"`
-	CollectEnergyUsage  int64  `json:"collect_energy_usage"`
-	WithdrawTxCount     int64  `json:"withdraw_tx_count"`
-	WithdrawFee         int64  `json:"withdraw_fee"`
-	WithdrawNetFee      int64  `json:"withdraw_net_fee"`
-	WithdrawNetUsage    int64  `json:"withdraw_net_usage"`
-	WithdrawEnergyTotal int64  `json:"withdraw_energy_total"`
-	WithdrawEnergyFee   int64  `json:"withdraw_energy_fee"`
-	WithdrawEnergyUsage int64  `json:"withdraw_energy_usage"`
+	ID                  uint         `gorm:"primaryKey" json:"-"`
+	Date                string       `gorm:"size:6;index" json:"date,omitempty"`
+	Name                string       `json:"name,omitempty"`
+	Token               string       `gorm:"index;" json:"token,omitempty"`
+	TotalFee            int64        `json:"total_fee"`
+	ChargeTxCount       int64        `json:"charge_tx_count"`
+	ChargeAmount        types.BigInt `json:"charge_amount"`
+	ChargeFee           int64        `json:"charge_fee"`
+	ChargeNetFee        int64        `json:"charge_net_fee"`
+	ChargeNetUsage      int64        `json:"charge_net_usage"`
+	ChargeEnergyTotal   int64        `json:"charge_energy_total"`
+	ChargeEnergyFee     int64        `json:"charge_energy_fee"`
+	ChargeEnergyUsage   int64        `json:"charge_energy_usage"`
+	CollectTxCount      int64        `json:"collect_tx_count"`
+	CollectAmount       types.BigInt `json:"collect_amount"`
+	CollectFee          int64        `json:"collect_fee"`
+	CollectNetFee       int64        `json:"collect_net_fee"`
+	CollectNetUsage     int64        `json:"collect_net_usage"`
+	CollectEnergyTotal  int64        `json:"collect_energy_total"`
+	CollectEnergyFee    int64        `json:"collect_energy_fee"`
+	CollectEnergyUsage  int64        `json:"collect_energy_usage"`
+	WithdrawTxCount     int64        `json:"withdraw_tx_count"`
+	WithdrawAmount      types.BigInt `json:"withdraw_amount"`
+	WithdrawFee         int64        `json:"withdraw_fee"`
+	WithdrawNetFee      int64        `json:"withdraw_net_fee"`
+	WithdrawNetUsage    int64        `json:"withdraw_net_usage"`
+	WithdrawEnergyTotal int64        `json:"withdraw_energy_total"`
+	WithdrawEnergyFee   int64        `json:"withdraw_energy_fee"`
+	WithdrawEnergyUsage int64        `json:"withdraw_energy_usage"`
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
@@ -270,6 +279,7 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 
 	o.TotalFee += other.TotalFee
 	o.ChargeTxCount += other.ChargeTxCount
+	o.ChargeAmount.Add(other.ChargeAmount)
 	o.ChargeFee += other.ChargeFee
 	o.ChargeNetFee += other.ChargeNetFee
 	o.ChargeNetUsage += other.ChargeNetUsage
@@ -277,6 +287,7 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.ChargeEnergyFee += other.ChargeEnergyFee
 	o.ChargeEnergyUsage += other.ChargeEnergyUsage
 	o.CollectTxCount += other.CollectTxCount
+	o.CollectAmount.Add(other.CollectAmount)
 	o.CollectFee += other.CollectFee
 	o.CollectNetFee += other.CollectNetFee
 	o.CollectNetUsage += other.CollectNetUsage
@@ -284,6 +295,7 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.CollectEnergyFee += other.CollectEnergyFee
 	o.CollectEnergyUsage += other.CollectEnergyUsage
 	o.WithdrawTxCount += other.WithdrawTxCount
+	o.WithdrawAmount.Add(other.WithdrawAmount)
 	o.WithdrawFee += other.WithdrawFee
 	o.WithdrawNetFee += other.WithdrawNetFee
 	o.WithdrawNetUsage += other.WithdrawNetUsage
@@ -295,6 +307,7 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 func (o *ExchangeStatistic) AddCharge(stat *UserTokenStatistic) {
 	o.TotalFee += stat.ToFee
 	o.ChargeTxCount += stat.ToTXCount
+	o.ChargeAmount.Add(stat.ToAmount)
 	o.ChargeFee += stat.ToFee
 	o.ChargeNetFee += stat.ToNetFee
 	o.ChargeNetUsage += stat.ToNetUsage
@@ -306,6 +319,7 @@ func (o *ExchangeStatistic) AddCharge(stat *UserTokenStatistic) {
 func (o *ExchangeStatistic) AddCollect(stat *UserTokenStatistic) {
 	o.TotalFee += stat.ToFee
 	o.CollectTxCount += stat.ToTXCount
+	o.CollectAmount.Add(stat.ToAmount)
 	o.CollectFee += stat.ToFee
 	o.CollectNetFee += stat.ToNetFee
 	o.CollectNetUsage += stat.ToNetUsage
@@ -317,6 +331,7 @@ func (o *ExchangeStatistic) AddCollect(stat *UserTokenStatistic) {
 func (o *ExchangeStatistic) AddWithdraw(stat *UserTokenStatistic) {
 	o.TotalFee += stat.FromFee
 	o.WithdrawTxCount += stat.FromTXCount
+	o.WithdrawAmount.Add(stat.FromAmount)
 	o.WithdrawFee += stat.FromFee
 	o.WithdrawNetFee += stat.FromNetFee
 	o.WithdrawNetUsage += stat.FromNetUsage
@@ -328,6 +343,7 @@ func (o *ExchangeStatistic) AddWithdraw(stat *UserTokenStatistic) {
 func (o *ExchangeStatistic) AddWithdrawFromTx(tx *Transaction) {
 	o.TotalFee += tx.Fee
 	o.WithdrawTxCount++
+	o.WithdrawAmount.Add(tx.Amount)
 	o.WithdrawFee += tx.Fee
 	o.WithdrawNetFee += tx.NetFee
 	o.WithdrawNetUsage += tx.NetUsage

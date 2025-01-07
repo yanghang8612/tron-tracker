@@ -1107,11 +1107,15 @@ func (db *RawDB) countAmount() {
 
 		for _, stats := range exchangeStats {
 			for _, stat := range stats {
-				db.db.Model(&models.ExchangeStatistic{}).Where(models.ExchangeStatistic{
+				db.db.Where(&models.ExchangeStatistic{
 					Date:  stat.Date,
 					Name:  stat.Name,
 					Token: stat.Token,
-				}).Updates(stat)
+				}).Updates(models.ExchangeStatistic{
+					ChargeAmount:   stat.ChargeAmount,
+					CollectAmount:  stat.CollectAmount,
+					WithdrawAmount: stat.WithdrawAmount,
+				})
 			}
 		}
 

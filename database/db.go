@@ -1043,8 +1043,101 @@ func (db *RawDB) countLoop() {
 				}
 			}
 
-			time.Sleep(1 * time.Second)
+			db.countAmount()
+			os.Exit(1)
+
+			// time.Sleep(1 * time.Second)
 		}
+	}
+}
+
+func (db *RawDB) countAmount() {
+	db.logger.Infof("Start counting amount")
+
+	var (
+		countingDate = "240703"
+		results      = make([]*models.Transaction, 0)
+	)
+
+	for countingDate != db.trackingDate {
+		txCount := int64(0)
+		exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
+		result := db.db.Table("transactions_"+countingDate).
+			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+				for _, result := range results {
+					if _, ok := db.vt[result.Name]; !ok || len(result.ToAddr) == 0 || result.Result != 1 {
+						continue
+					}
+
+					if db.el.Contains(result.FromAddr) {
+						exchangeName := db.el.Get(result.FromAddr).Name
+						if _, ok := exchangeStats[exchangeName]; !ok {
+							exchangeStats[exchangeName] = make(map[string]*models.ExchangeStatistic)
+						}
+						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
+							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
+								Date:  countingDate,
+								Name:  exchangeName,
+								Token: result.Name,
+							}
+						}
+						exchangeStats[exchangeName][result.Name].WithdrawAmount.Add(result.Amount)
+					} else if db.el.Contains(result.ToAddr) {
+						exchangeName := db.el.Get(result.ToAddr).Name
+						if _, ok := exchangeStats[exchangeName]; !ok {
+							exchangeStats[exchangeName] = make(map[string]*models.ExchangeStatistic)
+						}
+						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
+							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
+								Date:  countingDate,
+								Name:  exchangeName,
+								Token: result.Name,
+							}
+						}
+						exchangeStats[exchangeName][result.Name].CollectAmount.Add(result.Amount)
+					} else if charger, ok := db.isCharger(result.ToAddr); ok {
+						exchangeName := charger.ExchangeName
+						if _, ok := exchangeStats[exchangeName]; !ok {
+							exchangeStats[exchangeName] = make(map[string]*models.ExchangeStatistic)
+						}
+						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
+							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
+								Date:  countingDate,
+								Name:  exchangeName,
+								Token: result.Name,
+							}
+						}
+						exchangeStats[exchangeName][result.Name].ChargeAmount.Add(result.Amount)
+					}
+				}
+
+				txCount += tx.RowsAffected
+
+				if txCount%500_000 == 0 {
+					db.logger.Infof("Counting amount for date [%s], counted txs [%d]", countingDate, txCount)
+				}
+
+				return nil
+			})
+
+		for _, stats := range exchangeStats {
+			for _, stat := range stats {
+				db.db.Model(&models.ExchangeStatistic{}).Where(models.ExchangeStatistic{
+					Date:  stat.Date,
+					Name:  stat.Name,
+					Token: stat.Token,
+				}).Updates(stat)
+			}
+		}
+
+		if result.Error != nil {
+			db.logger.Errorf("Counting amount for date [%s], error [%v]", countingDate, result.Error)
+		}
+
+		db.logger.Infof("Finish counting amount for date [%s], counted txs [%d]", countingDate, result.RowsAffected)
+
+		date, _ := time.Parse("060102", countingDate)
+		countingDate = date.AddDate(0, 0, 1).Format("060102")
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 	"tron-tracker/database/models"
+	types2 "tron-tracker/database/models/types"
 	"tron-tracker/net"
 	"tron-tracker/types"
 	"tron-tracker/utils"
@@ -1076,9 +1078,12 @@ func (db *RawDB) countAmount() {
 						}
 						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
 							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
-								Date:  countingDate,
-								Name:  exchangeName,
-								Token: result.Name,
+								Date:           countingDate,
+								Name:           exchangeName,
+								Token:          result.Name,
+								ChargeAmount:   types2.NewBigInt(big.NewInt(0)),
+								CollectAmount:  types2.NewBigInt(big.NewInt(0)),
+								WithdrawAmount: types2.NewBigInt(big.NewInt(0)),
 							}
 						}
 						exchangeStats[exchangeName][result.Name].WithdrawAmount.Add(result.Amount)
@@ -1089,9 +1094,12 @@ func (db *RawDB) countAmount() {
 						}
 						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
 							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
-								Date:  countingDate,
-								Name:  exchangeName,
-								Token: result.Name,
+								Date:           countingDate,
+								Name:           exchangeName,
+								Token:          result.Name,
+								ChargeAmount:   types2.NewBigInt(big.NewInt(0)),
+								CollectAmount:  types2.NewBigInt(big.NewInt(0)),
+								WithdrawAmount: types2.NewBigInt(big.NewInt(0)),
 							}
 						}
 						exchangeStats[exchangeName][result.Name].CollectAmount.Add(result.Amount)
@@ -1102,9 +1110,12 @@ func (db *RawDB) countAmount() {
 						}
 						if _, ok := exchangeStats[exchangeName][result.Name]; !ok {
 							exchangeStats[exchangeName][result.Name] = &models.ExchangeStatistic{
-								Date:  countingDate,
-								Name:  exchangeName,
-								Token: result.Name,
+								Date:           countingDate,
+								Name:           exchangeName,
+								Token:          result.Name,
+								ChargeAmount:   types2.NewBigInt(big.NewInt(0)),
+								CollectAmount:  types2.NewBigInt(big.NewInt(0)),
+								WithdrawAmount: types2.NewBigInt(big.NewInt(0)),
 							}
 						}
 						exchangeStats[exchangeName][result.Name].ChargeAmount.Add(result.Amount)

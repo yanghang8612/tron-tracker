@@ -147,6 +147,15 @@ type UserTokenStatistic struct {
 	ToNetFee              int64        `json:"to_net_fee"`
 }
 
+func NewUserTokenStatistic(user, token string) *UserTokenStatistic {
+	return &UserTokenStatistic{
+		User:       user,
+		Token:      token,
+		FromAmount: types.NewBigInt(big.NewInt(0)),
+		ToAmount:   types.NewBigInt(big.NewInt(0)),
+	}
+}
+
 func (o *UserTokenStatistic) Merge(other *UserTokenStatistic) {
 	if other == nil {
 		return
@@ -270,6 +279,17 @@ type ExchangeStatistic struct {
 	WithdrawEnergyTotal int64        `json:"withdraw_energy_total"`
 	WithdrawEnergyFee   int64        `json:"withdraw_energy_fee"`
 	WithdrawEnergyUsage int64        `json:"withdraw_energy_usage"`
+}
+
+func NewExchangeStatistic(date, name, token string) *ExchangeStatistic {
+	return &ExchangeStatistic{
+		Date:           date,
+		Name:           name,
+		Token:          token,
+		ChargeAmount:   types.NewBigInt(big.NewInt(0)),
+		CollectAmount:  types.NewBigInt(big.NewInt(0)),
+		WithdrawAmount: types.NewBigInt(big.NewInt(0)),
+	}
 }
 
 func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {

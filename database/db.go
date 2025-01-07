@@ -787,18 +787,12 @@ func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats
 
 func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
 	if _, ok := stats[tx.FromAddr+tx.Name]; !ok {
-		stats[tx.FromAddr+tx.Name] = &models.UserTokenStatistic{
-			User:  tx.FromAddr,
-			Token: tx.Name,
-		}
+		stats[tx.FromAddr+tx.Name] = models.NewUserTokenStatistic(tx.FromAddr, tx.Name)
 	}
 	stats[tx.FromAddr+tx.Name].AddFrom(tx)
 
 	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
-		stats[tx.ToAddr+tx.Name] = &models.UserTokenStatistic{
-			User:  tx.ToAddr,
-			Token: tx.Name,
-		}
+		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
 	}
 	stats[tx.ToAddr+tx.Name].AddTo(tx)
 }
@@ -1093,11 +1087,8 @@ func (db *RawDB) countForDate(date string) {
 				if charger, ok := db.isCharger(to); ok && db.el.Contains(from) {
 					exchange := db.el.Get(from)
 					if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
-						ExchangeSpecialStats[exchange.Name] = &models.ExchangeStatistic{
-							Date:  date,
-							Name:  charger.ExchangeName,
-							Token: "Special",
-						}
+						ExchangeSpecialStats[exchange.Name] =
+							models.NewExchangeStatistic(date, charger.ExchangeName, "Special")
 
 						ExchangeSpecialStats[exchange.Name].AddWithdrawFromTx(result)
 					}
@@ -1302,22 +1293,16 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 				if _, ok := exchangeStats[exchange.Name]; !ok {
 					exchangeStats[exchange.Name] = make(map[string]*models.ExchangeStatistic)
-					exchangeStats[exchange.Name]["_"] = &models.ExchangeStatistic{
-						Date:  cache.date,
-						Name:  exchange.Name,
-						Token: "_",
-					}
+					exchangeStats[exchange.Name]["_"] =
+						models.NewExchangeStatistic(cache.date, exchange.Name, "_")
 				}
 
 				exchangeStats[exchange.Name]["_"].AddCollect(stats)
 				exchangeStats[exchange.Name]["_"].AddWithdraw(stats)
 
 				if _, ok := exchangeStats[exchange.Name][stats.Token]; !ok {
-					exchangeStats[exchange.Name][stats.Token] = &models.ExchangeStatistic{
-						Date:  cache.date,
-						Name:  exchange.Name,
-						Token: stats.Token,
-					}
+					exchangeStats[exchange.Name][stats.Token] =
+						models.NewExchangeStatistic(cache.date, exchange.Name, stats.Token)
 				}
 
 				exchangeStats[exchange.Name][stats.Token].AddCollect(stats)
@@ -1334,21 +1319,15 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 					if _, ok := exchangeStats[charger.ExchangeName]; !ok {
 						exchangeStats[charger.ExchangeName] = make(map[string]*models.ExchangeStatistic)
-						exchangeStats[charger.ExchangeName]["_"] = &models.ExchangeStatistic{
-							Date:  cache.date,
-							Name:  charger.ExchangeName,
-							Token: "_",
-						}
+						exchangeStats[charger.ExchangeName]["_"] =
+							models.NewExchangeStatistic(cache.date, charger.ExchangeName, "_")
 					}
 
 					exchangeStats[charger.ExchangeName]["_"].AddCharge(stats)
 
 					if _, ok := exchangeStats[charger.ExchangeName][stats.Token]; !ok {
-						exchangeStats[charger.ExchangeName][stats.Token] = &models.ExchangeStatistic{
-							Date:  cache.date,
-							Name:  charger.ExchangeName,
-							Token: stats.Token,
-						}
+						exchangeStats[charger.ExchangeName][stats.Token] =
+							models.NewExchangeStatistic(cache.date, charger.ExchangeName, stats.Token)
 					}
 
 					exchangeStats[charger.ExchangeName][stats.Token].AddCharge(stats)

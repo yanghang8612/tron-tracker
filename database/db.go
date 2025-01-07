@@ -416,12 +416,12 @@ func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndToken(date time.Time, day
 	return resultMap
 }
 
-func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []models.ExchangeStatistic {
+func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []*models.ExchangeStatistic {
 	return db.GetExchangeStatisticsByDateAndToken(date.Format("060102"), "_")
 }
 
-func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []models.ExchangeStatistic {
-	var results []models.ExchangeStatistic
+func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []*models.ExchangeStatistic {
+	var results []*models.ExchangeStatistic
 	db.db.Where("date = ? and token = ?", date, token).Find(&results)
 	return results
 }

@@ -1055,7 +1055,7 @@ func (db *RawDB) countAmount() {
 	db.logger.Infof("Start counting amount")
 
 	var (
-		countingDate = "240703"
+		countingDate = "240808"
 		results      = make([]*models.Transaction, 0)
 	)
 

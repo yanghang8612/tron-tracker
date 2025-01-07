@@ -1107,6 +1107,10 @@ func (db *RawDB) countAmount() {
 
 		for _, stats := range exchangeStats {
 			for _, stat := range stats {
+				if len(stat.Name) == 0 {
+					continue
+				}
+
 				db.db.Where(&models.ExchangeStatistic{
 					Date:  stat.Date,
 					Name:  stat.Name,

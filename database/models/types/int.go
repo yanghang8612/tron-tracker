@@ -44,3 +44,10 @@ func (b BigInt) String() string {
 func (b BigInt) Length() int {
 	return len(b.val.String())
 }
+
+func (b *BigInt) MarshalJSON() ([]byte, error) {
+	if b.val == nil {
+		return []byte("0"), nil
+	}
+	return []byte(`"` + b.val.String() + `"`), nil
+}

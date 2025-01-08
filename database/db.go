@@ -450,12 +450,12 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days in
 			}
 
 			if _, ok := resultMap[es.Name][tokenName]; !ok {
-				resultMap[es.Name][tokenName] = &models.ExchangeStatistic{}
+				resultMap[es.Name][tokenName] = models.NewExchangeStatistic("", "", "")
 			}
 			resultMap[es.Name][tokenName].Merge(&es)
 
 			if _, ok := resultMap["All"][tokenName]; !ok {
-				resultMap["All"][tokenName] = &models.ExchangeStatistic{}
+				resultMap["All"][tokenName] = models.NewExchangeStatistic("", "", "")
 			}
 			resultMap["All"][tokenName].Merge(&es)
 		}

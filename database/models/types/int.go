@@ -32,7 +32,9 @@ func (b BigInt) Neg() {
 }
 
 func (b BigInt) Add(other BigInt) {
-	b.val.Add(b.val, other.val)
+	if other.val != nil {
+		b.val.Add(b.val, other.val)
+	}
 }
 
 func (b BigInt) String() string {

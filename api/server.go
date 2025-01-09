@@ -141,7 +141,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 			}
 
 			if _, ok := resultMap[es.Name]; !ok {
-				resultMap[es.Name] = models.NewExchangeStatistic(es.Name, dateRangeStr, "")
+				resultMap[es.Name] = models.NewExchangeStatistic(dateRangeStr, es.Name, "")
 			}
 			resultMap[es.Name].Merge(es)
 		}

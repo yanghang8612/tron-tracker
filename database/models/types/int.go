@@ -33,6 +33,9 @@ func (b BigInt) Neg() {
 
 func (b BigInt) Add(other BigInt) {
 	if other.val != nil {
+		if b.val == nil {
+			b.val = big.NewInt(0)
+		}
 		b.val.Add(b.val, other.val)
 	}
 }

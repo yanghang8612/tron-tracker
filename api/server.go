@@ -94,6 +94,7 @@ func (s *Server) Start() {
 	s.router.GET("/market_pair_volumes", s.marketPairVolumes)
 	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
 	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
+	s.router.GET("/volume_ppt_data", s.volumePPTData)
 
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
@@ -1264,6 +1265,40 @@ func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
 	}
 
 	c.JSON(200, result)
+}
+
+func (s *Server) volumePPTData(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c)
+	if !ok {
+		return
+	}
+
+	token := c.DefaultQuery("token", "tron")
+
+	var exchanges []string
+	exchangesParam := c.DefaultQuery("exchanges", "")
+	if exchangesParam != "" {
+		exchanges = strings.Split(exchangesParam, ",")
+	}
+	if !strings.Contains(exchangesParam, "Binance") {
+		exchanges = append(exchanges, "Binance")
+	}
+
+	result := strings.Builder{}
+	for i := 0; i < days; i++ {
+		queryDate := startDate.AddDate(0, 0, i)
+		marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token)
+		marketPairStats = s.dealWithGroupByTag(marketPairStats)
+
+		result.WriteString(queryDate.Format("2006-01-02") + " ")
+		for _, exchange := range exchanges {
+			result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
+		}
+
+		result.WriteString(fmt.Sprintf("%.2f\n", marketPairStats["Total"].Volume))
+	}
+
+	c.String(200, result.String())
 }
 
 // Helper function to convert size string to bytes

@@ -1294,10 +1294,18 @@ func (s *Server) volumePPTData(c *gin.Context) {
 
 		result.WriteString(curDate.Format("2006-01-02") + " ")
 		for _, exchange := range exchanges {
-			result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
+			if _, inStats := marketPairStats[exchange]; inStats {
+				result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
+			} else {
+				result.WriteString("0 ")
+			}
 		}
 
-		result.WriteString(fmt.Sprintf("%.2f\n", marketPairStats["Total"].Volume))
+		if _, inStats := marketPairStats["Total"]; inStats {
+			result.WriteString(fmt.Sprintf("%.2f\n", marketPairStats["Total"].Volume))
+		} else {
+			result.WriteString("0\n")
+		}
 	}
 
 	c.String(200, result.String())

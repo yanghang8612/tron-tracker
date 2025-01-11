@@ -1287,11 +1287,12 @@ func (s *Server) volumePPTData(c *gin.Context) {
 
 	result := strings.Builder{}
 	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
+		curDate := startDate.AddDate(0, 0, i)
+		queryDate := curDate.AddDate(0, 0, 1)
 		marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
 		marketPairStats = s.dealWithGroupByTag(marketPairStats)
 
-		result.WriteString(queryDate.Format("2006-01-02") + " ")
+		result.WriteString(curDate.Format("2006-01-02") + " ")
 		for _, exchange := range exchanges {
 			result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
 		}

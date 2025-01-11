@@ -1112,8 +1112,9 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "tron")
 
-	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token)
-	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate.AddDate(0, 0, -days), days, token)
+	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token, true)
+	lastStartDate := startDate.AddDate(0, 0, -days)
+	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(lastStartDate, days, token, true)
 
 	if _, ok = c.GetQuery("group_by"); ok {
 		curMarketPairStats = s.dealWithGroupByTag(curMarketPairStats)
@@ -1287,7 +1288,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 	result := strings.Builder{}
 	for i := 0; i < days; i++ {
 		queryDate := startDate.AddDate(0, 0, i)
-		marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token)
+		marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
 		marketPairStats = s.dealWithGroupByTag(marketPairStats)
 
 		result.WriteString(queryDate.Format("2006-01-02") + " ")

@@ -504,7 +504,7 @@ func (db *RawDB) GetTokenPriceByDate(date time.Time, token string) float64 {
 	return stats.Price
 }
 
-func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string, queryDepth bool) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
 	var totalVolume float64
@@ -516,7 +516,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		var earliestDatetime string
 		db.db.Table(todayDBName).
 			Select("MIN(datetime)").
-			Where("token = ? and percent > 0", token).
+			Where("datetime like ? and token = ? and percent > 0", today.Format("02")+"%", token).
 			Find(&earliestDatetime)
 
 		// Then query the volume statistics
@@ -537,25 +537,27 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 			totalVolume += dayStat.Volume
 		}
 
-		lastDay := today.AddDate(0, 0, -1)
-		lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
+		if queryDepth {
+			lastDay := today.AddDate(0, 0, -1)
+			lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
 
-		var depthStats []*models.MarketPairStatistic
-		db.db.Table(lastDayDBName).
-			Select("exchange_name", "pair",
-				"AVG(depth_usd_positive_two) as depth_usd_positive_two",
-				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
-			Where("datetime like ? and token = ? and percent > 0", lastDay.Format("02")+"%", token).
-			Group("exchange_name, pair").
-			Find(&depthStats)
+			var depthStats []*models.MarketPairStatistic
+			db.db.Table(lastDayDBName).
+				Select("exchange_name", "pair",
+					"AVG(depth_usd_positive_two) as depth_usd_positive_two",
+					"AVG(depth_usd_negative_two) as depth_usd_negative_two").
+				Where("datetime like ? and token = ? and percent > 0", lastDay.Format("02")+"%", token).
+				Group("exchange_name, pair").
+				Find(&depthStats)
 
-		for _, depthStat := range depthStats {
-			key := depthStat.ExchangeName + "_" + depthStat.Pair
-			if _, ok := resultMap[key]; !ok {
-				resultMap[key] = depthStat
-			} else {
-				resultMap[key].DepthUsdPositiveTwo += depthStat.DepthUsdPositiveTwo
-				resultMap[key].DepthUsdNegativeTwo += depthStat.DepthUsdNegativeTwo
+			for _, depthStat := range depthStats {
+				key := depthStat.ExchangeName + "_" + depthStat.Pair
+				if _, ok := resultMap[key]; !ok {
+					resultMap[key] = depthStat
+				} else {
+					resultMap[key].DepthUsdPositiveTwo += depthStat.DepthUsdPositiveTwo
+					resultMap[key].DepthUsdNegativeTwo += depthStat.DepthUsdNegativeTwo
+				}
 			}
 		}
 	}

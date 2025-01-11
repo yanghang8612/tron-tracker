@@ -512,10 +512,18 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		today := date.AddDate(0, 0, i)
 		todayDBName := "market_pair_statistics_" + today.Format("0601")
 
+		// First query the earliest datetime of the day
+		var earliestDatetime string
+		db.db.Table(todayDBName).
+			Select("MIN(datetime)").
+			Where("token = ? and percent > 0", token).
+			Find(&earliestDatetime)
+
+		// Then query the volume statistics
 		var volumeStats []*models.MarketPairStatistic
 		db.db.Table(todayDBName).
 			Select("exchange_name", "pair", "volume").
-			Where("datetime = ? and token = ? and percent > 0", today.Format("02")+"0000", token).
+			Where("datetime = ? and token = ? and percent > 0", earliestDatetime, token).
 			Find(&volumeStats)
 
 		for _, dayStat := range volumeStats {

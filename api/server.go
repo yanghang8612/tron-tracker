@@ -16,7 +16,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
-	"github.com/jinzhu/now"
 	"go.uber.org/zap"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
@@ -438,9 +437,7 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 		return
 	}
 
-	thisMonday := now.With(date).BeginningOfWeek().AddDate(0, 0, 1).Format("20060102")
-
-	statsResultFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s_stats.txt", thisMonday))
+	statsResultFile, err := os.Open(fmt.Sprintf("/data/tronlink/week%s_stats.txt", date))
 	if err != nil {
 		c.JSON(200, gin.H{
 			"code":    500,
@@ -466,8 +463,14 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 		nums = append(nums, num)
 	}
 	c.JSON(200, gin.H{
-		"total_fee":    nums[0],
-		"total_energy": nums[1],
+		"total_fee":       nums[0],
+		"total_energy":    nums[1],
+		"withdraw_fee":    nums[2],
+		"withdraw_energy": nums[3],
+		"collect_fee":     nums[4],
+		"collect_energy":  nums[5],
+		"charge_fee":      nums[6],
+		"charge_energy":   nums[7],
 	})
 }
 

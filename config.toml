@@ -22,7 +22,7 @@
     ["TRFe3hT5oYhjSZ6f3ji5FJ7YCfrkWnHRvh", "ETH"],
     ["THb4CqiFdwNHsWsQCs4JhzwjMWys4aqCbF", "ETHOLD"],
     ["TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t", "USDT"],
-    ["TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", "USDD"],
+    ["TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn", "USDDOLD"],
     ["TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "USDC"],
     ["TLa2f6VPqDgRE67v1736s7bJ8Ray5wYjU7", "WIN"],
     ["TMwFHYXLJaRUPeW6421aqXL4ZEzPRFGkGT", "USDJ"],
@@ -39,6 +39,10 @@
     ["TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR", "WTRX"],
     ["TThzxNRLrW2Brp9DcTQU8i4Wd9udCWEdZ3", "stUSDT"],
     ["TGkxzkDKyMeq2T7edKnyjZoFypyzjkkssq", "wstUSDT"],
+    ["TXL6rJbvmjD46zeN1JssfgxvSo99qC8MRT", "SUNDOG"],
+    ["TXDk8mbtRbXeYuMNS83CfKPaYYT8XWv9Hz", "USDD"],
+    ["TR3DLthpnDdCGabhVDbD3VMsiJoCXY3bZd", "LTC"],
+    ["TXWkP3jLBqRGojUih1ShzNyDaN5Csnebok", "WETH"],
   ]
 [defi]
   sunswap_v1 = [
@@ -148,24 +152,41 @@
     "TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax"
   ]
 
+  sunswapv3 = [
+    "TFVisXFaijZfeyeSjCEVkHfex7HGdTxzF9"
+  ]
+
+  sunpump = [
+    "TG9nDZMUtC4LBmrWSdNXNi8xrKzXTMMSKT",
+    "TQHj5QZA8PaHBcAGkYdi8QxdtuNabuVx5r",
+    "TTfvyrAz86hbZk5iDpKD78pqLGgi8C7AAw",
+    "TZFs5ch1R1C4mmjwrrmZqeqbUgGpxY1yWB",
+    "TSiiYf1b1PV1fpT9T7V4wy11btsNVajw1g",
+    "TRs4TG1vizrtkVXAM1CsuWvxtXat3J7nTu",
+  ]
+
   justlend = [
+    "TGjYzgCyPobsNS9n6WcbdLVR9dH7mWqFx7", # Unitroller
     "TE2RzoSV3wFK99w6J9UnnZ4vLfXYoxvRwP",
-    "TFpPyDCKvNFgos3g3WVsAqMrdqhB81JXHE",
-    "TGBr8uh9jBVHJhhkwSJvQN2ZAKzVkxDmno",
-    "TL5x9MtSnDy537FXKx53yAaHRRNdg9TkkA",
-    "TLeEu311Cbw63BcmMHDgDLu7fnk9fqGcqT",
-    "TLHASseQymmpGQdfAyNjkMXFTJh8nzR2x2",
-    "TNSBA6KvSvMoTqQcEgpVK7VhHT3z7wifxy",
-    "TPXDpkg9e3eZzxqxAUyke9S4z4pGJBJw9e",
-    "TR7BUFRQeq1w5jAZf1FKx85SHuX6PfMqsV",
-    "TRg6MnpsFXc82ymUPgf5qbj59ibxiEDWvv",
-    "TSXv71Fy5XdL3Rh2QfBoUu3NAaM4sMif8R",
-    "TUaUHU9Dy8x5yNi1pKnFYqHWojot61Jfto",
-    "TUY54PVeH6WCcYCd6ZXXoBDsHytN9V5PXt",
-    "TWQhCXaWz4eHK4Kd1ErSDHjMFPoPc9czts",
-    "TX7kybeP6UwTBRHLNPYmswFESHfyjm9bAS",
-    "TD8bq1aFY8yc9nsD2rfqqJGDtkh7aPpEpr",
     "TXJgMdjVX5dKiQaUi9QobwNxtSQaFqccvd",
+    "TL5x9MtSnDy537FXKx53yAaHRRNdg9TkkA",
+    "TGBr8uh9jBVHJhhkwSJvQN2ZAKzVkxDmno",
+    "TRg6MnpsFXc82ymUPgf5qbj59ibxiEDWvv",
+    "TLeEu311Cbw63BcmMHDgDLu7fnk9fqGcqT",
+    "TWQhCXaWz4eHK4Kd1ErSDHjMFPoPc9czts",
+    "TUY54PVeH6WCcYCd6ZXXoBDsHytN9V5PXt",
+    "TR7BUFRQeq1w5jAZf1FKx85SHuX6PfMqsV",
+    "TSXv71Fy5XdL3Rh2QfBoUu3NAaM4sMif8R",
+    "TFpPyDCKvNFgos3g3WVsAqMrdqhB81JXHE",
+    "TPXDpkg9e3eZzxqxAUyke9S4z4pGJBJw9e",
+    "TNSBA6KvSvMoTqQcEgpVK7VhHT3z7wifxy",
+    "TUaUHU9Dy8x5yNi1pKnFYqHWojot61Jfto",
+    "TX7kybeP6UwTBRHLNPYmswFESHfyjm9bAS",
+    "TLHASseQymmpGQdfAyNjkMXFTJh8nzR2x2",
+    "TJQ9rbVe9ei3nNtyGgBL22Fuu2xYjZaLAQ",
+    "TWBxQMb6RD3qmkXUXpNwVCYbL8SHNreru6",
+    "TD5SdLw5scR6mXgyMK2xKrFJpauDjpKqrW",
+    "TKFRELGGoRgiayhwJTNNLqCNjFoLBh3Mnf",
   ]
 
   bttc = [

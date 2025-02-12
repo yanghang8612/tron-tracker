@@ -29,6 +29,8 @@ type ServerConfig struct {
 type DeFiConfig struct {
 	SunSwapV1  []string `toml:"sunswap_v1"`
 	SunSwapV2  []string `toml:"sunswap_v2"`
+	SunSwapV3  []string `toml:"sunswap_v3"`
+	SunPump    []string `toml:"sunpump"`
 	JustLend   []string `toml:"justlend"`
 	BTTC       []string `toml:"bttc"`
 	USDTCasino []string `toml:"usdtcasino"`
@@ -611,6 +613,10 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		sunswapV1Energy  int64
 		sunswapV2Fee     int64
 		sunswapV2Energy  int64
+		sunswapV3Fee     int64
+		sunswapV3Energy  int64
+		sunpumpFee       int64
+		sunpumpEnergy    int64
 		justlendFee      int64
 		justlendEnergy   int64
 		bttcFee          int64
@@ -642,6 +648,24 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 			sunswapV2Energy += tokenStats.EnergyTotal
 		}
 
+		for _, addr := range s.defiConfig.SunSwapV3 {
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
+			sunswapV3Fee += tokenStats.Fee
+			sunswapV3Energy += tokenStats.EnergyTotal
+		}
+
+		for _, addr := range s.defiConfig.SunSwapV3 {
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
+			sunswapV3Fee += tokenStats.Fee
+			sunswapV3Energy += tokenStats.EnergyTotal
+		}
+
+		for _, addr := range s.defiConfig.SunPump {
+			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
+			sunpumpFee += tokenStats.Fee
+			sunpumpEnergy += tokenStats.EnergyTotal
+		}
+
 		for _, addr := range s.defiConfig.JustLend {
 			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			justlendFee += tokenStats.Fee
@@ -670,6 +694,10 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		"sunswap_v1_energy": sunswapV1Energy / 7,
 		"sunswap_v2_fee":    sunswapV2Fee / 7_000_000,
 		"sunswap_v2_energy": sunswapV2Energy / 7,
+		"sunswap_v3_fee":    sunswapV3Fee / 7_000_000,
+		"sunswap_v3_energy": sunswapV3Energy / 7,
+		"sunpump_fee":       sunpumpFee / 7_000_000,
+		"sunpump_energy":    sunpumpEnergy / 7,
 		"justlend_fee":      justlendFee / 7_000_000,
 		"justlend_energy":   justlendEnergy / 7,
 		"bttc_fee":          bttcFee / 7_000_000,

@@ -152,8 +152,10 @@
     "TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax"
   ]
 
-  sunswapv3 = [
-    "TFVisXFaijZfeyeSjCEVkHfex7HGdTxzF9"
+  sunswap_v3 = [
+    "TFVisXFaijZfeyeSjCEVkHfex7HGdTxzF9",
+    "TJ4NNy8xZEqsowCBhLvZ45LCqPdGjkET5j",
+    "TSUUVjysXV8YqHytSNjfkNXnnB49QDvZpx",
   ]
 
   sunpump = [

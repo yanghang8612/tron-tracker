@@ -654,12 +654,6 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 			sunswapV3Energy += tokenStats.EnergyTotal
 		}
 
-		for _, addr := range s.defiConfig.SunSwapV3 {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			sunswapV3Fee += tokenStats.Fee
-			sunswapV3Energy += tokenStats.EnergyTotal
-		}
-
 		for _, addr := range s.defiConfig.SunPump {
 			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
 			sunpumpFee += tokenStats.Fee

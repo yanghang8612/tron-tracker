@@ -707,19 +707,58 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		return
 	}
 
-	result := strings.Builder{}
-	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
-		trxPrice := s.db.GetTokenPriceByDate(queryDate.AddDate(0, 0, 1), "tron")
-		totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
-		usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+	if c.GetBool("json") {
+		type ResEntity struct {
+			Date             string  `json:"date"`
+			TrxPrice         float64 `json:"trx_price"`
+			TotalEnergyFee   int64   `json:"total_energy_fee"`
+			TotalNetFee      int64   `json:"total_net_fee"`
+			TotalEnergyUsage int64   `json:"total_energy_usage"`
+			TotalNetUsage    int64   `json:"total_net_usage"`
+			UsdtEnergyFee    int64   `json:"usdt_energy_fee"`
+			UsdtNetFee       int64   `json:"usdt_net_fee"`
+			UsdtEnergyUsage  int64   `json:"usdt_energy_usage"`
+			UsdtNetUsage     int64   `json:"usdt_net_usage"`
+		}
 
-		result.WriteString(fmt.Sprintf("%f %d %d %d %d %d %d %d %d\n", trxPrice,
-			totalStat.EnergyFee, totalStat.NetFee, totalStat.EnergyUsage+totalStat.EnergyOriginUsage, totalStat.NetUsage,
-			usdtStat.EnergyFee, usdtStat.NetFee, usdtStat.EnergyUsage+usdtStat.EnergyOriginUsage, usdtStat.NetUsage))
+		result := make([]ResEntity, 0)
+		for i := 0; i < days; i++ {
+			queryDate := startDate.AddDate(0, 0, i)
+			trxPrice := s.db.GetTokenPriceByDate(queryDate.AddDate(0, 0, 1), "tron")
+			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
+			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+
+			result = append(result, ResEntity{
+				Date:             queryDate.Format("2006-01-02"),
+				TrxPrice:         trxPrice,
+				TotalEnergyFee:   totalStat.EnergyFee,
+				TotalNetFee:      totalStat.NetFee,
+				TotalEnergyUsage: totalStat.EnergyUsage + totalStat.EnergyOriginUsage,
+				TotalNetUsage:    totalStat.NetUsage,
+				UsdtEnergyFee:    usdtStat.EnergyFee,
+				UsdtNetFee:       usdtStat.NetFee,
+				UsdtEnergyUsage:  usdtStat.EnergyUsage + usdtStat.EnergyOriginUsage,
+				UsdtNetUsage:     usdtStat.NetUsage,
+			})
+		}
+
+		c.JSON(200, result)
+	} else {
+		result := strings.Builder{}
+		for i := 0; i < days; i++ {
+			queryDate := startDate.AddDate(0, 0, i)
+			trxPrice := s.db.GetTokenPriceByDate(queryDate.AddDate(0, 0, 1), "tron")
+			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
+			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+
+			result.WriteString(fmt.Sprintf("%s %f %d %d %d %d %d %d %d %d\n", queryDate.Format("2006-01-02"), trxPrice,
+				totalStat.EnergyFee, totalStat.NetFee, totalStat.EnergyUsage+totalStat.EnergyOriginUsage, totalStat.NetUsage,
+				usdtStat.EnergyFee, usdtStat.NetFee, usdtStat.EnergyUsage+usdtStat.EnergyOriginUsage, usdtStat.NetUsage))
+		}
+
+		c.String(200, result.String())
 	}
 
-	c.String(200, result.String())
 }
 
 func (s *Server) trxStatistics(c *gin.Context) {

@@ -707,7 +707,8 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		return
 	}
 
-	if c.GetBool("json") {
+	isJson := c.DefaultQuery("json", "false")
+	if isJson == "true" {
 		type ResEntity struct {
 			Date             string  `json:"date"`
 			TrxPrice         float64 `json:"trx_price"`

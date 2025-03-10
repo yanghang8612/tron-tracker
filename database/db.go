@@ -507,7 +507,10 @@ func (db *RawDB) GetTokenPriceByDate(date time.Time, token string) float64 {
 func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string, queryDepth bool) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
-	var totalVolume float64
+	var (
+		totalVolume float64
+		emptyDays   int
+	)
 	for i := 0; i < days; i++ {
 		today := date.AddDate(0, 0, i)
 		todayDBName := "market_pair_statistics_" + today.Format("0601")
@@ -527,7 +530,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 			Find(&volumeStats)
 
 		if len(volumeStats) == 0 {
-			days -= 1
+			emptyDays += 1
 			continue
 		}
 
@@ -567,6 +570,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		}
 	}
 
+	days -= emptyDays
 	totalVolume /= float64(days)
 	for _, stat := range resultMap {
 		stat.Datetime = ""

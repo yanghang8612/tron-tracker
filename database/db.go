@@ -523,8 +523,13 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		var volumeStats []*models.MarketPairStatistic
 		db.db.Table(todayDBName).
 			Select("exchange_name", "pair", "volume").
-			Where("datetime = ? and token = ? and percent > 0", earliestDatetime, token).
+			Where("datetime = ? and token = ? and percent > 0 and volume > 0", earliestDatetime, token).
 			Find(&volumeStats)
+
+		if len(volumeStats) == 0 {
+			days -= 1
+			continue
+		}
 
 		for _, dayStat := range volumeStats {
 			key := dayStat.ExchangeName + "_" + dayStat.Pair

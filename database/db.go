@@ -111,6 +111,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.Table("market_pair_statistics_2501").AutoMigrate(&models.MarketPairStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 
@@ -518,8 +523,10 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		// First query the earliest datetime of the day
 		var earliestDatetime string
 		db.db.Table(todayDBName).
-			Select("MIN(datetime)").
+			Select("datetime").
 			Where("datetime like ? and token = ? and percent > 0", today.Format("02")+"%", token).
+			Order("datetime").
+			Limit(1).
 			Find(&earliestDatetime)
 
 		// Then query the volume statistics

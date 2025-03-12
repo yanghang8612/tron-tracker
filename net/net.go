@@ -16,6 +16,7 @@ import (
 type Config struct {
 	FullNode     string `toml:"full_node"`
 	SlackWebhook string `toml:"slack_webhook"`
+	CMCApiKey    string `toml:"cmc_api_key"`
 }
 
 type slackMessage struct {
@@ -141,4 +142,51 @@ func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error)
 	}
 
 	return string(resp.Body()), marketPairs, nil
+}
+
+type TokenListingsResponse struct {
+	Data []Coin `json:"data"`
+}
+
+type Coin struct {
+	ID     uint   `json:"id"`
+	Symbol string `json:"symbol"`
+	Quote  struct {
+		USD struct {
+			Price           float64 `json:"price"`
+			Volume24h       float64 `json:"volume_24h"`
+			VolumeChange24h float64 `json:"volume_change_24h"`
+			MarketCap       float64 `json:"market_cap"`
+		} `json:"USD"`
+	} `json:"quote"`
+}
+
+func GetTokenListings() (string, []*models.TokenListingStatistic, error) {
+	resp, err := client.R().
+		SetHeader("X-CMC_PRO_API_KEY", config.CMCApiKey).
+		Get("https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest")
+	if err != nil {
+		return "", nil, err
+	}
+
+	var response TokenListingsResponse
+	err = json.Unmarshal(resp.Body(), &response)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var tokenListings = make([]*models.TokenListingStatistic, 0)
+	for _, tokenListing := range response.Data {
+		tokenListings = append(tokenListings, &models.TokenListingStatistic{
+			Datetime:        time.Now().Format("021504"),
+			CMCID:           tokenListing.ID,
+			Token:           tokenListing.Symbol,
+			Price:           tokenListing.Quote.USD.Price,
+			Volume24H:       tokenListing.Quote.USD.Volume24h,
+			VolumeChange24H: tokenListing.Quote.USD.VolumeChange24h,
+			MarketCap:       tokenListing.Quote.USD.MarketCap,
+		})
+	}
+
+	return string(resp.Body()), tokenListings, nil
 }

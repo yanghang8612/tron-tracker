@@ -2,7 +2,8 @@
   http_port = 8080
 [net]
   full_node = "https://api.trongrid.io"
-  slack_webhook = "...(your slack webhook url)"
+  slack_webhook = "...(your slack webhook url)..."
+  cmc_api_key = "...(your cmc api key)..."
 [log]
   log_path = "logs"
   log_file = "app.log"

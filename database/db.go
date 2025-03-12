@@ -700,6 +700,17 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time,
 	return resultMap
 }
 
+func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.TokenListingStatistic {
+	queryDateDBName := "token_listing_statistics_" + date.Format("0601")
+
+	var todayStat models.TokenListingStatistic
+	db.db.Table(queryDateDBName).
+		Where("datetime = ? and token = ?", date.Format("02")+"0010", token).
+		Find(&todayStat)
+
+	return &todayStat
+}
+
 func (db *RawDB) GetPhishingStatisticsByDate(date string) models.PhishingStatistic {
 	var phishingStatistic models.PhishingStatistic
 	db.db.Where("date = ?", date).Limit(1).Find(&phishingStatistic)
@@ -995,6 +1006,24 @@ func (db *RawDB) DoMarketPairStatistics() {
 	db.logger.Infof("Finish doing market pair statistics")
 }
 
+func (db *RawDB) DoTokenListingStatistics() {
+	db.logger.Infof("Start doing token listing statistics")
+
+	statsDBName := "token_listing_statistics_" + time.Now().Format("0601")
+	db.createTableIfNotExist(statsDBName, models.TokenListingStatistic{})
+
+	originData, tokenListings, err := net.GetTokenListings()
+	if err != nil {
+		db.logger.Errorf("Get token listing error: [%s]", err.Error())
+		return
+	}
+
+	db.saveTokenListingOriginData(originData)
+	db.db.Table(statsDBName).Save(tokenListings)
+
+	db.logger.Infof("Finish doing token listing statistics")
+}
+
 func (db *RawDB) isCharger(address string) (*models.Charger, bool) {
 	db.chargersLock.RLock()
 	defer db.chargersLock.RUnlock()
@@ -1010,6 +1039,26 @@ func (db *RawDB) saveMarketPairOriginData(token, data string) {
 	date := time.Now().Format("060102")
 	hour := time.Now().Format("1504")
 	filePath := fmt.Sprintf("/data/market_pairs/%s/%s/", token, date)
+	err := os.MkdirAll(filePath, os.ModePerm)
+	if err != nil {
+		db.logger.Errorf("Create directory error: [%s]", err.Error())
+		return
+	}
+
+	dataFile, err := os.Create(filePath + hour + ".json")
+	if err != nil {
+		db.logger.Errorf("Create data file error: [%s]", err.Error())
+		return
+	}
+	defer dataFile.Close()
+
+	dataFile.WriteString(data)
+}
+
+func (db *RawDB) saveTokenListingOriginData(data string) {
+	date := time.Now().Format("060102")
+	hour := time.Now().Format("1504")
+	filePath := fmt.Sprintf("/data/token_listings/%s/", date)
 	err := os.MkdirAll(filePath, os.ModePerm)
 	if err != nil {
 		db.logger.Errorf("Create directory error: [%s]", err.Error())

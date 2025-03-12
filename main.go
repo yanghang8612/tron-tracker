@@ -33,6 +33,7 @@ func main() {
 	})
 	_, _ = c.AddFunc("0 */10 * * * *", func() {
 		db.DoMarketPairStatistics()
+		db.DoTokenListingStatistics()
 	})
 	_, _ = c.AddFunc("0 */10 * * * *", func() {
 		tracker.Report()

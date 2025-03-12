@@ -431,6 +431,17 @@ type MarketPairStatistic struct {
 	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two,omitempty"`
 }
 
+type TokenListingStatistic struct {
+	ID              uint    `gorm:"primaryKey" json:"-"`
+	Datetime        string  `gorm:"size:6;index" json:"date,omitempty"`
+	CMCID           uint    `gorm:"index" json:"cmcid,omitempty"`
+	Token           string  `gorm:"index" json:"token,omitempty"`
+	Price           float64 `json:"price,omitempty"`
+	Volume24H       float64 `json:"volume_24h,omitempty"`
+	VolumeChange24H float64 `json:"volume_change_24h,omitempty"`
+	MarketCap       float64 `json:"market_cap,omitempty"`
+}
+
 type PhishingStatistic struct {
 	ID                          uint   `gorm:"primaryKey" json:"-"`
 	Date                        string `gorm:"size:6;index" json:"date,omitempty"`

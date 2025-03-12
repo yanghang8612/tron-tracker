@@ -95,6 +95,7 @@ func (s *Server) Start() {
 	s.router.GET("/market_pair_volumes", s.marketPairVolumes)
 	s.router.GET("/market_pair_weekly_volumes", s.marketPairWeeklyVolumes)
 	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
+	s.router.GET("/token_listing_statistic", s.tokenListingStatistic)
 	s.router.GET("/volume_ppt_data", s.volumePPTData)
 
 	s.router.GET("/tx_analyse", s.txAnalyze)
@@ -1333,6 +1334,19 @@ func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
 	}
 
 	c.JSON(200, result)
+}
+
+func (s *Server) tokenListingStatistic(c *gin.Context) {
+	date, ok := getDateParam(c, "date")
+	if !ok {
+		return
+	}
+
+	token := c.DefaultQuery("token", "TRX")
+
+	stat := s.db.GetTokenListingStatistic(date, token)
+
+	c.JSON(200, stat)
 }
 
 func (s *Server) volumePPTData(c *gin.Context) {

@@ -99,6 +99,8 @@ func (s *Server) Start() {
 
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
+	s.router.Static("/usdt_transfer_statistics", "/data/usdt")
+
 	go func() {
 		err := s.srv.ListenAndServe()
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {

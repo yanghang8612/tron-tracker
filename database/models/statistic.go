@@ -420,13 +420,13 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 type MarketPairStatistic struct {
 	ID                  uint    `gorm:"primaryKey" json:"-"`
 	Datetime            string  `gorm:"size:6;index" json:"date,omitempty"`
-	Token               string  `gorm:"index" json:"token,omitempty"`
-	ExchangeName        string  `gorm:"index" json:"exchange_name,omitempty"`
-	Pair                string  `json:"pair,omitempty"`
+	Token               string  `gorm:"size:8;index" json:"token,omitempty"`
+	ExchangeName        string  `gorm:"size:32;index" json:"exchange_name,omitempty"`
+	Pair                string  `gorm:"size:16" json:"pair,omitempty"`
 	Reputation          float64 `json:"reputation,omitempty"`
 	Price               float64 `json:"price,omitempty"`
 	Volume              float64 `json:"volume,omitempty"`
-	Percent             float64 `json:"percent,omitempty"`
+	Percent             float64 `gorm:"index" json:"percent,omitempty"`
 	DepthUsdPositiveTwo float64 `json:"depth_usd_positive_two,omitempty"`
 	DepthUsdNegativeTwo float64 `json:"depth_usd_negative_two,omitempty"`
 }
@@ -435,7 +435,7 @@ type TokenListingStatistic struct {
 	ID              uint    `gorm:"primaryKey" json:"-"`
 	Datetime        string  `gorm:"size:6;index" json:"date,omitempty"`
 	CMCID           uint    `gorm:"index" json:"cmcid,omitempty"`
-	Token           string  `gorm:"index" json:"token,omitempty"`
+	Token           string  `gorm:"size:8;index" json:"token,omitempty"`
 	Price           float64 `json:"price,omitempty"`
 	Volume24H       float64 `json:"volume_24h,omitempty"`
 	VolumeChange24H float64 `json:"volume_change_24h,omitempty"`

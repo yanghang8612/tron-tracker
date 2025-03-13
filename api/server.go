@@ -1397,6 +1397,8 @@ func (s *Server) volumePPTData(c *gin.Context) {
 			} else {
 				entity.Volumes["Total"] = 0
 			}
+
+			result = append(result, entity)
 		}
 
 		c.JSON(200, result)

@@ -1004,7 +1004,12 @@ func (db *RawDB) DoMarketPairStatistics() {
 	}
 
 	db.saveMarketPairOriginData("tron", tronOriginData)
-	db.db.Table(statsDBName).Save(tronMarketPairs)
+	res := db.db.Table(statsDBName).Create(tronMarketPairs)
+	if res.Error != nil {
+		db.logger.Warn("Save tron market pairs error: [%s]", res.Error.Error())
+	} else {
+		db.logger.Infof("Save tron market pairs success, affected rows: %d", res.RowsAffected)
+	}
 
 	steemOriginData, steemMarketPairs, err := net.GetMarketPairs("steem")
 	if err != nil {
@@ -1013,7 +1018,12 @@ func (db *RawDB) DoMarketPairStatistics() {
 	}
 
 	db.saveMarketPairOriginData("steem", steemOriginData)
-	db.db.Table(statsDBName).Save(steemMarketPairs)
+	res = db.db.Table(statsDBName).Create(steemMarketPairs)
+	if res.Error != nil {
+		db.logger.Warn("Save steem market pairs error: [%s]", res.Error.Error())
+	} else {
+		db.logger.Infof("Save steem market pairs success, affected rows: %d", res.RowsAffected)
+	}
 
 	db.logger.Infof("Finish doing market pair statistics")
 }
@@ -1031,7 +1041,12 @@ func (db *RawDB) DoTokenListingStatistics() {
 	}
 
 	db.saveTokenListingOriginData(originData)
-	db.db.Table(statsDBName).Save(tokenListings)
+	res := db.db.Table(statsDBName).Create(tokenListings)
+	if res.Error != nil {
+		db.logger.Warn("Save token listings error: [%s]", res.Error)
+	} else {
+		db.logger.Info("Save token listings success, affected rows: %d", res.RowsAffected)
+	}
 
 	db.logger.Infof("Finish doing token listing statistics")
 }

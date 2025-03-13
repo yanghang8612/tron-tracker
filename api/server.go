@@ -1366,30 +1366,66 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		exchanges = append(exchanges, "Binance")
 	}
 
-	result := strings.Builder{}
-	for i := 0; i < days; i++ {
-		curDate := startDate.AddDate(0, 0, i)
-		queryDate := curDate.AddDate(0, 0, 1)
-		marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
-		marketPairStats = s.dealWithGroupByTag(marketPairStats)
+	isJson := c.DefaultQuery("json", "false")
+	if isJson == "true" {
+		type ResEntity struct {
+			Date    string             `json:"date"`
+			Volumes map[string]float64 `json:"volumes"`
+		}
 
-		result.WriteString(curDate.Format("2006-01-02") + " ")
-		for _, exchange := range exchanges {
-			if _, inStats := marketPairStats[exchange]; inStats {
-				result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
+		result := make([]ResEntity, 0)
+		for i := 0; i < days; i++ {
+			curDate := startDate.AddDate(0, 0, i)
+			queryDate := curDate.AddDate(0, 0, 1)
+			marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
+			marketPairStats = s.dealWithGroupByTag(marketPairStats)
+
+			entity := ResEntity{
+				Date:    curDate.Format("2006-01-02"),
+				Volumes: make(map[string]float64),
+			}
+			for _, exchange := range exchanges {
+				if _, inStats := marketPairStats[exchange]; inStats {
+					entity.Volumes[exchange] = marketPairStats[exchange].Volume
+				} else {
+					entity.Volumes[exchange] = 0
+				}
+			}
+
+			if _, inStats := marketPairStats["Total"]; inStats {
+				entity.Volumes["Total"] = marketPairStats["Total"].Volume
 			} else {
-				result.WriteString("0 ")
+				entity.Volumes["Total"] = 0
 			}
 		}
 
-		if _, inStats := marketPairStats["Total"]; inStats {
-			result.WriteString(fmt.Sprintf("%.2f\n", marketPairStats["Total"].Volume))
-		} else {
-			result.WriteString("0\n")
-		}
-	}
+		c.JSON(200, result)
+	} else {
+		result := strings.Builder{}
+		for i := 0; i < days; i++ {
+			curDate := startDate.AddDate(0, 0, i)
+			queryDate := curDate.AddDate(0, 0, 1)
+			marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
+			marketPairStats = s.dealWithGroupByTag(marketPairStats)
 
-	c.String(200, result.String())
+			result.WriteString(curDate.Format("2006-01-02") + " ")
+			for _, exchange := range exchanges {
+				if _, inStats := marketPairStats[exchange]; inStats {
+					result.WriteString(fmt.Sprintf("%.2f ", marketPairStats[exchange].Volume))
+				} else {
+					result.WriteString("0 ")
+				}
+			}
+
+			if _, inStats := marketPairStats["Total"]; inStats {
+				result.WriteString(fmt.Sprintf("%.2f\n", marketPairStats["Total"].Volume))
+			} else {
+				result.WriteString("0\n")
+			}
+		}
+
+		c.String(200, result.String())
+	}
 }
 
 // Helper function to convert size string to bytes

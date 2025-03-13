@@ -421,8 +421,8 @@ type MarketPairStatistic struct {
 	ID                  uint    `gorm:"primaryKey" json:"-"`
 	Datetime            string  `gorm:"size:6;index" json:"date,omitempty"`
 	Token               string  `gorm:"size:16;index" json:"token,omitempty"`
-	ExchangeName        string  `gorm:"size:32;index" json:"exchange_name,omitempty"`
-	Pair                string  `gorm:"size:16" json:"pair,omitempty"`
+	ExchangeName        string  `gorm:"size:32;index:idx_exchange_pair" json:"exchange_name,omitempty"`
+	Pair                string  `gorm:"size:16;index:idx_exchange_pair" json:"pair,omitempty"`
 	Reputation          float64 `json:"reputation,omitempty"`
 	Price               float64 `json:"price,omitempty"`
 	Volume              float64 `json:"volume,omitempty"`

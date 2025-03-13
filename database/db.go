@@ -507,8 +507,7 @@ func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 		Select("price").
 		Where("datetime like ? and exchange_name = ? and pair = ?",
 			date.Format("02")+"%", "Binance", "TRX/USDT").
-		Order("datetime").
-		Limit(1).
+		Order("datetime").Limit(1).
 		Find(&earliestPrice)
 
 	return earliestPrice
@@ -530,8 +529,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		db.db.Table(todayDBName).
 			Select("datetime").
 			Where("datetime like ? and token = ? and percent > 0", today.Format("02")+"%", token).
-			Order("datetime").
-			Limit(1).
+			Order("datetime").Limit(1).
 			Find(&earliestDatetime)
 
 		// Then query the volume statistics
@@ -717,9 +715,11 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 
 	var todayStat models.TokenListingStatistic
 	db.db.Table(queryDateDBName).
-		Where("datetime = ? and token = ?", date.Format("02")+"0010", token).
+		Where("datetime like ? and token = ?", date.Format("02")+"%", strings.ToUpper(token)).
+		Order("datetime").Limit(1).
 		Find(&todayStat)
 
+	todayStat.Datetime = date.Format("2006-01-02")
 	return &todayStat
 }
 

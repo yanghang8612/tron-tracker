@@ -164,7 +164,7 @@ type Coin struct {
 func GetTokenListings() (string, []*models.TokenListingStatistic, error) {
 	resp, err := client.R().
 		SetHeader("X-CMC_PRO_API_KEY", config.CMCApiKey).
-		Get("https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limt=1000")
+		Get("https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limit=1000")
 	if err != nil {
 		return "", nil, err
 	}

@@ -111,11 +111,6 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
-	dbErr = db.Table("market_pair_statistics_2501").AutoMigrate(&models.MarketPairStatistic{})
-	if dbErr != nil {
-		panic(dbErr)
-	}
-
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
 

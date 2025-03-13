@@ -498,15 +498,20 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
 
-func (db *RawDB) GetTokenPriceByDate(date time.Time, token string) float64 {
+func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 	queryDateDBName := "market_pair_statistics_" + date.Format("0601")
 
-	var stats models.MarketPairStatistic
+	// Query the earliest Binance-TRX/USDT price of the day
+	var earliestPrice float64
 	db.db.Table(queryDateDBName).
-		Where("datetime = ? and token = ?", date.Format("02")+"0010", token).
-		Find(&stats)
+		Select("price").
+		Where("datetime like ? and exchange_name = ? and pair = ?",
+			date.Format("02")+"%", "Binance", "TRX/USDT").
+		Order("datetime").
+		Limit(1).
+		Find(&earliestPrice)
 
-	return stats.Price
+	return earliestPrice
 }
 
 func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string, queryDepth bool) map[string]*models.MarketPairStatistic {

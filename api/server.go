@@ -728,7 +728,7 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		result := make([]ResEntity, 0)
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
-			trxPrice := s.db.GetTokenPriceByDate(queryDate.AddDate(0, 0, 1), "tron")
+			trxPrice := s.db.GetTRXPriceByDate(queryDate.AddDate(0, 0, 1))
 			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
 			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 
@@ -751,7 +751,7 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		result := strings.Builder{}
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
-			trxPrice := s.db.GetTokenPriceByDate(queryDate.AddDate(0, 0, 1), "tron")
+			trxPrice := s.db.GetTRXPriceByDate(queryDate.AddDate(0, 0, 1))
 			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
 			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
 

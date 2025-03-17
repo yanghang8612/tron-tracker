@@ -992,35 +992,29 @@ func (db *RawDB) DoMarketPairStatistics() {
 	statsDBName := "market_pair_statistics_" + time.Now().Format("0601")
 	db.createTableIfNotExist(statsDBName, models.MarketPairStatistic{})
 
-	tronOriginData, tronMarketPairs, err := net.GetMarketPairs("tron")
-	if err != nil {
-		db.logger.Errorf("Get tron market pairs error: [%s]", err.Error())
-		return
-	}
+	tokens := []string{"tron", "steem", "wink", "just"}
 
-	db.saveMarketPairOriginData("tron", tronOriginData)
-	res := db.db.Table(statsDBName).Create(tronMarketPairs)
-	if res.Error != nil {
-		db.logger.Warn("Save tron market pairs error: [%s]", res.Error.Error())
-	} else {
-		db.logger.Infof("Save tron market pairs success, affected rows: %d", res.RowsAffected)
-	}
-
-	steemOriginData, steemMarketPairs, err := net.GetMarketPairs("steem")
-	if err != nil {
-		db.logger.Errorf("Get steem market pairs error: [%s]", err.Error())
-		return
-	}
-
-	db.saveMarketPairOriginData("steem", steemOriginData)
-	res = db.db.Table(statsDBName).Create(steemMarketPairs)
-	if res.Error != nil {
-		db.logger.Warn("Save steem market pairs error: [%s]", res.Error.Error())
-	} else {
-		db.logger.Infof("Save steem market pairs success, affected rows: %d", res.RowsAffected)
+	for _, token := range tokens {
+		db.doMarketPairStatistics(statsDBName, token)
 	}
 
 	db.logger.Infof("Finish doing market pair statistics")
+}
+
+func (db *RawDB) doMarketPairStatistics(dbName, token string) {
+	originData, marketPairs, err := net.GetMarketPairs(token)
+	if err != nil {
+		db.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
+		return
+	}
+
+	db.saveMarketPairOriginData(token, originData)
+	res := db.db.Table(dbName).Create(marketPairs)
+	if res.Error != nil {
+		db.logger.Warn("Save %s market pairs error: [%s]", token, res.Error.Error())
+	} else {
+		db.logger.Infof("Save %s market pairs success, affected rows: %d", token, res.RowsAffected)
+	}
 }
 
 func (db *RawDB) DoTokenListingStatistics() {

@@ -256,7 +256,7 @@ type ExchangeStatistic struct {
 	Token               string       `gorm:"index;" json:"token,omitempty"`
 	TotalFee            int64        `json:"total_fee"`
 	ChargeTxCount       int64        `json:"charge_tx_count"`
-	ChargeAmount        types.BigInt `json:"charge_amount"`
+	ChargeAmount        types.BigInt `json:"charge_amount,omitempty"`
 	ChargeFee           int64        `json:"charge_fee"`
 	ChargeNetFee        int64        `json:"charge_net_fee"`
 	ChargeNetUsage      int64        `json:"charge_net_usage"`
@@ -264,7 +264,7 @@ type ExchangeStatistic struct {
 	ChargeEnergyFee     int64        `json:"charge_energy_fee"`
 	ChargeEnergyUsage   int64        `json:"charge_energy_usage"`
 	CollectTxCount      int64        `json:"collect_tx_count"`
-	CollectAmount       types.BigInt `json:"collect_amount"`
+	CollectAmount       types.BigInt `json:"collect_amount,omitempty"`
 	CollectFee          int64        `json:"collect_fee"`
 	CollectNetFee       int64        `json:"collect_net_fee"`
 	CollectNetUsage     int64        `json:"collect_net_usage"`
@@ -272,7 +272,7 @@ type ExchangeStatistic struct {
 	CollectEnergyFee    int64        `json:"collect_energy_fee"`
 	CollectEnergyUsage  int64        `json:"collect_energy_usage"`
 	WithdrawTxCount     int64        `json:"withdraw_tx_count"`
-	WithdrawAmount      types.BigInt `json:"withdraw_amount"`
+	WithdrawAmount      types.BigInt `json:"withdraw_amount,omitempty"`
 	WithdrawFee         int64        `json:"withdraw_fee"`
 	WithdrawNetFee      int64        `json:"withdraw_net_fee"`
 	WithdrawNetUsage    int64        `json:"withdraw_net_usage"`
@@ -370,6 +370,12 @@ func (o *ExchangeStatistic) AddWithdrawFromTx(tx *Transaction) {
 	o.WithdrawEnergyTotal += tx.EnergyTotal
 	o.WithdrawEnergyFee += tx.EnergyFee
 	o.WithdrawEnergyUsage += tx.EnergyUsage
+}
+
+func (o *ExchangeStatistic) ClearAmountFields() {
+	o.ChargeAmount = types.NewBigInt(nil)
+	o.CollectAmount = types.NewBigInt(nil)
+	o.WithdrawAmount = types.NewBigInt(nil)
 }
 
 type FungibleTokenStatistic struct {

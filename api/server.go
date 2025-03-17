@@ -145,6 +145,10 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 				es.Name = "Bybit"
 			}
 
+			if strings.Contains(strings.ToUpper(es.Name), "OKX") {
+				es.Name = "Okex"
+			}
+
 			if _, ok := resultMap[es.Name]; !ok {
 				resultMap[es.Name] = models.NewExchangeStatistic(dateRangeStr, es.Name, "")
 			}
@@ -154,6 +158,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 
 	resultArray := make([]*models.ExchangeStatistic, 0)
 	for _, es := range resultMap {
+		es.ClearAmountFields()
 		resultArray = append(resultArray, es)
 	}
 	sort.Slice(resultArray, func(i, j int) bool {

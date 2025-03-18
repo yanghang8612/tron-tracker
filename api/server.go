@@ -86,7 +86,7 @@ func (s *Server) Start() {
 	s.router.GET("/usdt_statistics", s.usdtStatistics)
 	s.router.GET("/usdt_storage_statistics", s.usdtStorageStatistics)
 	s.router.GET("/user_statistics", s.userStatistics)
-	s.router.GET("/user_token_statistics", s.userStatistics)
+	s.router.GET("/user_token_statistics", s.userTokenStatistics)
 	s.router.GET("/top_users", s.topUsers)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)

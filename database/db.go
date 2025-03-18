@@ -992,10 +992,11 @@ func (db *RawDB) DoMarketPairStatistics() {
 	statsDBName := "market_pair_statistics_" + time.Now().Format("0601")
 	db.createTableIfNotExist(statsDBName, models.MarketPairStatistic{})
 
-	tokens := []string{"tron", "steem", "wink", "just"}
+	tokens := []string{"tron", "steem", "wink", "just", "bittorrent-new", "apenft", "sun-token"}
 
 	for _, token := range tokens {
 		db.doMarketPairStatistics(statsDBName, token)
+		time.Sleep(time.Second * 1)
 	}
 
 	db.logger.Infof("Finish doing market pair statistics")
@@ -1011,7 +1012,7 @@ func (db *RawDB) doMarketPairStatistics(dbName, token string) {
 	db.saveMarketPairOriginData(token, originData)
 	res := db.db.Table(dbName).Create(marketPairs)
 	if res.Error != nil {
-		db.logger.Warn("Save %s market pairs error: [%s]", token, res.Error.Error())
+		db.logger.Warnf("Save %s market pairs error: [%s]", token, res.Error.Error())
 	} else {
 		db.logger.Infof("Save %s market pairs success, affected rows: %d", token, res.RowsAffected)
 	}
@@ -1032,9 +1033,9 @@ func (db *RawDB) DoTokenListingStatistics() {
 	db.saveTokenListingOriginData(originData)
 	res := db.db.Table(statsDBName).Create(tokenListings)
 	if res.Error != nil {
-		db.logger.Warn("Save token listings error: [%s]", res.Error)
+		db.logger.Warnf("Save token listings error: [%s]", res.Error)
 	} else {
-		db.logger.Info("Save token listings success, affected rows: %d", res.RowsAffected)
+		db.logger.Infof("Save token listings success, affected rows: %d", res.RowsAffected)
 	}
 
 	db.logger.Infof("Finish doing token listing statistics")

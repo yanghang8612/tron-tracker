@@ -395,8 +395,8 @@ func (s *Server) totalStatistics(c *gin.Context) {
 	withComment := c.DefaultQuery("comment", "false")
 	if withComment == "false" {
 		c.JSON(200, gin.H{
-			"total_statistic":    currentTotalStatistic,
-			"phishing_statistic": currentPhishingStatistic,
+			"total_statistic": currentTotalStatistic,
+			// "phishing_statistic": currentPhishingStatistic,
 		})
 		return
 	}
@@ -427,9 +427,9 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		humanize.Comma(currentTotalStatistic.SmallUSDTTotal-lastTotalStatistic.SmallUSDTTotal)))
 
 	c.JSON(200, gin.H{
-		"total_statistic":    currentTotalStatistic,
-		"phishing_statistic": currentPhishingStatistic,
-		"comment":            comment.String(),
+		"total_statistic": currentTotalStatistic,
+		// "phishing_statistic": currentPhishingStatistic,
+		"comment": comment.String(),
 	})
 }
 

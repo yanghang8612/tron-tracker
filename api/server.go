@@ -86,6 +86,7 @@ func (s *Server) Start() {
 	s.router.GET("/usdt_statistics", s.usdtStatistics)
 	s.router.GET("/usdt_storage_statistics", s.usdtStorageStatistics)
 	s.router.GET("/user_statistics", s.userStatistics)
+	s.router.GET("/user_token_statistics", s.userStatistics)
 	s.router.GET("/top_users", s.topUsers)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
@@ -1001,6 +1002,38 @@ func (s *Server) userStatistics(c *gin.Context) {
 	}
 
 	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(date, user, days))
+}
+
+func (s *Server) userTokenStatistics(c *gin.Context) {
+	date, ok := getDateParam(c, "start_date")
+	if !ok {
+		return
+	}
+
+	days, ok := getIntParam(c, "days", 1)
+	if !ok {
+		return
+	}
+
+	user, ok := c.GetQuery("user")
+	if !ok {
+		c.JSON(500, gin.H{
+			"code":  500,
+			"error": "user must be provided",
+		})
+		return
+	}
+
+	token, ok := c.GetQuery("token")
+	if !ok {
+		c.JSON(500, gin.H{
+			"code":  500,
+			"error": "token must be provided",
+		})
+		return
+	}
+
+	c.JSON(200, s.db.GetUserTokenStatisticsByDateAndDaysAndUserAndToken(date, days, user, token))
 }
 
 func (s *Server) topUsers(c *gin.Context) {

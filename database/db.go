@@ -416,6 +416,28 @@ func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndToken(date time.Time, day
 	return resultMap
 }
 
+func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndUserAndToken(date time.Time, days int, user, token string) map[string]*models.UserTokenStatistic {
+	resultMap := make(map[string]*models.UserTokenStatistic)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStats []*models.UserTokenStatistic
+		db.db.Table("user_token_stats_"+queryDate).Where("user = ? and token = ?", user, token).Find(&dayStats)
+
+		for _, dayStat := range dayStats {
+			if _, ok := resultMap[dayStat.User]; !ok {
+				dayStat.Token = ""
+				resultMap[dayStat.User] = dayStat
+			} else {
+				resultMap[dayStat.User].Merge(dayStat)
+			}
+		}
+	}
+
+	return resultMap
+}
+
 func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []*models.ExchangeStatistic {
 	return db.GetExchangeStatisticsByDateAndToken(date.Format("060102"), "_")
 }

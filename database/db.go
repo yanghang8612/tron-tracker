@@ -875,21 +875,40 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		db.chargersLock.Unlock()
 
 		db.chargersToSave[from] = db.chargers[from]
-	} else if ok && !charger.IsFake {
-		if db.el.Contains(to) {
-			// Charger interact with other exchange address, so it is a fake charger
-			if db.el.Get(to).Name != charger.ExchangeName {
-				charger.IsFake = true
-				db.chargersToSave[from] = charger
-			}
-		} else {
-			// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
-			if len(charger.BackupAddress) == 0 {
-				charger.BackupAddress = to
-				db.chargersToSave[from] = charger
-			} else if to != charger.BackupAddress {
-				charger.IsFake = true
-				db.chargersToSave[from] = charger
+	} else if ok {
+		// Special fix for Okex fake chargers
+		if charger.IsFake && len(charger.BackupAddress) == 0 && charger.ExchangeName == "Okex" {
+			db.logger.Infof("Fix Okex fake charger - [%s]", from)
+			charger.IsFake = false
+			db.chargersToSave[from] = charger
+		}
+
+		// Adapt to exchange name trim rule changes
+		if len(charger.BackupAddress) == 0 && db.el.Contains(to) &&
+			charger.ExchangeName != db.el.Get(to).Name &&
+			utils.TrimExchangeName(charger.ExchangeName) == db.el.Get(to).Name {
+			db.logger.Infof("Exchange name of charger [%s] changed from [%s] to [%s]", from, charger.ExchangeName, db.el.Get(to).Name)
+			charger.ExchangeName = db.el.Get(to).Name
+			charger.IsFake = false
+			db.chargersToSave[from] = charger
+		}
+
+		if !charger.IsFake {
+			if db.el.Contains(to) {
+				// Charger interact with other exchange address, so it is a fake charger
+				if db.el.Get(to).Name != charger.ExchangeName {
+					charger.IsFake = true
+					db.chargersToSave[from] = charger
+				}
+			} else {
+				// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
+				if len(charger.BackupAddress) == 0 {
+					charger.BackupAddress = to
+					db.chargersToSave[from] = charger
+				} else if to != charger.BackupAddress {
+					charger.IsFake = true
+					db.chargersToSave[from] = charger
+				}
 			}
 		}
 	}

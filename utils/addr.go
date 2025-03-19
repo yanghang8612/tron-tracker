@@ -17,10 +17,15 @@ func EncodeToBase58(addrInHex string) string {
 }
 
 func TrimExchangeName(name string) string {
-	if strings.Contains(name, "Bitpie") {
+	if strings.Contains(name, "Bitpie") || strings.Contains(name, "bitpie") {
 		return "Bitpie"
 	}
-	return regexp.MustCompile(`-hot|-Hot|\s+\d+$`).ReplaceAllString(name, ``)
+	if strings.Contains(name, "OKX") || strings.Contains(name, "okx") {
+		return "Okex"
+	}
+	return regexp.
+		MustCompile(` Exchange| Deposit| hot wallet| Hot Wallet| Wallet| Exchange Hot Wallet|-hot|-Hot|-cold|-Cold| Cold|\s+\d+$`).
+		ReplaceAllString(name, ``)
 }
 
 func IsSameExchange(name1 string, name2 string) bool {

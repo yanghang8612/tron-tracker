@@ -598,15 +598,18 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 	}
 
 	days -= emptyDays
-	totalVolume /= float64(days)
-	for _, stat := range resultMap {
-		stat.Datetime = ""
-		stat.Token = ""
-		stat.Volume /= float64(days)
-		stat.Percent = stat.Volume / totalVolume
-		stat.DepthUsdPositiveTwo /= float64(days)
-		stat.DepthUsdNegativeTwo /= float64(days)
+	if days != 0 {
+		totalVolume /= float64(days)
+		for _, stat := range resultMap {
+			stat.Datetime = ""
+			stat.Token = ""
+			stat.Volume /= float64(days)
+			stat.Percent = stat.Volume / totalVolume
+			stat.DepthUsdPositiveTwo /= float64(days)
+			stat.DepthUsdNegativeTwo /= float64(days)
+		}
 	}
+
 	resultMap["Total"] = &models.MarketPairStatistic{
 		ExchangeName: "Total",
 		Volume:       totalVolume,

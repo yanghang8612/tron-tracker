@@ -71,6 +71,7 @@ func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig)
 func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
+	s.router.GET("/exchange_statistics_now", s.exchangesStatisticNow)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
 	s.router.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
 	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
@@ -172,6 +173,41 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 		"total_energy_usage":        totalEnergyUsage,
 		"exchanges_total_statistic": resultArray,
 	})
+}
+
+func (s *Server) exchangesStatisticNow(c *gin.Context) {
+	date, ok := getDateParam(c, "date")
+	if !ok {
+		return
+	}
+
+	batchSize, ok := getIntParam(c, "batch_size", 100)
+	if !ok {
+		return
+	}
+
+	exchangeStats := make(map[string]*models.ExchangeStatistic)
+	s.db.TraverseTransactions(date.Format("060102"), batchSize, func(tx *models.Transaction) {
+		if charger, ok := s.db.GetChargers()[tx.ToAddr]; ok && !charger.IsFake {
+			if _, ok := exchangeStats[charger.ExchangeName]; !ok {
+				exchangeStats[charger.ExchangeName] =
+					models.NewExchangeStatistic("", charger.ExchangeName, "")
+			}
+			exchangeStats[charger.ExchangeName].ChargeTxCount += 1
+			exchangeStats[charger.ExchangeName].ChargeFee += tx.Fee
+		}
+	})
+
+	resultArray := make([]*models.ExchangeStatistic, 0)
+	for _, es := range exchangeStats {
+		resultArray = append(resultArray, es)
+	}
+
+	sort.Slice(resultArray, func(i, j int) bool {
+		return resultArray[i].ChargeFee > resultArray[j].ChargeFee
+	})
+
+	c.JSON(200, resultArray)
 }
 
 type ExchangeTokenStatisticInResult struct {

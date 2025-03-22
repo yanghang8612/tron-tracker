@@ -263,6 +263,24 @@ func (db *RawDB) GetTokenName(addr string) string {
 	return db.vt[addr]
 }
 
+func (db *RawDB) GetChargers() map[string]*models.Charger {
+	return db.chargers
+}
+
+func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
+	start := time.Now()
+
+	results := make([]*models.Transaction, 0)
+	result := db.db.Table("transactions_"+date).FindInBatches(&results, batchSize, func(_ *gorm.DB, _ int) error {
+		for _, tx := range results {
+			handler(tx)
+		}
+		return nil
+	})
+
+	db.logger.Infof("Traversing [%d] results, time: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
+}
+
 func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days int, contract string, result int) []*models.Transaction {
 	var results []*models.Transaction
 

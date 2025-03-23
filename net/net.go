@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 	"tron-tracker/database/models"
 	"tron-tracker/types"
-	"tron-tracker/utils"
 )
 
 type Config struct {
@@ -69,26 +68,26 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	return txInfoList, err
 }
 
-func GetExchanges() *types.ExchangeList {
-	var exchangeList = types.ExchangeList{}
+func GetExchanges() *models.Exchanges {
+	var exchanges = models.Exchanges{}
 	resp, err := client.R().Get("https://apilist.tronscanapi.com/api/hot/exchanges")
 	if err != nil {
 		zap.S().Error(err)
 	} else {
-		err = json.Unmarshal(resp.Body(), &exchangeList)
+		err = json.Unmarshal(resp.Body(), &exchanges)
 		if err != nil {
 			zap.S().Error(err)
 		}
 	}
 
-	for i := range exchangeList.Exchanges {
-		exchangeList.Exchanges[i].Name = utils.TrimExchangeName(exchangeList.Exchanges[i].Name)
+	for i := range exchanges.Val {
+		// exchangeList.Exchanges[i].Name = utils.TrimExchangeName(exchangeList.Exchanges[i].Name)
 
-		if exchangeList.Exchanges[i].Name == "BtcTurk" {
-			exchangeList.Exchanges[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
+		if exchanges.Val[i].Name == "BtcTurk" {
+			exchanges.Val[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
 		}
 	}
-	return &exchangeList
+	return &exchanges
 }
 
 type MarketPairsResponse struct {

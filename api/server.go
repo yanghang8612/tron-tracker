@@ -44,6 +44,8 @@ type Server struct {
 	serverConfig *ServerConfig
 	defiConfig   *DeFiConfig
 
+	isRepairing bool
+
 	logger *zap.SugaredLogger
 }
 
@@ -69,7 +71,7 @@ func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig)
 }
 
 func (s *Server) Start() {
-	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
+	s.router.GET("/repair_exchange_statistics", s.repairExchangesStatistic)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
 	s.router.GET("/exchange_statistics_now", s.exchangesStatisticNow)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
@@ -102,6 +104,10 @@ func (s *Server) Start() {
 
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
+	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
+	s.router.GET("/system/get_exchange", s.getExchange)
+	s.router.GET("/system/add_exchange", s.addExchange)
+
 	s.router.Static("/usdt_transfer_statistics", "/data/usdt")
 
 	go func() {
@@ -120,11 +126,28 @@ func (s *Server) Stop() {
 	}
 }
 
-func (s *Server) lastTrackedBlockNumber(c *gin.Context) {
-	c.JSON(200, gin.H{
-		"last_tracked_block_number": s.db.GetLastTrackedBlockNum(),
-		"last_tracked_block_time":   time.Unix(s.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"),
-	})
+func (s *Server) repairExchangesStatistic(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c)
+	if !ok {
+		return
+	}
+
+	if s.isRepairing {
+		c.JSON(200, "already repairing")
+		return
+	}
+
+	s.isRepairing = true
+	go func() {
+		for i := 0; i < days; i++ {
+			queryDate := startDate.AddDate(0, 0, i)
+			s.db.DoExchangeStatistics(queryDate.Format("060102"))
+		}
+
+		s.isRepairing = false
+	}()
+
+	c.JSON(200, "repairing started")
 }
 
 func (s *Server) exchangesStatistic(c *gin.Context) {
@@ -1649,6 +1672,37 @@ func (s *Server) txAnalyze(c *gin.Context) {
 	c.JSON(200, transactions)
 }
 
+func (s *Server) lastTrackedBlockNumber(c *gin.Context) {
+	c.JSON(200, gin.H{
+		"last_tracked_block_number": s.db.GetLastTrackedBlockNum(),
+		"last_tracked_block_time":   time.Unix(s.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"),
+	})
+}
+
+func (s *Server) getExchange(c *gin.Context) {
+	exchanges := s.db.GetExchanges()
+
+	c.JSON(200, exchanges)
+}
+
+func (s *Server) addExchange(c *gin.Context) {
+	addr, ok := mustGetParam(c, "addr")
+	if !ok {
+		return
+	}
+
+	name, ok := mustGetParam(c, "name")
+	if !ok {
+		return
+	}
+
+	s.db.AddOrOverrideExchange(addr, name)
+	c.JSON(200, gin.H{
+		"code":  200,
+		"error": "success",
+	})
+}
+
 func prepareStartDateAndDays(c *gin.Context) (time.Time, int, bool) {
 	startDate, ok := getDateParam(c, "start_date")
 	if !ok {
@@ -1696,6 +1750,28 @@ func getIntParam(c *gin.Context, name string, defaultValue int) (int, bool) {
 		})
 
 		return 0, false
+	}
+
+	return param, true
+}
+
+func getStringParam(c *gin.Context, name string, defaultValue string) string {
+	param, ok := c.GetQuery(name)
+	if !ok {
+		return defaultValue
+	}
+
+	return param
+}
+
+func mustGetParam(c *gin.Context, name string) (string, bool) {
+	param, ok := c.GetQuery(name)
+	if !ok {
+		c.JSON(200, gin.H{
+			"code":  400,
+			"error": name + " must be provided",
+		})
+		return "", false
 	}
 
 	return param, true

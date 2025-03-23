@@ -49,10 +49,10 @@ func newCache() *dbCache {
 }
 
 type RawDB struct {
-	db          *gorm.DB
-	el          *types.ExchangeList
-	elUpdatedAt time.Time
-	vt          map[string]string
+	db                 *gorm.DB
+	exchanges          map[string]*models.Exchange
+	exchangesUpdatedAt time.Time
+	validTokens        map[string]string
 
 	lastTrackedBlockNum  uint
 	lastTrackedBlockTime int64
@@ -136,9 +136,8 @@ func New(config *Config) *RawDB {
 
 	rawDB := &RawDB{
 		db:          db,
-		el:          net.GetExchanges(),
-		elUpdatedAt: time.Now(),
-		vt:          validTokens,
+		exchanges:   make(map[string]*models.Exchange),
+		validTokens: validTokens,
 
 		lastTrackedBlockNum: uint(trackingStartBlockNum - 1),
 		isTableMigrated:     make(map[string]bool),
@@ -155,6 +154,7 @@ func New(config *Config) *RawDB {
 		logger: zap.S().Named("[db]"),
 	}
 
+	rawDB.updateExchanges()
 	rawDB.loadChargers()
 	rawDB.refreshChargers()
 
@@ -237,7 +237,7 @@ func (db *RawDB) refreshChargers() {
 	var chargeToSave []*models.Charger
 	count := 0
 	for _, charger := range db.chargers {
-		if db.el.Contains(charger.Address) {
+		if db.IsExchange(charger.Address) {
 			db.db.Delete(charger)
 			delete(db.chargers, charger.Address)
 		} else if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
@@ -268,6 +268,80 @@ func (db *RawDB) refreshChargers() {
 	db.logger.Info("Complete refreshing chargers")
 }
 
+func (db *RawDB) loadExchanges() {
+	if db.db.Migrator().HasTable(&models.Exchange{}) {
+		exchanges := make([]*models.Exchange, 0)
+
+		db.logger.Info("Start loading exchanges from db")
+		result := db.db.Find(&exchanges)
+		db.logger.Infof("Loaded [%d] exchanges from db", result.RowsAffected)
+
+		db.logger.Info("Start building exchanges map")
+		for _, exchange := range exchanges {
+			db.exchanges[exchange.Address] = exchange
+		}
+		db.logger.Info("Complete building exchanges map")
+
+		return
+	}
+
+	dbErr := db.db.AutoMigrate(&models.Exchange{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	exchanges := net.GetExchanges()
+	for _, exchange := range exchanges.Val {
+		exchange.Name = utils.TrimExchangeName(exchange.OriginName)
+		db.db.Create(&exchange)
+		db.exchanges[exchange.Address] = exchange
+	}
+}
+
+func (db *RawDB) updateExchanges() {
+	if time.Now().Sub(db.exchangesUpdatedAt) < 1*time.Hour {
+		return
+	}
+
+	exchanges := net.GetExchanges()
+	for _, newExchange := range exchanges.Val {
+		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
+			if oldExchange.OriginName != newExchange.OriginName {
+				if utils.TrimExchangeName(oldExchange.OriginName) != utils.TrimExchangeName(newExchange.OriginName) {
+					db.logger.Warnf("Exchange origin name mismatch: [%s] - [%s -> %s]",
+						oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
+					continue
+				}
+				db.logger.Infof("Exchange origin name updated: [%s] - [%s -> %s]",
+					oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
+				db.db.Model(&oldExchange).Update("origin_name", newExchange.OriginName)
+			}
+		} else {
+			newExchange.Name = utils.TrimExchangeName(newExchange.OriginName)
+			db.db.Create(&newExchange)
+			db.exchanges[newExchange.Address] = newExchange
+			db.logger.Infof("New exchange added: [%s - %s] - [%s]",
+				newExchange.Address, newExchange.OriginName, newExchange.Name)
+		}
+	}
+
+	for addr, oldExchange := range db.exchanges {
+		found := false
+		for _, newExchange := range exchanges.Val {
+			if addr == newExchange.Address {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			db.logger.Warnf("Exchange removed: [%s - %s]", oldExchange.Address, oldExchange.OriginName)
+		}
+	}
+
+	db.exchangesUpdatedAt = time.Now()
+}
+
 func (db *RawDB) Start() {
 	db.loopWG.Add(2)
 	go db.cacheFlushLoop()
@@ -289,11 +363,35 @@ func (db *RawDB) Report() {
 }
 
 func (db *RawDB) IsExchange(addr string) bool {
-	return db.el.Contains(addr)
+	_, ok := db.exchanges[addr]
+	return ok
 }
 
-func (db *RawDB) GetExchange(addr string) types.Exchange {
-	return db.el.Get(addr)
+func (db *RawDB) GetExchange(addr string) *models.Exchange {
+	return db.exchanges[addr]
+}
+
+func (db *RawDB) GetExchanges() map[string]*models.Exchange {
+	return db.exchanges
+}
+
+func (db *RawDB) AddOrOverrideExchange(addr, name string) {
+	if exchange, ok := db.exchanges[addr]; ok {
+		db.logger.Infof("Updated exchange name: [%s] - [%s -> %s]", addr, exchange.Name, name)
+
+		exchange.Name = name
+		db.db.Save(exchange)
+	} else {
+		db.logger.Infof("Added exchange: [%s - %s]", addr, name)
+
+		exchangeToSave := &models.Exchange{
+			Address:    addr,
+			Name:       name,
+			OriginName: name,
+		}
+		db.db.Create(exchangeToSave)
+		db.exchanges[addr] = exchangeToSave
+	}
 }
 
 func (db *RawDB) GetLastTrackedBlockNum() uint {
@@ -305,7 +403,7 @@ func (db *RawDB) GetLastTrackedBlockTime() int64 {
 }
 
 func (db *RawDB) GetTokenName(addr string) string {
-	return db.vt[addr]
+	return db.validTokens[addr]
 }
 
 func (db *RawDB) GetChargers() map[string]*models.Charger {
@@ -857,29 +955,6 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
 }
 
-func (db *RawDB) updateExchanges() {
-	if time.Now().Sub(db.elUpdatedAt) < 1*time.Hour {
-		return
-	}
-
-	for i := 0; i < 3; i++ {
-		el := net.GetExchanges()
-		if len(el.Exchanges) == 0 {
-			db.logger.Infof("No exchange found, retry %d times", i+1)
-		} else {
-			if len(db.el.Exchanges) == len(el.Exchanges) {
-				db.logger.Info("Update exchange list successfully, exchange list is not changed")
-			} else {
-				db.logger.Infof("Update exchange list successfully, exchange list size [%d] => [%d]", len(db.el.Exchanges), len(el.Exchanges))
-			}
-
-			db.el = el
-			db.elUpdatedAt = time.Now()
-			break
-		}
-	}
-}
-
 func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 	if transactions == nil || len(transactions) == 0 {
 		return
@@ -938,15 +1013,15 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 
 func (db *RawDB) SaveCharger(from, to, token string) {
 	// Filter invalid token charger
-	if _, ok := db.vt[token]; !ok {
+	if _, ok := db.validTokens[token]; !ok {
 		return
 	}
 
-	if charger, ok := db.chargers[from]; !ok && !db.el.Contains(from) && db.el.Contains(to) {
+	if charger, ok := db.chargers[from]; !ok && !db.IsExchange(from) && db.IsExchange(to) {
 		db.chargersLock.Lock()
 		db.chargers[from] = &models.Charger{
 			Address:      from,
-			ExchangeName: db.el.Get(to).Name,
+			ExchangeName: db.GetExchange(to).Name,
 		}
 		db.chargersLock.Unlock()
 
@@ -960,19 +1035,20 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		}
 
 		// Adapt to exchange name trim rule changes
-		if len(charger.BackupAddress) == 0 && db.el.Contains(to) &&
-			charger.ExchangeName != db.el.Get(to).Name &&
-			utils.TrimExchangeName(charger.ExchangeName) == db.el.Get(to).Name {
-			db.logger.Infof("Exchange name of charger [%s] changed from [%s] to [%s]", from, charger.ExchangeName, db.el.Get(to).Name)
-			charger.ExchangeName = db.el.Get(to).Name
+		if len(charger.BackupAddress) == 0 && db.IsExchange(to) &&
+			charger.ExchangeName != db.GetExchange(to).Name &&
+			utils.TrimExchangeName(charger.ExchangeName) == db.GetExchange(to).Name {
+			db.logger.Infof("Exchange name of charger [%s] changed from [%s] to [%s]",
+				from, charger.ExchangeName, db.GetExchange(to).Name)
+			charger.ExchangeName = db.GetExchange(to).Name
 			charger.IsFake = false
 			db.chargersToSave[from] = charger
 		}
 
 		if !charger.IsFake {
-			if db.el.Contains(to) {
+			if db.IsExchange(to) {
 				// Charger interact with other exchange address, so it is a fake charger
-				if db.el.Get(to).Name != charger.ExchangeName {
+				if db.GetExchange(to).Name != charger.ExchangeName {
 					charger.IsFake = true
 					db.chargersToSave[from] = charger
 				}
@@ -1057,7 +1133,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 					continue
 				}
 
-				if db.el.Contains(user) {
+				if db.IsExchange(user) {
 					withdrawFee += result.Fee
 					withdrawEnergy += result.EnergyTotal
 				} else if _, ok := db.isCharger(user); ok {
@@ -1163,7 +1239,7 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 
 	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
 	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
-		if _, ok := db.vt[tx.Name]; !ok ||
+		if _, ok := db.validTokens[tx.Name]; !ok ||
 			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 ||
 			tx.Amount.Length() < 6 {
 			return
@@ -1171,16 +1247,16 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 
 		from := tx.FromAddr
 		to := tx.ToAddr
-		token := db.vt[tx.Name]
+		token := db.validTokens[tx.Name]
 
-		if db.el.Contains(from) {
-			exchange := db.el.Get(from).Name
+		if db.IsExchange(from) {
+			exchange := db.GetExchange(from).Name
 			setExchangeStatsMap(exchangeStats, date, exchange, token)
 			exchangeStats[exchange]["_"].AddWithdraw(tx)
 			exchangeStats[exchange][token].AddWithdraw(tx)
 
-		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.el.Contains(to) {
-			exchange := db.el.Get(to).Name
+		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+			exchange := db.GetExchange(to).Name
 			setExchangeStatsMap(exchangeStats, date, exchange, token)
 			exchangeStats[exchange]["_"].AddCollect(tx)
 			exchangeStats[exchange][token].AddCollect(tx)
@@ -1345,8 +1421,8 @@ func (db *RawDB) countForDate(date string) {
 				from := result.FromAddr
 				to := result.ToAddr
 
-				if charger, ok := db.isCharger(to); ok && db.el.Contains(from) {
-					exchange := db.el.Get(from)
+				if charger, ok := db.isCharger(to); ok && db.IsExchange(from) {
+					exchange := db.GetExchange(from)
 					if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
 						ExchangeSpecialStats[exchange.Name] =
 							models.NewExchangeStatistic(date, charger.ExchangeName, "Special")

@@ -154,7 +154,7 @@ func New(config *Config) *RawDB {
 		logger: zap.S().Named("[db]"),
 	}
 
-	rawDB.updateExchanges()
+	rawDB.loadExchanges()
 	rawDB.loadChargers()
 	rawDB.refreshChargers()
 
@@ -234,25 +234,35 @@ func (db *RawDB) refreshChargers() {
 
 	db.logger.Info("Start refreshing chargers")
 
-	var chargeToSave []*models.Charger
+	chargeToSave := make(map[string]*models.Charger)
 	count := 0
 	for _, charger := range db.chargers {
-		if db.IsExchange(charger.Address) {
-			db.db.Delete(charger)
-			delete(db.chargers, charger.Address)
-		} else if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
+		if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
 			charger.ExchangeName = utils.TrimExchangeName(charger.ExchangeName)
 
 			if charger.IsFake && len(charger.BackupAddress) == 0 {
 				charger.IsFake = false
 			}
 
-			chargeToSave = append(chargeToSave, charger)
+			chargeToSave[charger.Address] = charger
+		}
+
+		// Sometimes, backup address can become to an exchange address
+		if len(charger.BackupAddress) == 34 && db.IsExchange(charger.BackupAddress) {
+			if charger.ExchangeName != db.GetExchange(charger.BackupAddress).Name {
+				if !charger.IsFake {
+					charger.IsFake = true
+					chargeToSave[charger.Address] = charger
+				}
+			} else {
+				charger.BackupAddress = ""
+				chargeToSave[charger.Address] = charger
+			}
 		}
 
 		if len(chargeToSave) == 200 {
 			db.db.Save(&chargeToSave)
-			chargeToSave = make([]*models.Charger, 0)
+			chargeToSave = make(map[string]*models.Charger)
 		}
 
 		count++
@@ -307,8 +317,8 @@ func (db *RawDB) updateExchanges() {
 	for _, newExchange := range exchanges.Val {
 		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
 			if oldExchange.OriginName != newExchange.OriginName {
-				if utils.TrimExchangeName(oldExchange.OriginName) != utils.TrimExchangeName(newExchange.OriginName) {
-					db.logger.Warnf("Exchange origin name mismatch: [%s] - [%s -> %s]",
+				if !utils.IsSameExchange(oldExchange.OriginName, newExchange.OriginName) {
+					db.logger.Warnf("Exchange origin name mismatch: [%s] - [%s & %s]",
 						oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
 					continue
 				}
@@ -1017,7 +1027,12 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		return
 	}
 
-	if charger, ok := db.chargers[from]; !ok && !db.IsExchange(from) && db.IsExchange(to) {
+	// Filter exchange address
+	if db.IsExchange(from) {
+		return
+	}
+
+	if charger, ok := db.chargers[from]; !ok && db.IsExchange(to) {
 		db.chargersLock.Lock()
 		db.chargers[from] = &models.Charger{
 			Address:      from,
@@ -1026,41 +1041,23 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		db.chargersLock.Unlock()
 
 		db.chargersToSave[from] = db.chargers[from]
-	} else if ok {
-		// Special fix for Okex fake chargers
-		if charger.IsFake && len(charger.BackupAddress) == 0 && charger.ExchangeName == "Okex" {
-			db.logger.Infof("Fix Okex fake charger - [%s]", from)
-			charger.IsFake = false
-			db.chargersToSave[from] = charger
-		}
-
-		// Adapt to exchange name trim rule changes
-		if len(charger.BackupAddress) == 0 && db.IsExchange(to) &&
-			charger.ExchangeName != db.GetExchange(to).Name &&
-			utils.TrimExchangeName(charger.ExchangeName) == db.GetExchange(to).Name {
-			db.logger.Infof("Exchange name of charger [%s] changed from [%s] to [%s]",
-				from, charger.ExchangeName, db.GetExchange(to).Name)
-			charger.ExchangeName = db.GetExchange(to).Name
-			charger.IsFake = false
-			db.chargersToSave[from] = charger
-		}
-
-		if !charger.IsFake {
-			if db.IsExchange(to) {
-				// Charger interact with other exchange address, so it is a fake charger
-				if db.GetExchange(to).Name != charger.ExchangeName {
-					charger.IsFake = true
-					db.chargersToSave[from] = charger
-				}
-			} else {
-				// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
-				if len(charger.BackupAddress) == 0 {
-					charger.BackupAddress = to
-					db.chargersToSave[from] = charger
-				} else if to != charger.BackupAddress {
-					charger.IsFake = true
-					db.chargersToSave[from] = charger
-				}
+	} else if ok && !charger.IsFake {
+		if db.IsExchange(to) {
+			// Charger interact with other exchange address, so it is a fake charger
+			if db.GetExchange(to).Name != charger.ExchangeName {
+				// Here we save the other exchange address into backup address
+				charger.BackupAddress = db.GetExchange(to).Name
+				charger.IsFake = true
+				db.chargersToSave[from] = charger
+			}
+		} else {
+			// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
+			if len(charger.BackupAddress) == 0 {
+				charger.BackupAddress = to
+				db.chargersToSave[from] = charger
+			} else if to != charger.BackupAddress {
+				charger.IsFake = true
+				db.chargersToSave[from] = charger
 			}
 		}
 	}
@@ -1643,6 +1640,9 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 	// Start doing exchange statistics
 	db.DoExchangeStatistics(cache.date)
+
+	// Refresh chargers
+	db.refreshChargers()
 
 	db.logger.Infof("Complete flushing cache to DB for date [%s]", cache.date)
 }

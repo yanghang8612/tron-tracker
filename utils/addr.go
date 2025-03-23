@@ -27,3 +27,7 @@ func TrimExchangeName(name string) string {
 	}
 	return trimRules.ReplaceAllString(name, ``)
 }
+
+func IsSameExchange(name1, name2 string) bool {
+	return TrimExchangeName(name1) == TrimExchangeName(name2)
+}

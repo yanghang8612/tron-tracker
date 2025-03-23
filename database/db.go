@@ -288,6 +288,11 @@ func (db *RawDB) refreshChargers() {
 
 func (db *RawDB) loadExchanges() {
 	if db.db.Migrator().HasTable(&models.Exchange{}) {
+		dbErr := db.db.AutoMigrate(&models.Exchange{})
+		if dbErr != nil {
+			panic(dbErr)
+		}
+
 		exchanges := make([]*models.Exchange, 0)
 
 		db.logger.Info("Start loading exchanges from db")

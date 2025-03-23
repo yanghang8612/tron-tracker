@@ -191,7 +191,7 @@ func (s *Server) exchangesStatisticNow(c *gin.Context) {
 	s.db.TraverseTransactions(date.Format("060102"), batchSize, func(tx *models.Transaction) {
 		if len(s.db.GetTokenName(tx.Name)) == 0 ||
 			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 ||
-			tx.Amount.Length() > 5 {
+			tx.Amount.Length() < 6 {
 			return
 		}
 

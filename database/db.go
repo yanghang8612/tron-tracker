@@ -1177,7 +1177,7 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
 		if _, ok := db.vt[tx.Name]; !ok ||
 			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 ||
-			tx.Amount.Length() > 5 {
+			tx.Amount.Length() < 6 {
 			return
 		}
 

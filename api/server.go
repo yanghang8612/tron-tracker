@@ -105,7 +105,7 @@ func (s *Server) Start() {
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
-	s.router.GET("/system/get_exchange", s.getExchange)
+	s.router.GET("/system/exchanges", s.getExchange)
 	s.router.GET("/system/add_exchange", s.addExchange)
 
 	s.router.Static("/usdt_transfer_statistics", "/data/usdt")

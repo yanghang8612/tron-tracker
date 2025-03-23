@@ -234,7 +234,7 @@ func (db *RawDB) refreshChargers() {
 
 	db.logger.Info("Start refreshing chargers")
 
-	chargeToSave := make(map[string]*models.Charger)
+	chargersToSave := make(map[string]*models.Charger)
 	count := 0
 	for _, charger := range db.chargers {
 		if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
@@ -244,7 +244,7 @@ func (db *RawDB) refreshChargers() {
 				charger.IsFake = false
 			}
 
-			chargeToSave[charger.Address] = charger
+			chargersToSave[charger.Address] = charger
 		}
 
 		// Sometimes, backup address can become to an exchange address
@@ -252,17 +252,21 @@ func (db *RawDB) refreshChargers() {
 			if charger.ExchangeName != db.GetExchange(charger.BackupAddress).Name {
 				if !charger.IsFake {
 					charger.IsFake = true
-					chargeToSave[charger.Address] = charger
+					chargersToSave[charger.Address] = charger
 				}
 			} else {
 				charger.BackupAddress = ""
-				chargeToSave[charger.Address] = charger
+				chargersToSave[charger.Address] = charger
 			}
 		}
 
-		if len(chargeToSave) == 200 {
-			db.db.Save(&chargeToSave)
-			chargeToSave = make(map[string]*models.Charger)
+		if len(chargersToSave) == 200 {
+			chargers := make([]*models.Charger, 0)
+			for _, chargerToSave := range chargersToSave {
+				chargers = append(chargers, chargerToSave)
+			}
+			db.db.Save(chargers)
+			chargersToSave = make(map[string]*models.Charger)
 		}
 
 		count++
@@ -271,8 +275,12 @@ func (db *RawDB) refreshChargers() {
 		}
 	}
 
-	if len(chargeToSave) != 0 {
-		db.db.Save(&chargeToSave)
+	if len(chargersToSave) != 0 {
+		chargers := make([]*models.Charger, 0)
+		for _, chargerToSave := range chargersToSave {
+			chargers = append(chargers, chargerToSave)
+		}
+		db.db.Save(chargers)
 	}
 
 	db.logger.Info("Complete refreshing chargers")
@@ -344,7 +352,7 @@ func (db *RawDB) updateExchanges() {
 			}
 		}
 
-		if !found {
+		if !found && !oldExchange.FromAsuka {
 			db.logger.Warnf("Exchange removed: [%s - %s]", oldExchange.Address, oldExchange.OriginName)
 		}
 	}
@@ -392,12 +400,13 @@ func (db *RawDB) AddOrOverrideExchange(addr, name string) {
 		exchange.Name = name
 		db.db.Save(exchange)
 	} else {
-		db.logger.Infof("Added exchange: [%s - %s]", addr, name)
+		db.logger.Infof("Added exchange from asuka: [%s - %s]", addr, name)
 
 		exchangeToSave := &models.Exchange{
 			Address:    addr,
 			Name:       name,
 			OriginName: name,
+			FromAsuka:  true,
 		}
 		db.db.Create(exchangeToSave)
 		db.exchanges[addr] = exchangeToSave

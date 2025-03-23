@@ -5,6 +5,7 @@ type Exchange struct {
 	Address    string `gorm:"size:34;index" json:"address"`
 	Name       string
 	OriginName string `json:"name"`
+	FromAsuka  bool   `json:"-"`
 }
 
 type Exchanges struct {

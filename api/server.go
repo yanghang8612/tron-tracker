@@ -143,6 +143,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
 
+			// TODO: Remove this when all exchanges are normalized
 			if es.Name == "bybit" {
 				es.Name = "Bybit"
 			}
@@ -188,13 +189,45 @@ func (s *Server) exchangesStatisticNow(c *gin.Context) {
 
 	exchangeStats := make(map[string]*models.ExchangeStatistic)
 	s.db.TraverseTransactions(date.Format("060102"), batchSize, func(tx *models.Transaction) {
-		if charger, ok := s.db.GetChargers()[tx.ToAddr]; ok && !charger.IsFake {
-			if _, ok := exchangeStats[charger.ExchangeName]; !ok {
-				exchangeStats[charger.ExchangeName] =
-					models.NewExchangeStatistic("", charger.ExchangeName, "")
+		if len(s.db.GetTokenName(tx.Name)) == 0 || len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
+			return
+		}
+
+		from := tx.FromAddr
+		to := tx.ToAddr
+
+		if s.db.IsExchange(from) {
+			exchange := s.db.GetExchange(from).Name
+
+			if _, ok := exchangeStats[exchange]; !ok {
+				exchangeStats[exchange] =
+					models.NewExchangeStatistic("", exchange, "")
 			}
-			exchangeStats[charger.ExchangeName].ChargeTxCount += 1
-			exchangeStats[charger.ExchangeName].ChargeFee += tx.Fee
+			exchangeStats[exchange].TotalFee += tx.Fee
+			exchangeStats[exchange].WithdrawFee += tx.Fee
+			exchangeStats[exchange].WithdrawTxCount += 1
+
+		} else if _, fromIsCharger := s.db.GetChargers()[from]; fromIsCharger && s.db.IsExchange(to) {
+			exchange := s.db.GetExchange(to).Name
+
+			if _, ok := exchangeStats[exchange]; !ok {
+				exchangeStats[exchange] =
+					models.NewExchangeStatistic("", exchange, "")
+			}
+			exchangeStats[exchange].TotalFee += tx.Fee
+			exchangeStats[exchange].CollectFee += tx.Fee
+			exchangeStats[exchange].CollectTxCount += 1
+
+		} else if charger, toIsCharger := s.db.GetChargers()[to]; toIsCharger {
+			exchange := charger.ExchangeName
+
+			if _, ok := exchangeStats[exchange]; !ok {
+				exchangeStats[exchange] =
+					models.NewExchangeStatistic("", exchange, "")
+			}
+			exchangeStats[exchange].TotalFee += tx.Fee
+			exchangeStats[exchange].ChargeTxCount += 1
+			exchangeStats[exchange].ChargeFee += tx.Fee
 		}
 	})
 
@@ -204,7 +237,7 @@ func (s *Server) exchangesStatisticNow(c *gin.Context) {
 	}
 
 	sort.Slice(resultArray, func(i, j int) bool {
-		return resultArray[i].ChargeFee > resultArray[j].ChargeFee
+		return resultArray[i].TotalFee > resultArray[j].TotalFee
 	})
 
 	c.JSON(200, resultArray)

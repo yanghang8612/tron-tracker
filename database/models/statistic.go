@@ -324,43 +324,31 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
 }
 
-func (o *ExchangeStatistic) AddCharge(stat *UserTokenStatistic) {
-	o.TotalFee += stat.ToFee
-	o.ChargeTxCount += stat.ToTXCount
-	o.ChargeAmount.Add(stat.ToAmount)
-	o.ChargeFee += stat.ToFee
-	o.ChargeNetFee += stat.ToNetFee
-	o.ChargeNetUsage += stat.ToNetUsage
-	o.ChargeEnergyTotal += stat.ToEnergyTotal
-	o.ChargeEnergyFee += stat.ToEnergyFee
-	o.ChargeEnergyUsage += stat.ToEnergyUsage
+func (o *ExchangeStatistic) AddCharge(tx *Transaction) {
+	o.TotalFee += tx.Fee
+	o.ChargeTxCount += 1
+	o.ChargeAmount.Add(tx.Amount)
+	o.ChargeFee += tx.Fee
+	o.ChargeNetFee += tx.NetFee
+	o.ChargeNetUsage += tx.NetUsage
+	o.ChargeEnergyTotal += tx.EnergyTotal
+	o.ChargeEnergyFee += tx.EnergyFee
+	o.ChargeEnergyUsage += tx.EnergyUsage + tx.EnergyOriginUsage
 }
 
-func (o *ExchangeStatistic) AddCollect(stat *UserTokenStatistic) {
-	o.TotalFee += stat.ToFee
-	o.CollectTxCount += stat.ToTXCount
-	o.CollectAmount.Add(stat.ToAmount)
-	o.CollectFee += stat.ToFee
-	o.CollectNetFee += stat.ToNetFee
-	o.CollectNetUsage += stat.ToNetUsage
-	o.CollectEnergyTotal += stat.ToEnergyTotal
-	o.CollectEnergyFee += stat.ToEnergyFee
-	o.CollectEnergyUsage += stat.ToEnergyUsage
+func (o *ExchangeStatistic) AddCollect(tx *Transaction) {
+	o.TotalFee += tx.Fee
+	o.CollectTxCount++
+	o.CollectAmount.Add(tx.Amount)
+	o.CollectFee += tx.Fee
+	o.CollectNetFee += tx.NetFee
+	o.CollectNetUsage += tx.NetUsage
+	o.CollectEnergyTotal += tx.EnergyTotal
+	o.CollectEnergyFee += tx.EnergyFee
+	o.CollectEnergyUsage += tx.EnergyUsage
 }
 
-func (o *ExchangeStatistic) AddWithdraw(stat *UserTokenStatistic) {
-	o.TotalFee += stat.FromFee
-	o.WithdrawTxCount += stat.FromTXCount
-	o.WithdrawAmount.Add(stat.FromAmount)
-	o.WithdrawFee += stat.FromFee
-	o.WithdrawNetFee += stat.FromNetFee
-	o.WithdrawNetUsage += stat.FromNetUsage
-	o.WithdrawEnergyTotal += stat.FromEnergyTotal
-	o.WithdrawEnergyFee += stat.FromEnergyFee
-	o.WithdrawEnergyUsage += stat.FromEnergyUsage
-}
-
-func (o *ExchangeStatistic) AddWithdrawFromTx(tx *Transaction) {
+func (o *ExchangeStatistic) AddWithdraw(tx *Transaction) {
 	o.TotalFee += tx.Fee
 	o.WithdrawTxCount++
 	o.WithdrawAmount.Add(tx.Amount)

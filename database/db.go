@@ -156,6 +156,7 @@ func New(config *Config) *RawDB {
 	}
 
 	rawDB.loadChargers()
+	rawDB.refreshChargers()
 
 	return rawDB
 }
@@ -227,6 +228,58 @@ func (db *RawDB) loadChargers() {
 	}
 }
 
+func (db *RawDB) refreshChargers() {
+	db.chargersLock.Lock()
+	defer db.chargersLock.Unlock()
+
+	db.logger.Info("Start refreshing chargers")
+
+	var chargeToSave []*models.Charger
+	count := 0
+	for _, charger := range db.chargers {
+		if db.el.Contains(charger.Address) {
+			db.db.Delete(charger)
+			delete(db.chargers, charger.Address)
+		} else if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
+			charger.ExchangeName = utils.TrimExchangeName(charger.ExchangeName)
+
+			if charger.IsFake && len(charger.BackupAddress) == 0 {
+				charger.IsFake = false
+			}
+
+			chargeToSave = append(chargeToSave, charger)
+		} else if charger.ExchangeName == "bybit" || charger.ExchangeName == "bitget" {
+			if charger.ExchangeName == "bybit" {
+				charger.ExchangeName = "Bybit"
+			} else {
+				charger.ExchangeName = "Bitget"
+			}
+
+			if charger.IsFake && len(charger.BackupAddress) == 0 {
+				charger.IsFake = false
+			}
+
+			chargeToSave = append(chargeToSave, charger)
+		}
+
+		if len(chargeToSave) == 200 {
+			db.db.Save(&chargeToSave)
+			chargeToSave = make([]*models.Charger, 0)
+		}
+
+		count++
+		if count%1_000_000 == 0 {
+			db.logger.Infof("Refreshed [%d] chargers", count)
+		}
+	}
+
+	if len(chargeToSave) != 0 {
+		db.db.Save(&chargeToSave)
+	}
+
+	db.logger.Info("Complete refreshing chargers")
+}
+
 func (db *RawDB) Start() {
 	db.loopWG.Add(2)
 	go db.cacheFlushLoop()
@@ -251,6 +304,10 @@ func (db *RawDB) IsExchange(addr string) bool {
 	return db.el.Contains(addr)
 }
 
+func (db *RawDB) GetExchange(addr string) types.Exchange {
+	return db.el.Get(addr)
+}
+
 func (db *RawDB) GetLastTrackedBlockNum() uint {
 	return db.lastTrackedBlockNum
 }
@@ -268,17 +325,27 @@ func (db *RawDB) GetChargers() map[string]*models.Charger {
 }
 
 func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
-	start := time.Now()
+	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 
-	results := make([]*models.Transaction, 0)
+	var (
+		start   = time.Now()
+		results = make([]*models.Transaction, 0)
+		count   = 0
+	)
+
 	result := db.db.Table("transactions_"+date).FindInBatches(&results, batchSize, func(_ *gorm.DB, _ int) error {
 		for _, tx := range results {
 			handler(tx)
+
+			count++
+			if count%1_000_000 == 0 {
+				db.logger.Infof("Traversed [%s] transactions", humanize.Comma(int64(count)))
+			}
 		}
 		return nil
 	})
 
-	db.logger.Infof("Traversing [%d] results, time: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
+	db.logger.Infof("Traversed [%d] results, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
 func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days int, contract string, result int) []*models.Transaction {
@@ -1103,6 +1170,59 @@ func (db *RawDB) DoTokenListingStatistics() {
 	db.logger.Infof("Finish doing token listing statistics")
 }
 
+func (db *RawDB) DoExchangeStatistics(date string) {
+	db.logger.Infof("Start doing exchange statistics for date [%s]", date)
+
+	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
+	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
+		if _, ok := db.vt[tx.Name]; !ok || len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
+			return
+		}
+
+		from := tx.FromAddr
+		to := tx.ToAddr
+		token := db.vt[tx.Name]
+
+		if db.el.Contains(from) {
+			exchange := db.el.Get(from).Name
+			setExchangeStatsMap(exchangeStats, date, exchange, token)
+			exchangeStats[exchange]["_"].AddWithdraw(tx)
+			exchangeStats[exchange][token].AddWithdraw(tx)
+
+		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.el.Contains(to) {
+			exchange := db.el.Get(to).Name
+			setExchangeStatsMap(exchangeStats, date, exchange, token)
+			exchangeStats[exchange]["_"].AddCollect(tx)
+			exchangeStats[exchange][token].AddCollect(tx)
+
+		} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+			setExchangeStatsMap(exchangeStats, date, charger.ExchangeName, token)
+			exchangeStats[charger.ExchangeName]["_"].AddCharge(tx)
+			exchangeStats[charger.ExchangeName][token].AddCharge(tx)
+		}
+	})
+
+	db.db.Delete(&models.ExchangeStatistic{}, "date = ?", date)
+	for _, stats := range exchangeStats {
+		for _, stat := range stats {
+			db.db.Create(stat)
+		}
+	}
+}
+
+func setExchangeStatsMap(stats map[string]map[string]*models.ExchangeStatistic, date, exchange, token string) {
+	if _, ok := stats[exchange]; !ok {
+		stats[exchange] = make(map[string]*models.ExchangeStatistic)
+		stats[exchange]["_"] =
+			models.NewExchangeStatistic(date, exchange, "_")
+	}
+
+	if _, ok := stats[exchange][token]; !ok {
+		stats[exchange][token] =
+			models.NewExchangeStatistic(date, exchange, token)
+	}
+}
+
 func (db *RawDB) isCharger(address string) (*models.Charger, bool) {
 	db.chargersLock.RLock()
 	defer db.chargersLock.RUnlock()
@@ -1241,7 +1361,7 @@ func (db *RawDB) countForDate(date string) {
 						ExchangeSpecialStats[exchange.Name] =
 							models.NewExchangeStatistic(date, charger.ExchangeName, "Special")
 
-						ExchangeSpecialStats[exchange.Name].AddWithdrawFromTx(result)
+						ExchangeSpecialStats[exchange.Name].AddWithdraw(result)
 					}
 				}
 
@@ -1357,7 +1477,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 
 	db.logger.Infof("Start flushing cache to DB for date [%s]", cache.date)
 
-	// Flush user from statistics
+	// Start flushing user from statistics
 	db.logger.Info("Start flushing from_stats")
 
 	fromStatsDBName := "from_stats_" + cache.date
@@ -1378,9 +1498,10 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	}
 	db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
 
+	// End of flushing user from statistics
 	db.logger.Info(reporter.Finish("Flushing from_stats"))
 
-	// Flush user to statistics
+	// Start flushing user to statistics
 	db.logger.Info("Start flushing to_stats")
 
 	toStatsDBName := "to_stats_" + cache.date
@@ -1401,9 +1522,10 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	}
 	db.db.Table(toStatsDBName).Create(&toStatsToPersist)
 
+	// End of flushing user to statistics
 	db.logger.Info(reporter.Finish("Flushing to_stats"))
 
-	// Flush token statistics
+	// Start flushing token statistics
 	db.logger.Info("Start flushing token_stats")
 
 	tokenStatsDBName := "token_stats_" + cache.date
@@ -1424,9 +1546,10 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	}
 	db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
 
+	// End of flushing token statistics
 	db.logger.Info(reporter.Finish("Flushing token_stats"))
 
-	// Flush user token statistics
+	// Start flushing user token statistics
 	db.logger.Info("Start flushing user_token_stats")
 
 	userTokenStatsDBName := "user_token_stats_" + cache.date
@@ -1435,58 +1558,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	reporter = utils.NewReporter(0, 60*time.Second, len(cache.userTokenStats), makeReporterFunc("user_token_stats"))
 
 	userTokenStatsToPersist := make([]*models.UserTokenStatistic, 0)
-	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
 	for _, stats := range cache.userTokenStats {
-		// First, do exchange statistics
-		if _, ok := db.vt[stats.Token]; ok {
-			if db.el.Contains(stats.User) {
-				exchange := db.el.Get(stats.User)
-
-				if _, ok := exchangeStats[exchange.Name]; !ok {
-					exchangeStats[exchange.Name] = make(map[string]*models.ExchangeStatistic)
-					exchangeStats[exchange.Name]["_"] =
-						models.NewExchangeStatistic(cache.date, exchange.Name, "_")
-				}
-
-				exchangeStats[exchange.Name]["_"].AddCollect(stats)
-				exchangeStats[exchange.Name]["_"].AddWithdraw(stats)
-
-				if _, ok := exchangeStats[exchange.Name][stats.Token]; !ok {
-					exchangeStats[exchange.Name][stats.Token] =
-						models.NewExchangeStatistic(cache.date, exchange.Name, stats.Token)
-				}
-
-				exchangeStats[exchange.Name][stats.Token].AddCollect(stats)
-				exchangeStats[exchange.Name][stats.Token].AddWithdraw(stats)
-			} else {
-				charger, isCharger := db.isCharger(stats.User)
-
-				if isCharger {
-					if db.el.Contains(charger.Address) {
-						charger.IsFake = true
-						db.db.Save(charger)
-						continue
-					}
-
-					if _, ok := exchangeStats[charger.ExchangeName]; !ok {
-						exchangeStats[charger.ExchangeName] = make(map[string]*models.ExchangeStatistic)
-						exchangeStats[charger.ExchangeName]["_"] =
-							models.NewExchangeStatistic(cache.date, charger.ExchangeName, "_")
-					}
-
-					exchangeStats[charger.ExchangeName]["_"].AddCharge(stats)
-
-					if _, ok := exchangeStats[charger.ExchangeName][stats.Token]; !ok {
-						exchangeStats[charger.ExchangeName][stats.Token] =
-							models.NewExchangeStatistic(cache.date, charger.ExchangeName, stats.Token)
-					}
-
-					exchangeStats[charger.ExchangeName][stats.Token].AddCharge(stats)
-				}
-			}
-		}
-
-		// Second, save it to db
 		userTokenStatsToPersist = append(userTokenStatsToPersist, stats)
 		if len(userTokenStatsToPersist) == 200 {
 			db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
@@ -1500,18 +1572,11 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	}
 	db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
 
+	// End of flushing user token statistics
 	db.logger.Info(reporter.Finish("Flushing user_token_stats"))
 
-	db.logger.Info("Start saving exchange statistic")
-
-	// Flush exchange statistics
-	for _, tokenStats := range exchangeStats {
-		for _, stats := range tokenStats {
-			db.db.Create(stats)
-		}
-	}
-
-	db.logger.Info("Complete saving exchange statistic")
+	// Start doing exchange statistics
+	db.DoExchangeStatistics(cache.date)
 
 	db.logger.Infof("Complete flushing cache to DB for date [%s]", cache.date)
 }

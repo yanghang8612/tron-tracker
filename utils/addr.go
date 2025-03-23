@@ -24,7 +24,7 @@ func TrimExchangeName(name string) string {
 		return "Okex"
 	}
 	return regexp.
-		MustCompile(` Exchange| Deposit| hot wallet| Hot Wallet| Wallet| Exchange Hot Wallet|-hot|-Hot|-cold|-Cold| Cold|\s+\d+$`).
+		MustCompile(` Reserves| Exchange| Deposit| hot wallet| Hot Wallet| Wallet| Exchange Hot Wallet|-hot|-Hot|-cold|-Cold| Cold|\s+\d+$`).
 		ReplaceAllString(name, ``)
 }
 

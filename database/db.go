@@ -248,18 +248,6 @@ func (db *RawDB) refreshChargers() {
 			}
 
 			chargeToSave = append(chargeToSave, charger)
-		} else if charger.ExchangeName == "bybit" || charger.ExchangeName == "bitget" {
-			if charger.ExchangeName == "bybit" {
-				charger.ExchangeName = "Bybit"
-			} else {
-				charger.ExchangeName = "Bitget"
-			}
-
-			if charger.IsFake && len(charger.BackupAddress) == 0 {
-				charger.IsFake = false
-			}
-
-			chargeToSave = append(chargeToSave, charger)
 		}
 
 		if len(chargeToSave) == 200 {

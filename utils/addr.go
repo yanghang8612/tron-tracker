@@ -16,6 +16,8 @@ func EncodeToBase58(addrInHex string) string {
 	return base58.CheckEncode(addressBytes, 0x41)
 }
 
+var trimRules = regexp.MustCompile(` Global| Reserves| Exchange| Deposit| hot wallet| Hot Wallet| Wallet| Exchange Hot Wallet|-hot|-Hot|-cold|-Cold| Cold|\s+\d+$`)
+
 func TrimExchangeName(name string) string {
 	if strings.Contains(name, "Bitpie") || strings.Contains(name, "bitpie") {
 		return "Bitpie"
@@ -23,9 +25,7 @@ func TrimExchangeName(name string) string {
 	if strings.Contains(name, "OKX") || strings.Contains(name, "okx") {
 		return "Okex"
 	}
-	return regexp.
-		MustCompile(` Global| Reserves| Exchange| Deposit| hot wallet| Hot Wallet| Wallet| Exchange Hot Wallet|-hot|-Hot|-cold|-Cold| Cold|\s+\d+$`).
-		ReplaceAllString(name, ``)
+	return trimRules.ReplaceAllString(name, ``)
 }
 
 func IsSameExchange(name1 string, name2 string) bool {

@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -366,7 +367,8 @@ func (db *RawDB) updateExchanges() {
 }
 
 func (db *RawDB) Start() {
-	db.loopWG.Add(2)
+	db.loopWG.Add(3)
+	go db.marketPairDepthStatisticsLoop()
 	go db.cacheFlushLoop()
 	go db.countLoop()
 }
@@ -773,11 +775,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 			var depthStats []*models.MarketPairStatistic
 			db.db.Table(lastDayDBName).
-				Select("exchange_name", "pair",
-					"AVG(depth_usd_positive_two) as depth_usd_positive_two",
-					"AVG(depth_usd_negative_two) as depth_usd_negative_two").
-				Where("datetime like ? and token = ? and percent > 0", lastDay.Format("02")+"%", token).
-				Group("exchange_name, pair").
+				Where("datetime = ? and token = ?", lastDay.Format("060102"), token).
 				Find(&depthStats)
 
 			for _, depthStat := range depthStats {
@@ -967,6 +965,7 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 		db.trackingDate = trackingDate
 	} else if db.trackingDate != trackingDate {
 		db.flushCh <- db.cache
+		db.statsCh <- db.cache.date
 
 		db.trackingDate = trackingDate
 		db.cache = newCache()
@@ -1349,6 +1348,73 @@ func (db *RawDB) saveTokenListingOriginData(data string) {
 	defer dataFile.Close()
 
 	dataFile.WriteString(data)
+}
+
+func (db *RawDB) marketPairDepthStatisticsLoop() {
+	isAllHistoryDone := false
+	for {
+		select {
+		case <-db.quitCh:
+			db.logger.Info("market pair depth statistics loop ended")
+			db.loopWG.Done()
+			return
+		case date := <-db.statsCh:
+			yesterday, _ := time.Parse("060102", date)
+			db.doMarketPairDepthStatistics(yesterday)
+		default:
+			if !isAllHistoryDone {
+				tables, err := db.db.Migrator().GetTables()
+				if err != nil {
+					db.logger.Warnf("Failed to get tables: %v", err)
+					isAllHistoryDone = true
+					continue
+				}
+
+				db.logger.Info("Start doing market pair depth statistics for history")
+				for _, table := range tables {
+					if strings.Contains(table, "market_pair_statistics_") {
+						month := strings.Split(table, "_")[3]
+						date, _ := time.Parse("0601", month)
+
+						for date.Format("0601") == month && date.Before(time.Now().Truncate(24*time.Hour)) {
+							db.doMarketPairDepthStatistics(date)
+							date = date.AddDate(0, 0, 1)
+						}
+					}
+				}
+
+				isAllHistoryDone = true
+				db.logger.Info("Finish doing market pair depth statistics for history")
+			}
+
+			time.Sleep(1 * time.Second)
+		}
+	}
+}
+
+func (db *RawDB) doMarketPairDepthStatistics(date time.Time) {
+	table := "market_pair_statistics_" + date.Format("0601")
+
+	stat := &models.MarketPairStatistic{}
+	res := db.db.Table(table).Where("datetime = ?", date.Format("060102")).First(stat)
+
+	if errors.Is(res.Error, gorm.ErrRecordNotFound) {
+		var depthStats []*models.MarketPairStatistic
+		db.db.Table(table).
+			Select("token", "exchange_name", "pair",
+				"AVG(depth_usd_positive_two) as depth_usd_positive_two",
+				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
+			Where("datetime like ? and percent > 0", date.Format("02")+"%").
+			Group("token, exchange_name, pair").
+			Find(&depthStats)
+
+		for _, depthStat := range depthStats {
+			depthStat.Datetime = date.Format("060102")
+			db.db.Create(depthStat)
+		}
+
+		db.logger.Infof("Finish market pair depth statistics for date [%s], affected rows: %d", date.Format("060102"), len(depthStats))
+	}
 }
 
 func (db *RawDB) cacheFlushLoop() {

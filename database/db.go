@@ -775,7 +775,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 			var depthStats []*models.MarketPairStatistic
 			db.db.Table(lastDayDBName).
-				Where("datetime = ? and token = ?", lastDay.Format("060102"), token).
+				Where("datetime = ? and token = ?", generateMarketPairDepthDailyKey(lastDay), token).
 				Find(&depthStats)
 
 			for _, depthStat := range depthStats {
@@ -1392,11 +1392,12 @@ func (db *RawDB) marketPairDepthStatisticsLoop() {
 	}
 }
 
-func (db *RawDB) doMarketPairDepthStatistics(date time.Time) {
-	table := "market_pair_statistics_" + date.Format("0601")
+func (db *RawDB) doMarketPairDepthStatistics(day time.Time) {
+	table := "market_pair_statistics_" + day.Format("0601")
 
 	stat := &models.MarketPairStatistic{}
-	res := db.db.Table(table).Where("datetime = ?", date.Format("060102")).First(stat)
+	dailyKey := generateMarketPairDepthDailyKey(day)
+	res := db.db.Table(table).Where("datetime = ?", dailyKey).First(stat)
 
 	if errors.Is(res.Error, gorm.ErrRecordNotFound) {
 		var depthStats []*models.MarketPairStatistic
@@ -1404,16 +1405,16 @@ func (db *RawDB) doMarketPairDepthStatistics(date time.Time) {
 			Select("token", "exchange_name", "pair",
 				"AVG(depth_usd_positive_two) as depth_usd_positive_two",
 				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
-			Where("datetime like ? and percent > 0", date.Format("02")+"%").
+			Where("datetime like ? and percent > 0", day.Format("02")+"%").
 			Group("token, exchange_name, pair").
 			Find(&depthStats)
 
 		for _, depthStat := range depthStats {
-			depthStat.Datetime = date.Format("060102")
+			depthStat.Datetime = dailyKey
 			db.db.Create(depthStat)
 		}
 
-		db.logger.Infof("Finish market pair depth statistics for date [%s], affected rows: %d", date.Format("060102"), len(depthStats))
+		db.logger.Infof("Finish market pair depth statistics for date [%s], affected rows: %d", day.Format("060102"), len(depthStats))
 	}
 }
 
@@ -1749,6 +1750,10 @@ func generateWeek(date string) string {
 	ts, _ := time.Parse("060102", date)
 	year, week := ts.ISOWeek()
 	return fmt.Sprintf("%d%2d", year, week)
+}
+
+func generateMarketPairDepthDailyKey(day time.Time) string {
+	return day.Format("02") + "2500"
 }
 
 func makeReporterFunc(name string) func(utils.ReporterState) string {

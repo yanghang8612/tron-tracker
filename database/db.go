@@ -1411,7 +1411,7 @@ func (db *RawDB) doMarketPairDepthStatistics(day time.Time) {
 
 		for _, depthStat := range depthStats {
 			depthStat.Datetime = dailyKey
-			db.db.Create(depthStat)
+			db.db.Table(table).Create(depthStat)
 		}
 
 		db.logger.Infof("Finish market pair depth statistics for date [%s], affected rows: %d", day.Format("060102"), len(depthStats))

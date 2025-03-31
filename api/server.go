@@ -1388,6 +1388,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	if _, ok = c.GetQuery("comment"); ok {
 		exchanges := make(map[string]bool)
+		exchanges["Total"] = true
 		exchangesParam := c.DefaultQuery("exchanges", "")
 		if exchangesParam != "" {
 			for _, exchange := range strings.Split(exchangesParam, ",") {
@@ -1398,7 +1399,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		result := strings.Builder{}
 		for _, stat := range statResults {
 			if exchanges[stat.ExchangeName] {
-				result.WriteString(fmt.Sprintf("%s: %s (%s) %s / %s %s (%s)\n",
+				result.WriteString(fmt.Sprintf("%s:\n%s (%s)\n%s / %s\n%s (%s)\n\n",
 					stat.ExchangeName, stat.Volume, stat.VolumeChange,
 					stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
 			}

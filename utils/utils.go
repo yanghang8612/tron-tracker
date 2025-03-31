@@ -3,16 +3,30 @@ package utils
 import "fmt"
 
 func FormatChangePercent(oldValue, newValue int64) string {
+	return FormatFloatChangePercent(float64(oldValue), float64(newValue))
+}
+
+func FormatFloatChangePercent(oldValue, newValue float64) string {
 	if oldValue == 0 {
 		return "∞%"
 	} else {
 		change := newValue - oldValue
-		changePercent := float64(change) / float64(oldValue) * 100.0
+		changePercent := change / oldValue * 100.0
 		if changePercent <= 0 {
 			return fmt.Sprintf("%.2f%%", changePercent)
 		} else {
 			return fmt.Sprintf("+%.2f%%", changePercent)
 		}
+	}
+}
+
+func FormatPercent(percent float64) string {
+	if percent == 0 {
+		return "0.00%"
+	} else if percent > 0 {
+		return fmt.Sprintf("+%.2f%%", percent)
+	} else {
+		return fmt.Sprintf("%.2f%%", percent)
 	}
 }
 

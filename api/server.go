@@ -1342,19 +1342,19 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 			ExchangeName:        curStat.ExchangeName,
 			Pair:                curStat.Pair,
 			Volume:              humanize.SIWithDigits(curStat.Volume, 2, ""),
-			Percent:             fmt.Sprintf("%.2f%%", curStat.Percent*100),
+			Percent:             utils.FormatPercent(curStat.Percent * 100),
 			DepthUsdPositiveTwo: humanize.SIWithDigits(curStat.DepthUsdPositiveTwo, 2, ""),
 			DepthUsdNegativeTwo: humanize.SIWithDigits(curStat.DepthUsdNegativeTwo, 2, ""),
 		}
 
 		if lastStat, ok := lastMarketPairStats[key]; ok {
 			jsonStat.VolumeChange = utils.FormatChangePercent(int64(lastStat.Volume), int64(curStat.Volume))
-			jsonStat.PercentChange = fmt.Sprintf("%.2f%%", (curStat.Percent-lastStat.Percent)*100)
+			jsonStat.PercentChange = utils.FormatPercent((curStat.Percent - lastStat.Percent) * 100)
 			jsonStat.DepthUsdPositiveTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdPositiveTwo), int64(curStat.DepthUsdPositiveTwo))
 			jsonStat.DepthUsdNegativeTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdNegativeTwo), int64(curStat.DepthUsdNegativeTwo))
 		} else {
 			jsonStat.VolumeChange = "+∞%"
-			jsonStat.PercentChange = fmt.Sprintf("%.2f%%", curStat.Percent*100)
+			jsonStat.PercentChange = utils.FormatPercent(curStat.Percent * 100)
 			jsonStat.DepthUsdPositiveTwoChange = "+∞%"
 			jsonStat.DepthUsdNegativeTwoChange = "+∞%"
 		}
@@ -1371,7 +1371,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 				Volume:              "0",
 				VolumeChange:        "-100%",
 				Percent:             "0%",
-				PercentChange:       fmt.Sprintf("%.2f%%", -lastStat.Percent*100),
+				PercentChange:       utils.FormatPercent(-lastStat.Percent * 100),
 				DepthUsdPositiveTwo: "-100%",
 				DepthUsdNegativeTwo: "-100%",
 			}
@@ -1476,9 +1476,22 @@ func (s *Server) tokenListingStatistic(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	stat := s.db.GetTokenListingStatistic(date, token)
+	curWeekStat := s.db.GetTokenListingStatistic(date, token)
+	lastWeekStat := s.db.GetTokenListingStatistic(date.AddDate(0, 0, -7), token)
 
-	c.JSON(200, stat)
+	type StatEntity struct {
+		models.TokenListingStatistic
+		PriceChange7Days  string `json:"price_change_7days"`
+		VolumeChange7Days string `json:"volume_change_7days"`
+	}
+
+	result := StatEntity{
+		TokenListingStatistic: *curWeekStat,
+		PriceChange7Days:      utils.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price),
+		VolumeChange7Days:     utils.FormatFloatChangePercent(lastWeekStat.Volume24H, curWeekStat.Volume24H),
+	}
+
+	c.JSON(200, result)
 }
 
 func (s *Server) volumePPTData(c *gin.Context) {
@@ -1721,7 +1734,7 @@ func getDateParam(c *gin.Context, name string) (time.Time, bool) {
 	dateStr, ok := c.GetQuery(name)
 	if !ok {
 		// If date is not present, use yesterday as default
-		return time.Now().AddDate(0, 0, -1), true
+		return time.Now().Truncate(24 * time.Hour), true
 	}
 
 	date, err := time.Parse("060102", dateStr)

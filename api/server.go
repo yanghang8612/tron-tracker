@@ -807,7 +807,8 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 func (s *Server) revenuePPTData(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c)
 	if !ok {
-		return
+		startDate = time.Now().AddDate(0, 0, -30)
+		days = 30
 	}
 
 	isJson := c.DefaultQuery("json", "false")
@@ -1307,7 +1308,8 @@ func (s *Server) forward(c *gin.Context) {
 func (s *Server) marketPairStatistics(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c)
 	if !ok {
-		return
+		startDate = time.Now().AddDate(0, 0, -7)
+		days = 7
 	}
 
 	token := c.DefaultQuery("token", "tron")
@@ -1335,7 +1337,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		DepthUsdNegativeTwoChange string  `json:"depth_usd_negative_two_change,omitempty"`
 	}
 
-	result := make([]*JsonStat, 0)
+	statResults := make([]*JsonStat, 0)
 	for key, curStat := range curMarketPairStats {
 		jsonStat := &JsonStat{
 			ID:                  curStat.Percent,
@@ -1359,7 +1361,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 			jsonStat.DepthUsdNegativeTwoChange = "+∞%"
 		}
 
-		result = append(result, jsonStat)
+		statResults = append(statResults, jsonStat)
 	}
 
 	for key, lastStat := range lastMarketPairStats {
@@ -1376,15 +1378,26 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 				DepthUsdNegativeTwo: "-100%",
 			}
 
-			result = append(result, jsonStat)
+			statResults = append(statResults, jsonStat)
 		}
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].ID > result[j].ID
+	sort.Slice(statResults, func(i, j int) bool {
+		return statResults[i].ID > statResults[j].ID
 	})
 
-	c.JSON(200, result)
+	if _, ok = c.GetQuery("comment"); ok {
+		result := strings.Builder{}
+		for _, stat := range statResults {
+			result.WriteString(fmt.Sprintf("%s: %s (%s) %s / %s %s (%s)\n",
+				stat.ExchangeName, stat.Volume, stat.VolumeChange,
+				stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
+		}
+
+		c.String(200, result.String())
+	} else {
+		c.JSON(200, statResults)
+	}
 }
 
 func (s *Server) dealWithGroupByTag(stats map[string]*models.MarketPairStatistic) map[string]*models.MarketPairStatistic {
@@ -1497,7 +1510,8 @@ func (s *Server) tokenListingStatistic(c *gin.Context) {
 func (s *Server) volumePPTData(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c)
 	if !ok {
-		return
+		startDate = time.Now().AddDate(0, 0, -30)
+		days = 30
 	}
 
 	token := c.DefaultQuery("token", "tron")

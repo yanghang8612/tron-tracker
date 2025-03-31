@@ -1344,19 +1344,19 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 			ExchangeName:        curStat.ExchangeName,
 			Pair:                curStat.Pair,
 			Volume:              humanize.SIWithDigits(curStat.Volume, 2, ""),
-			Percent:             utils.FormatPercent(curStat.Percent * 100),
+			Percent:             fmt.Sprintf("%.2f%%", curStat.Percent*100),
 			DepthUsdPositiveTwo: humanize.SIWithDigits(curStat.DepthUsdPositiveTwo, 2, ""),
 			DepthUsdNegativeTwo: humanize.SIWithDigits(curStat.DepthUsdNegativeTwo, 2, ""),
 		}
 
 		if lastStat, ok := lastMarketPairStats[key]; ok {
 			jsonStat.VolumeChange = utils.FormatChangePercent(int64(lastStat.Volume), int64(curStat.Volume))
-			jsonStat.PercentChange = utils.FormatPercent((curStat.Percent - lastStat.Percent) * 100)
+			jsonStat.PercentChange = utils.FormatPercentWithSign((curStat.Percent - lastStat.Percent) * 100)
 			jsonStat.DepthUsdPositiveTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdPositiveTwo), int64(curStat.DepthUsdPositiveTwo))
 			jsonStat.DepthUsdNegativeTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdNegativeTwo), int64(curStat.DepthUsdNegativeTwo))
 		} else {
 			jsonStat.VolumeChange = "+∞%"
-			jsonStat.PercentChange = utils.FormatPercent(curStat.Percent * 100)
+			jsonStat.PercentChange = utils.FormatPercentWithSign(curStat.Percent * 100)
 			jsonStat.DepthUsdPositiveTwoChange = "+∞%"
 			jsonStat.DepthUsdNegativeTwoChange = "+∞%"
 		}
@@ -1373,7 +1373,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 				Volume:              "0",
 				VolumeChange:        "-100%",
 				Percent:             "0%",
-				PercentChange:       utils.FormatPercent(-lastStat.Percent * 100),
+				PercentChange:       utils.FormatPercentWithSign(-lastStat.Percent * 100),
 				DepthUsdPositiveTwo: "-100%",
 				DepthUsdNegativeTwo: "-100%",
 			}
@@ -1387,11 +1387,21 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	})
 
 	if _, ok = c.GetQuery("comment"); ok {
+		exchanges := make(map[string]bool)
+		exchangesParam := c.DefaultQuery("exchanges", "")
+		if exchangesParam != "" {
+			for _, exchange := range strings.Split(exchangesParam, ",") {
+				exchanges[exchange] = true
+			}
+		}
+
 		result := strings.Builder{}
 		for _, stat := range statResults {
-			result.WriteString(fmt.Sprintf("%s: %s (%s) %s / %s %s (%s)\n",
-				stat.ExchangeName, stat.Volume, stat.VolumeChange,
-				stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
+			if exchanges[stat.ExchangeName] {
+				result.WriteString(fmt.Sprintf("%s: %s (%s) %s / %s %s (%s)\n",
+					stat.ExchangeName, stat.Volume, stat.VolumeChange,
+					stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
+			}
 		}
 
 		c.String(200, result.String())
@@ -1494,14 +1504,14 @@ func (s *Server) tokenListingStatistic(c *gin.Context) {
 
 	type StatEntity struct {
 		models.TokenListingStatistic
-		PriceChange7Days  string `json:"price_change_7days"`
-		VolumeChange7Days string `json:"volume_change_7days"`
+		PriceChange7Days     string `json:"price_change_7days"`
+		MarketCapChange7Days string `json:"market_cap_change_7days"`
 	}
 
 	result := StatEntity{
 		TokenListingStatistic: *curWeekStat,
 		PriceChange7Days:      utils.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price),
-		VolumeChange7Days:     utils.FormatFloatChangePercent(lastWeekStat.Volume24H, curWeekStat.Volume24H),
+		MarketCapChange7Days:  utils.FormatFloatChangePercent(lastWeekStat.MarketCap, curWeekStat.MarketCap),
 	}
 
 	c.JSON(200, result)

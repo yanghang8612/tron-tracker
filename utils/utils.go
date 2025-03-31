@@ -20,7 +20,7 @@ func FormatFloatChangePercent(oldValue, newValue float64) string {
 	}
 }
 
-func FormatPercent(percent float64) string {
+func FormatPercentWithSign(percent float64) string {
 	if percent == 0 {
 		return "0.00%"
 	} else if percent > 0 {

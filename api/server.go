@@ -127,7 +127,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) repairExchangesStatistic(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -151,7 +151,7 @@ func (s *Server) repairExchangesStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesStatistic(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -200,7 +200,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesStatisticNow(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "date", lastWeek())
 	if !ok {
 		return
 	}
@@ -277,7 +277,7 @@ type ExchangeTokenStatisticInResult struct {
 }
 
 func (s *Server) exchangesTokenStatistic(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -352,7 +352,7 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesTokenDailyStatistic(c *gin.Context) {
-	startDate, ok := getDateParam(c, "date")
+	startDate, ok := getDateParam(c, "date", yesterday())
 	if !ok {
 		return
 	}
@@ -377,7 +377,7 @@ func (s *Server) exchangesTokenDailyStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -449,7 +449,7 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 }
 
 func (s *Server) specialStatistic(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "date", yesterday())
 	if !ok {
 		return
 	}
@@ -469,7 +469,7 @@ func (s *Server) specialStatistic(c *gin.Context) {
 }
 
 func (s *Server) totalStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -529,7 +529,7 @@ func (s *Server) totalStatistics(c *gin.Context) {
 }
 
 func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
-	if date, ok := getDateParam(c, "date"); ok {
+	if date, ok := getDateParam(c, "date", lastWeek()); ok {
 		go func() {
 			s.db.DoTronLinkWeeklyStatistics(date, true)
 		}()
@@ -537,7 +537,7 @@ func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "date", lastWeek())
 	if !ok {
 		return
 	}
@@ -580,7 +580,7 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -630,7 +630,7 @@ func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]in
 }
 
 func (s *Server) tronWeeklyStatistics(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -680,7 +680,7 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 }
 
 func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -805,10 +805,9 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 }
 
 func (s *Server) revenuePPTData(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastMonth(), 30)
 	if !ok {
-		startDate = time.Now().AddDate(0, 0, -30)
-		days = 30
+		return
 	}
 
 	isJson := c.DefaultQuery("json", "false")
@@ -867,7 +866,7 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 }
 
 func (s *Server) trxStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -931,7 +930,7 @@ func (s *Server) trxStatistics(c *gin.Context) {
 }
 
 func (s *Server) usdtStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1000,7 +999,7 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 }
 
 func (s *Server) usdtStorageStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1077,12 +1076,7 @@ func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
 }
 
 func (s *Server) userStatistics(c *gin.Context) {
-	date, ok := getDateParam(c, "start_date")
-	if !ok {
-		return
-	}
-
-	days, ok := getIntParam(c, "days", 1)
+	startDate, days, ok := prepareStartDateAndDays(c, yesterday(), 1)
 	if !ok {
 		return
 	}
@@ -1096,16 +1090,11 @@ func (s *Server) userStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(date, user, days))
+	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(startDate, user, days))
 }
 
 func (s *Server) userTokenStatistics(c *gin.Context) {
-	date, ok := getDateParam(c, "start_date")
-	if !ok {
-		return
-	}
-
-	days, ok := getIntParam(c, "days", 1)
+	startDate, days, ok := prepareStartDateAndDays(c, yesterday(), 1)
 	if !ok {
 		return
 	}
@@ -1128,11 +1117,11 @@ func (s *Server) userTokenStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, s.db.GetUserTokenStatisticsByDateAndDaysAndUserAndToken(date, days, user, token))
+	c.JSON(200, s.db.GetUserTokenStatisticsByDateAndDaysAndUserAndToken(startDate, days, user, token))
 }
 
 func (s *Server) topUsers(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1197,7 +1186,7 @@ func (s *Server) topUsers(c *gin.Context) {
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1269,7 +1258,7 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 }
 
 func (s *Server) ethStatistics(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "date", lastWeek())
 	if !ok {
 		return
 	}
@@ -1306,10 +1295,9 @@ func (s *Server) forward(c *gin.Context) {
 }
 
 func (s *Server) marketPairStatistics(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
-		startDate = time.Now().AddDate(0, 0, -7)
-		days = 7
+		return
 	}
 
 	token := c.DefaultQuery("token", "tron")
@@ -1436,7 +1424,7 @@ func (s *Server) dealWithGroupByTag(stats map[string]*models.MarketPairStatistic
 }
 
 func (s *Server) marketPairVolumes(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1458,7 +1446,7 @@ func (s *Server) marketPairVolumes(c *gin.Context) {
 }
 
 func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -1480,7 +1468,7 @@ func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
 }
 
 func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
-	startDate, ok := getDateParam(c, "start_date")
+	startDate, ok := getDateParam(c, "start_date", lastWeek())
 	if !ok {
 		return
 	}
@@ -1498,7 +1486,7 @@ func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
 }
 
 func (s *Server) tokenListingStatistic(c *gin.Context) {
-	date, ok := getDateParam(c, "date")
+	date, ok := getDateParam(c, "date", today())
 	if !ok {
 		return
 	}
@@ -1524,10 +1512,9 @@ func (s *Server) tokenListingStatistic(c *gin.Context) {
 }
 
 func (s *Server) volumePPTData(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastMonth(), 30)
 	if !ok {
-		startDate = time.Now().AddDate(0, 0, -30)
-		days = 30
+		return
 	}
 
 	token := c.DefaultQuery("token", "tron")
@@ -1681,7 +1668,7 @@ func getEthereumDailyStats(day string) ethStatistics {
 }
 
 func (s *Server) txAnalyze(c *gin.Context) {
-	startDate, days, ok := prepareStartDateAndDays(c)
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return
 	}
@@ -1746,13 +1733,29 @@ func (s *Server) addExchange(c *gin.Context) {
 	})
 }
 
-func prepareStartDateAndDays(c *gin.Context) (time.Time, int, bool) {
-	startDate, ok := getDateParam(c, "start_date")
+func today() time.Time {
+	return time.Now()
+}
+
+func yesterday() time.Time {
+	return time.Now().AddDate(0, 0, -1)
+}
+
+func lastWeek() time.Time {
+	return time.Now().AddDate(0, 0, -7)
+}
+
+func lastMonth() time.Time {
+	return time.Now().AddDate(0, 0, -30)
+}
+
+func prepareStartDateAndDays(c *gin.Context, defaultStartDate time.Time, defaultDays int) (time.Time, int, bool) {
+	startDate, ok := getDateParam(c, "start_date", defaultStartDate)
 	if !ok {
 		return time.Time{}, 0, false
 	}
 
-	days, ok := getIntParam(c, "days", 1)
+	days, ok := getIntParam(c, "days", defaultDays)
 	if !ok {
 		return time.Time{}, 0, false
 	}
@@ -1760,11 +1763,10 @@ func prepareStartDateAndDays(c *gin.Context) (time.Time, int, bool) {
 	return startDate, days, true
 }
 
-func getDateParam(c *gin.Context, name string) (time.Time, bool) {
+func getDateParam(c *gin.Context, name string, defaultDate time.Time) (time.Time, bool) {
 	dateStr, ok := c.GetQuery(name)
 	if !ok {
-		// If date is not present, use yesterday as default
-		return time.Now().Truncate(24 * time.Hour), true
+		return defaultDate.Truncate(24 * time.Hour), true
 	}
 
 	date, err := time.Parse("060102", dateStr)

@@ -1399,9 +1399,14 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		result := strings.Builder{}
 		for _, stat := range statResults {
 			if exchanges[stat.ExchangeName] {
-				result.WriteString(fmt.Sprintf("%s:\n%s (%s)\n%s / %s\n%s (%s)\n\n",
-					stat.ExchangeName, stat.Volume, stat.VolumeChange,
-					stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
+				if stat.ExchangeName == "Total" {
+					result.WriteString(fmt.Sprintf("%s:\n%s %s\n\n",
+						stat.ExchangeName, stat.Volume, stat.VolumeChange))
+				} else {
+					result.WriteString(fmt.Sprintf("%s:\n%s (%s)\n%s / %s\n%s (%s)\n\n",
+						stat.ExchangeName, stat.Volume, stat.VolumeChange,
+						stat.DepthUsdPositiveTwo, stat.DepthUsdNegativeTwo, stat.Percent, stat.PercentChange))
+				}
 			}
 		}
 

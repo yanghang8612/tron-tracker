@@ -209,7 +209,7 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 				if marketPair.Volume < rule.Volume {
 					shouldWaring = true
-					textMsg += fmt.Sprintf(" [Volume]: $%s [< $%s]",
+					textMsg += fmt.Sprintf(", [Volume]: $%s (<$%s)",
 						humanize.SIWithDigits(marketPair.Volume, 0, ""),
 						humanize.SIWithDigits(rule.Volume, 0, ""))
 
@@ -217,18 +217,16 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 				if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
 					shouldWaring = true
-					textMsg += fmt.Sprintf(" [+2%% Depth]: $%s [< $%s]",
+					textMsg += fmt.Sprintf(", [+2%% Depth]: $%s (<$%s)",
 						humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
-					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
 				}
 
 				if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
 					shouldWaring = true
-					textMsg += fmt.Sprintf(" [-2%% Depth]: $%s [< $%s]",
+					textMsg += fmt.Sprintf(", [-2%% Depth]: $%s (<$%s)",
 						humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
-					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
 				}
 
 				if shouldWaring {

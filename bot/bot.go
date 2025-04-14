@@ -204,27 +204,34 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 		for _, marketPair := range marketPairs {
 			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
 			if rule.ID != 0 {
+				shouldWaring := false
+				textMsg := fmt.Sprintf("%s-%s", marketPair.ExchangeName, marketPair.Pair)
+
 				if marketPair.Volume < rule.Volume {
-					textMsg := fmt.Sprintf("%s-%s [volume]: $%s lower than $%s",
-						marketPair.ExchangeName, marketPair.Pair,
+					shouldWaring = true
+					textMsg += fmt.Sprintf(" [Volume]: $%s [< $%s]",
 						humanize.SIWithDigits(marketPair.Volume, 0, ""),
 						humanize.SIWithDigits(rule.Volume, 0, ""))
-					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
+
 				}
 
 				if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
-					textMsg := fmt.Sprintf("%s %s [+2%% Depth]: $%s lower than $%s",
-						marketPair.ExchangeName, marketPair.Pair,
+					shouldWaring = true
+					textMsg += fmt.Sprintf(" [+2%% Depth]: $%s [< $%s]",
 						humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
 				}
 
 				if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
-					textMsg := fmt.Sprintf("%s %s [-2%% Depth]: $%s lower than $%s",
-						marketPair.ExchangeName, marketPair.Pair,
+					shouldWaring = true
+					textMsg += fmt.Sprintf(" [-2%% Depth]: $%s [< $%s]",
 						humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
+					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
+				}
+
+				if shouldWaring {
 					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
 				}
 			}

@@ -11,11 +11,12 @@ import (
 )
 
 type Config struct {
-	Server api.ServerConfig `toml:"server"`
-	Net    net.Config       `toml:"net"`
-	Log    log.Config       `toml:"log"`
-	DB     database.Config  `toml:"database"`
-	DeFi   api.DeFiConfig   `toml:"defi"`
+	BotToken string           `toml:"bot_token"`
+	Server   api.ServerConfig `toml:"server"`
+	Net      net.Config       `toml:"net"`
+	Log      log.Config       `toml:"log"`
+	DB       database.Config  `toml:"database"`
+	DeFi     api.DeFiConfig   `toml:"defi"`
 }
 
 func loadConfig() *Config {

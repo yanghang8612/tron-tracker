@@ -9,6 +9,7 @@ const (
 	CountedDateKey           = "counted_date"
 	CountedWeekKey           = "counted_week"
 	TrackingStartBlockNumKey = "tracking_start_block_num"
+	TelegramBotChatID        = "telegram_bot_chat_id"
 )
 
 type Meta struct {

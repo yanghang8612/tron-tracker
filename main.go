@@ -8,6 +8,7 @@ import (
 
 	"github.com/robfig/cron/v3"
 	"tron-tracker/api"
+	"tron-tracker/bot"
 	"tron-tracker/database"
 	"tron-tracker/log"
 	"tron-tracker/net"
@@ -27,15 +28,18 @@ func main() {
 	apiSrv := api.New(db, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
+	tgBot := bot.New(cfg.BotToken, db)
+	tgBot.Start()
+
 	c := cron.New(cron.WithSeconds())
 	_, _ = c.AddFunc("0 */5 2-12 * * *", func() {
 		db.DoTronLinkWeeklyStatistics(time.Now(), false)
 	})
 	_, _ = c.AddFunc("0 5/10 * * * *", func() {
-		db.DoMarketPairStatistics()
+		tgBot.DoMarketPairStatistics()
 	})
 	_, _ = c.AddFunc("30 1/30 * * * *", func() {
-		db.DoTokenListingStatistics()
+		tgBot.DoTokenListingStatistics()
 	})
 	_, _ = c.AddFunc("0 */10 * * * *", func() {
 		tracker.Report()

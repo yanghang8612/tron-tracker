@@ -107,6 +107,11 @@ func New(config *Config) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.Rule{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	dbErr = db.AutoMigrate(&models.USDTStorageStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -436,6 +441,13 @@ func (db *RawDB) GetChargers() map[string]*models.Charger {
 	return db.chargers
 }
 
+func (db *RawDB) GetTelegramBotChatID() int64 {
+	var countedWeekMeta models.Meta
+	db.db.Where(models.Meta{Key: models.TelegramBotChatID}).Attrs(models.Meta{Val: "0"}).FirstOrCreate(&countedWeekMeta)
+	chatID, _ := strconv.ParseInt(countedWeekMeta.Val, 10, 64)
+	return chatID
+}
+
 func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
 	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 
@@ -727,6 +739,27 @@ func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 	return earliestPrice
 }
 
+func (db *RawDB) GetMarketPairRuleByExchangeNameAndPair(exchangeName, pair string) *models.Rule {
+	var rule models.Rule
+	db.db.Where("exchange_name = ? and pair = ?", exchangeName, pair).Find(&rule)
+	return &rule
+}
+
+func (db *RawDB) GetMarketPairRuleByID(id int) (*models.Rule, bool) {
+	var rule models.Rule
+	result := db.db.Where("id = ?", id).Find(&rule)
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, false
+	}
+	return &rule, true
+}
+
+func (db *RawDB) GetAllMarketPairRules() []*models.Rule {
+	var rules []*models.Rule
+	db.db.Find(&rules)
+	return rules
+}
+
 func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string, queryDepth bool) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
@@ -957,81 +990,9 @@ func (db *RawDB) GetUSDTStorageStatisticsByDateAndDays(date time.Time, days int)
 	return result
 }
 
-func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
-	db.updateExchanges()
-
-	trackingDate := generateDate(block.BlockHeader.RawData.Timestamp)
-	if db.trackingDate == "" {
-		db.trackingDate = trackingDate
-	} else if db.trackingDate != trackingDate {
-		db.flushCh <- db.cache
-		db.statsCh <- db.cache.date
-
-		db.trackingDate = trackingDate
-		db.cache = newCache()
-
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).Update("val", trackingDate)
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
-	}
-
-	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
-	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
-}
-
-func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
-	if transactions == nil || len(transactions) == 0 {
-		return
-	}
-
-	dbName := "transactions_" + db.trackingDate
-	db.createTableIfNotExist(dbName, models.Transaction{})
-	db.db.Table(dbName).Create(transactions)
-}
-
-func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
-	db.updateUserStatistic(tx.OwnerAddr, ts, tx, db.cache.fromStats)
-	db.updateUserStatistic("total", ts, tx, db.cache.fromStats)
-
-	if len(tx.ToAddr) > 0 {
-		db.updateUserStatistic(tx.ToAddr, ts, tx, db.cache.toStats)
-	}
-
-	if len(tx.Name) > 0 {
-		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
-		db.updateTokenStatistic("total", tx, db.cache.tokenStats)
-		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
-			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
-		}
-	}
-}
-
-func (db *RawDB) updateUserStatistic(user string, ts int64, tx *models.Transaction, stats map[string]*models.UserStatistic) {
-	db.cache.date = generateDate(ts)
-	if _, ok := stats[user]; !ok {
-		stats[user] = models.NewUserStatistic(user)
-	}
-	stats[user].Add(tx)
-}
-
-func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats map[string]*models.TokenStatistic) {
-	if _, ok := stats[name]; !ok {
-		stats[name] = &models.TokenStatistic{
-			Address: name,
-		}
-	}
-	stats[name].Add(tx)
-}
-
-func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
-	if _, ok := stats[tx.FromAddr+tx.Name]; !ok {
-		stats[tx.FromAddr+tx.Name] = models.NewUserTokenStatistic(tx.FromAddr, tx.Name)
-	}
-	stats[tx.FromAddr+tx.Name].AddFrom(tx)
-
-	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
-		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
-	}
-	stats[tx.ToAddr+tx.Name].AddTo(tx)
+func (db *RawDB) SaveTelegramChatID(chatID int64) {
+	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TelegramBotChatID}).Update("val", strconv.FormatInt(chatID, 10))
+	db.logger.Infof("Saved Telegram chat ID: [%d]", chatID)
 }
 
 func (db *RawDB) SaveCharger(from, to, token string) {
@@ -1078,6 +1039,116 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 	if len(db.chargersToSave) == 200 {
 		db.flushChargerToDB()
 	}
+}
+
+func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
+	if transactions == nil || len(transactions) == 0 {
+		return
+	}
+
+	dbName := "transactions_" + db.trackingDate
+	db.createTableIfNotExist(dbName, models.Transaction{})
+	db.db.Table(dbName).Create(transactions)
+}
+
+func (db *RawDB) SaveMarketPairRule(rule *models.Rule) {
+	result := db.db.Save(rule)
+	if result.Error != nil {
+		db.logger.Warnf("Save market pair rule error: [%s]", result.Error.Error())
+	}
+}
+
+func (db *RawDB) SaveMarketPairStatistics(token, originData string, marketPairs []*models.MarketPairStatistic) {
+	statsDBName := "market_pair_statistics_" + time.Now().Format("0601")
+	db.createTableIfNotExist(statsDBName, models.MarketPairStatistic{})
+
+	db.saveMarketPairOriginData(token, originData)
+	res := db.db.Table(statsDBName).Create(marketPairs)
+	if res.Error != nil {
+		db.logger.Warnf("Save %s market pairs error: [%s]", token, res.Error.Error())
+	} else {
+		db.logger.Infof("Save %s market pairs success, affected rows: %d", token, res.RowsAffected)
+	}
+}
+
+func (db *RawDB) SaveTokenListingStatistics(originData string, tokenListings []*models.TokenListingStatistic) {
+	statsDBName := "token_listing_statistics_" + time.Now().Format("0601")
+	db.createTableIfNotExist(statsDBName, models.TokenListingStatistic{})
+
+	db.saveTokenListingOriginData(originData)
+	res := db.db.Table(statsDBName).Create(tokenListings)
+	if res.Error != nil {
+		db.logger.Warnf("Save token listings error: [%s]", res.Error)
+	} else {
+		db.logger.Infof("Save token listings success, affected rows: %d", res.RowsAffected)
+	}
+}
+
+func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
+	db.updateExchanges()
+
+	trackingDate := generateDate(block.BlockHeader.RawData.Timestamp)
+	if db.trackingDate == "" {
+		db.trackingDate = trackingDate
+	} else if db.trackingDate != trackingDate {
+		db.flushCh <- db.cache
+		db.statsCh <- db.cache.date
+
+		db.trackingDate = trackingDate
+		db.cache = newCache()
+
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).Update("val", trackingDate)
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
+	}
+
+	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
+	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
+}
+
+func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
+	db.updateUserStatistic(tx.OwnerAddr, ts, tx, db.cache.fromStats)
+	db.updateUserStatistic("total", ts, tx, db.cache.fromStats)
+
+	if len(tx.ToAddr) > 0 {
+		db.updateUserStatistic(tx.ToAddr, ts, tx, db.cache.toStats)
+	}
+
+	if len(tx.Name) > 0 {
+		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
+		db.updateTokenStatistic("total", tx, db.cache.tokenStats)
+		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
+			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+		}
+	}
+}
+
+func (db *RawDB) updateUserStatistic(user string, ts int64, tx *models.Transaction, stats map[string]*models.UserStatistic) {
+	db.cache.date = generateDate(ts)
+	if _, ok := stats[user]; !ok {
+		stats[user] = models.NewUserStatistic(user)
+	}
+	stats[user].Add(tx)
+}
+
+func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats map[string]*models.TokenStatistic) {
+	if _, ok := stats[name]; !ok {
+		stats[name] = &models.TokenStatistic{
+			Address: name,
+		}
+	}
+	stats[name].Add(tx)
+}
+
+func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
+	if _, ok := stats[tx.FromAddr+tx.Name]; !ok {
+		stats[tx.FromAddr+tx.Name] = models.NewUserTokenStatistic(tx.FromAddr, tx.Name)
+	}
+	stats[tx.FromAddr+tx.Name].AddFrom(tx)
+
+	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
+		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
+	}
+	stats[tx.ToAddr+tx.Name].AddTo(tx)
 }
 
 func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
@@ -1187,61 +1258,6 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	slackMessage += fmt.Sprintf("> Collect Energy: `%s`, collect energy: `%s`\n", humanize.Comma(collectFee), humanize.Comma(collectEnergy))
 	slackMessage += fmt.Sprintf("> Charge Fee: `%s`, charge energy: `%s`\n", humanize.Comma(chargeFee), humanize.Comma(chargeEnergy))
 	net.ReportToSlack(slackMessage)
-}
-
-func (db *RawDB) DoMarketPairStatistics() {
-	db.logger.Infof("Start doing market pair statistics")
-
-	statsDBName := "market_pair_statistics_" + time.Now().Format("0601")
-	db.createTableIfNotExist(statsDBName, models.MarketPairStatistic{})
-
-	tokens := []string{"tron", "steem", "wink", "just", "bittorrent-new", "apenft", "sun-token"}
-
-	for _, token := range tokens {
-		db.doMarketPairStatistics(statsDBName, token)
-		time.Sleep(time.Second * 1)
-	}
-
-	db.logger.Infof("Finish doing market pair statistics")
-}
-
-func (db *RawDB) doMarketPairStatistics(dbName, token string) {
-	originData, marketPairs, err := net.GetMarketPairs(token)
-	if err != nil {
-		db.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
-		return
-	}
-
-	db.saveMarketPairOriginData(token, originData)
-	res := db.db.Table(dbName).Create(marketPairs)
-	if res.Error != nil {
-		db.logger.Warnf("Save %s market pairs error: [%s]", token, res.Error.Error())
-	} else {
-		db.logger.Infof("Save %s market pairs success, affected rows: %d", token, res.RowsAffected)
-	}
-}
-
-func (db *RawDB) DoTokenListingStatistics() {
-	db.logger.Infof("Start doing token listing statistics")
-
-	statsDBName := "token_listing_statistics_" + time.Now().Format("0601")
-	db.createTableIfNotExist(statsDBName, models.TokenListingStatistic{})
-
-	originData, tokenListings, err := net.GetTokenListings()
-	if err != nil {
-		db.logger.Errorf("Get token listing error: [%s]", err.Error())
-		return
-	}
-
-	db.saveTokenListingOriginData(originData)
-	res := db.db.Table(statsDBName).Create(tokenListings)
-	if res.Error != nil {
-		db.logger.Warnf("Save token listings error: [%s]", res.Error)
-	} else {
-		db.logger.Infof("Save token listings success, affected rows: %d", res.RowsAffected)
-	}
-
-	db.logger.Infof("Finish doing token listing statistics")
 }
 
 func (db *RawDB) DoExchangeStatistics(date string) {

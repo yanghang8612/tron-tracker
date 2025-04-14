@@ -1,6 +1,9 @@
 package utils
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 func FormatChangePercent(oldValue, newValue int64) string {
 	return FormatFloatChangePercent(float64(oldValue), float64(newValue))
@@ -37,4 +40,19 @@ func FormatOfPercent(total, part int64) string {
 		percent := float64(part) / float64(total) * 100.0
 		return fmt.Sprintf("%.2f%%", percent)
 	}
+}
+
+func EscapeMarkdownV2(text string) string {
+	specialCharacters := "_*[]()~`>#+-=|{}.!"
+
+	var builder strings.Builder
+
+	for _, char := range text {
+		if strings.ContainsRune(specialCharacters, char) {
+			builder.WriteRune('\\')
+		}
+		builder.WriteRune(char)
+	}
+
+	return builder.String()
 }

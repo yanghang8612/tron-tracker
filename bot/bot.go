@@ -191,18 +191,12 @@ func (tb *TelegramBot) SendMessage(msgID int, textMsg string, replyMarkup *tgbot
 func (tb *TelegramBot) DoMarketPairStatistics() {
 	tb.logger.Infof("Start doing market pair statistics")
 
-	tokens := map[string]string{
-		"TRX":   "tron",
-		"STEEM": "steem",
-		"WIN":   "wink",
-		"JST":   "just",
-		"BTT":   "bittorrent-new",
-		"NFT":   "apenft",
-		"SUN":   "sun-token"}
+	tokens := []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT"}
+	slugs := []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft"}
 
 	textMsg := ""
-	for token, slug := range tokens {
-		originData, marketPairs, err := net.GetMarketPairs(token, slug)
+	for i, token := range tokens {
+		originData, marketPairs, err := net.GetMarketPairs(token, slugs[i])
 		if err != nil {
 			tb.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
 			return

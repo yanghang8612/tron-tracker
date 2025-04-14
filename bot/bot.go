@@ -191,10 +191,18 @@ func (tb *TelegramBot) SendMessage(msgID int, textMsg string, replyMarkup *tgbot
 func (tb *TelegramBot) DoMarketPairStatistics() {
 	tb.logger.Infof("Start doing market pair statistics")
 
-	tokens := []string{"tron", "steem", "wink", "just", "bittorrent-new", "apenft", "sun-token"}
+	tokens := map[string]string{
+		"TRX":   "tron",
+		"STEEM": "steem",
+		"WIN":   "wink",
+		"JST":   "just",
+		"BTT":   "bittorrent-new",
+		"NFT":   "apenft",
+		"SUN":   "sun-token"}
 
-	for _, token := range tokens {
-		originData, marketPairs, err := net.GetMarketPairs(token)
+	textMsg := ""
+	for token, slug := range tokens {
+		originData, marketPairs, err := net.GetMarketPairs(token, slug)
 		if err != nil {
 			tb.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
 			return
@@ -202,26 +210,25 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
-		textMsg := ""
 		for _, marketPair := range marketPairs {
 			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
-			if rule.ID != 0 {
+			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
 				warningMsg := ""
 
 				if marketPair.Volume < rule.Volume {
-					warningMsg += fmt.Sprintf(", \\[Volume\\]: *$%s* \\(< *$%s*\\)",
+					warningMsg += fmt.Sprintf(", \\[Volume\\]: *$%s* \\(*$%s*\\)",
 						humanize.SIWithDigits(marketPair.Volume, 0, ""),
 						humanize.SIWithDigits(rule.Volume, 0, ""))
 				}
 
 				if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
-					warningMsg += fmt.Sprintf(", \\[\\+2%%Depth\\]: *$%s* \\(< *$%s*\\)",
+					warningMsg += fmt.Sprintf(", \\[\\+2%%\\]: *$%s* \\(*$%s*\\)",
 						humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 				}
 
 				if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
-					warningMsg += fmt.Sprintf(", \\[\\-2%%Depth\\]: *$%s* \\(< *$%s*\\)",
+					warningMsg += fmt.Sprintf(", \\[\\-2%%\\]: *$%s* \\(*$%s*\\)",
 						humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
 				}
@@ -232,12 +239,12 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 			}
 		}
 
-		if len(textMsg) > 0 {
-			textMsg = "Rule Alarm\n" + textMsg
-			tb.SendMessage(0, textMsg, nil)
-		}
-
 		time.Sleep(time.Second * 1)
+	}
+
+	if len(textMsg) > 0 {
+		textMsg = "Rule Alarm\n" + textMsg
+		tb.SendMessage(0, textMsg, nil)
 	}
 
 	tb.logger.Infof("Finish doing market pair statistics")

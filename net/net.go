@@ -111,8 +111,8 @@ type MarketPairsResponse struct {
 	} `json:"data"`
 }
 
-func GetMarketPairs(token string) (string, []*models.MarketPairStatistic, error) {
-	resp, err := client.R().Get(fmt.Sprintf("https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?slug=%s&start=1&limit=1000&category=spot&centerType=all&sort=cmc_rank_advanced&direction=desc&spotUntracked=true", token))
+func GetMarketPairs(token, slug string) (string, []*models.MarketPairStatistic, error) {
+	resp, err := client.R().Get(fmt.Sprintf("https://api.coinmarketcap.com/data-api/v3/cryptocurrency/market-pairs/latest?slug=%s&start=1&limit=1000&category=spot&centerType=all&sort=cmc_rank_advanced&direction=desc&spotUntracked=true", slug))
 	if err != nil {
 		return "", nil, err
 	}

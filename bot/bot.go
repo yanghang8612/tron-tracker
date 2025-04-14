@@ -71,13 +71,14 @@ func (tb *TelegramBot) Start() {
 					if len(rules) == 0 {
 						textMsg = "No rules found"
 					} else {
-						textMsg = "Rules:\n"
+						rulesMsg := "Rules:\n"
 						for _, rule := range rules {
-							textMsg += fmt.Sprintf("[%2d] %s-%s [volume]: $%s, [+/-2%% Depth]: $%s\n",
+							rulesMsg += fmt.Sprintf(">\\[%2d\\] %s\\-%s, \\[Volume\\]: *$%s*, \\[\\+/\\-2%% Depth\\]: *$%s*\n",
 								rule.ID, rule.ExchangeName, rule.Pair,
 								humanize.SIWithDigits(rule.Volume, 0, ""),
 								humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 						}
+						tb.SendMessage(update.Message.MessageID, rulesMsg, nil)
 					}
 				case "addrule":
 					data := strings.Fields(update.Message.Text)
@@ -201,38 +202,39 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
+		textMsg := ""
 		for _, marketPair := range marketPairs {
 			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
 			if rule.ID != 0 {
-				shouldWaring := false
-				textMsg := fmt.Sprintf("%s-%s", marketPair.ExchangeName, marketPair.Pair)
+				warningMsg := ""
 
 				if marketPair.Volume < rule.Volume {
-					shouldWaring = true
-					textMsg += fmt.Sprintf(", [Volume]: $%s (<$%s)",
+					warningMsg += fmt.Sprintf(", \\[Volume\\]: *$%s* \\(< *$%s*\\)",
 						humanize.SIWithDigits(marketPair.Volume, 0, ""),
 						humanize.SIWithDigits(rule.Volume, 0, ""))
-
 				}
 
 				if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
-					shouldWaring = true
-					textMsg += fmt.Sprintf(", [+2%% Depth]: $%s (<$%s)",
+					warningMsg += fmt.Sprintf(", \\[\\+2%%Depth\\]: *$%s* \\(< *$%s*\\)",
 						humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 				}
 
 				if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
-					shouldWaring = true
-					textMsg += fmt.Sprintf(", [-2%% Depth]: $%s (<$%s)",
+					warningMsg += fmt.Sprintf(", \\[\\-2%%Depth\\]: *$%s* \\(< *$%s*\\)",
 						humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 0, ""),
 						humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
 				}
 
-				if shouldWaring {
-					tb.SendMessage(0, utils.EscapeMarkdownV2(textMsg), nil)
+				if warningMsg != "" {
+					textMsg += fmt.Sprintf(">%s\\-%s%s\n", marketPair.ExchangeName, marketPair.Pair, warningMsg)
 				}
 			}
+		}
+
+		if len(textMsg) > 0 {
+			textMsg = "Rule Alarm\n" + textMsg
+			tb.SendMessage(0, textMsg, nil)
 		}
 
 		time.Sleep(time.Second * 1)

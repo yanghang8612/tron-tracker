@@ -204,31 +204,50 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
+		if time.Now().Minute() != 0 {
+			continue
+		}
+
 		for _, marketPair := range marketPairs {
 			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
 			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
+				shouldReport := false
 				warningMsg := ""
 
+				warningMsg += fmt.Sprintf(">\\- \\[24h Volume\\]: *$%s* \\(*$%s*\\)",
+					utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.Volume, 2, "")),
+					humanize.SIWithDigits(rule.Volume, 0, ""))
 				if marketPair.Volume < rule.Volume {
-					warningMsg += fmt.Sprintf(", \\[Volume\\]: *$%s* \\(*$%s*\\)",
-						humanize.SIWithDigits(marketPair.Volume, 0, ""),
-						humanize.SIWithDigits(rule.Volume, 0, ""))
+					shouldReport = true
+					warningMsg += " 🚨\n"
+				} else {
+					warningMsg += " ✅\n"
 				}
 
+				warningMsg += fmt.Sprintf(">\\- \\[\\+2%% Depth\\]: *$%s* \\(*$%s*\\)",
+					utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 2, "")),
+					humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 				if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
-					warningMsg += fmt.Sprintf(", \\[\\+2%%\\]: *$%s* \\(*$%s*\\)",
-						humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 0, ""),
-						humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
+					shouldReport = true
+					warningMsg += " 🚨\n"
+				} else {
+					warningMsg += " ✅\n"
 				}
 
+				warningMsg += fmt.Sprintf(">\\- \\[\\-2%% Depth\\]: *$%s* \\(*$%s*\\)",
+					utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 2, "")),
+					humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
 				if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
-					warningMsg += fmt.Sprintf(", \\[\\-2%%\\]: *$%s* \\(*$%s*\\)",
-						humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 0, ""),
-						humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
+					shouldReport = true
+					warningMsg += " 🚨\n"
+				} else {
+					warningMsg += " ✅\n"
 				}
 
-				if warningMsg != "" {
-					textMsg += fmt.Sprintf(">%s\\-%s%s\n", marketPair.ExchangeName, marketPair.Pair, warningMsg)
+				if shouldReport {
+					textMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
+						marketPair.ExchangeName, marketPair.Pair,
+						utils.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), warningMsg)
 				}
 			}
 		}

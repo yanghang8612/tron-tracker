@@ -433,8 +433,21 @@ func (db *RawDB) GetLastTrackedBlockTime() int64 {
 	return db.lastTrackedBlockTime
 }
 
-func (db *RawDB) GetTokenName(addr string) string {
-	return db.validTokens[addr]
+func (db *RawDB) GetTokenName(addrOrName string) string {
+	if len(addrOrName) == 34 {
+		addr := addrOrName
+		if name, ok := db.validTokens[addr]; ok {
+			return name
+		}
+	} else {
+		name := addrOrName
+		for _, tokenName := range db.validTokens {
+			if tokenName == name {
+				return name
+			}
+		}
+	}
+	return ""
 }
 
 func (db *RawDB) GetChargers() map[string]*models.Charger {

@@ -207,7 +207,11 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
-		if time.Now().Minute() != 0 {
+		if time.Now().Minute() != 0 ||
+			time.Now().Hour() == 0 ||
+			time.Now().Hour() == 6 ||
+			time.Now().Hour() == 12 ||
+			time.Now().Hour() == 18 {
 			continue
 		}
 

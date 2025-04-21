@@ -1300,7 +1300,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		return
 	}
 
-	token := c.DefaultQuery("token", "tron")
+	token := c.DefaultQuery("token", "TRX")
 
 	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token, true)
 	lastStartDate := startDate.AddDate(0, 0, -days)
@@ -1429,7 +1429,7 @@ func (s *Server) marketPairVolumes(c *gin.Context) {
 		return
 	}
 
-	token := c.DefaultQuery("token", "tron")
+	token := c.DefaultQuery("token", "TRX")
 
 	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, days, token)
 
@@ -1451,7 +1451,7 @@ func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
 		return
 	}
 
-	token := c.DefaultQuery("token", "tron")
+	token := c.DefaultQuery("token", "TRX")
 
 	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, 7, token)
 
@@ -1473,7 +1473,7 @@ func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
 		return
 	}
 
-	token := c.DefaultQuery("token", "tron")
+	token := c.DefaultQuery("token", "TRX")
 
 	marketPairAverageDepths := s.db.GetMarketPairAverageDepthsByDateAndDaysAndToken(startDate, 7, token)
 
@@ -1517,7 +1517,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		return
 	}
 
-	token := c.DefaultQuery("token", "tron")
+	token := c.DefaultQuery("token", "TRX")
 
 	var exchanges []string
 	exchangesParam := c.DefaultQuery("exchanges", "")

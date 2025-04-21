@@ -224,24 +224,24 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 	tb.logger.Infof("Finish doing market pair statistics")
 
-	if time.Now().Minute() != 0 ||
-		time.Now().Hour() == 0 ||
-		time.Now().Hour() == 6 ||
-		time.Now().Hour() == 12 ||
-		time.Now().Hour() == 18 {
-		return
-	}
-
-	if len(textMsg) > 0 {
-		loc, _ := time.LoadLocation("Asia/Shanghai")
-		textMsg = fmt.Sprintf("Rules Alarm at \\- \\[%s\\]\n%s",
-			utils.EscapeMarkdownV2(time.Now().In(loc).Format("01-02 15:04")), textMsg)
-		tb.SendMessage(0, textMsg, nil)
-	} else if time.Now().Minute() == 0 {
-		tb.SendMessage(0, "All rules are OK", nil)
-	}
-
-	tb.logger.Infof("Finish reporting rulse alarm")
+	// if time.Now().Minute() != 0 ||
+	// 	time.Now().Hour() == 0 ||
+	// 	time.Now().Hour() == 6 ||
+	// 	time.Now().Hour() == 12 ||
+	// 	time.Now().Hour() == 18 {
+	// 	return
+	// }
+	//
+	// if len(textMsg) > 0 {
+	// 	loc, _ := time.LoadLocation("Asia/Shanghai")
+	// 	textMsg = fmt.Sprintf("Rules Alarm at \\- \\[%s\\]\n%s",
+	// 		utils.EscapeMarkdownV2(time.Now().In(loc).Format("01-02 15:04")), textMsg)
+	// 	tb.SendMessage(0, textMsg, nil)
+	// } else if time.Now().Minute() == 0 {
+	// 	tb.SendMessage(0, "All rules are OK", nil)
+	// }
+	//
+	// tb.logger.Infof("Finish reporting rulse alarm")
 }
 
 func (tb *TelegramBot) DoTokenListingStatistics() {

@@ -1041,10 +1041,10 @@ func (db *RawDB) GetUSDTStorageStatisticsByDateDays(date time.Time, days int) *m
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 
-		var dayStat *models.USDTStorageStatistic
-		db.db.Where("date = ?", queryDate.Format("060102")).Limit(1).Find(dayStat)
+		var dayStat models.USDTStorageStatistic
+		db.db.Where("date = ?", queryDate.Format("060102")).Limit(1).Find(&dayStat)
 
-		result.Merge(dayStat)
+		result.Merge(&dayStat)
 	}
 
 	return result

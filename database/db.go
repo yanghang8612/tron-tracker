@@ -433,10 +433,9 @@ func (db *RawDB) GetTokenName(addrOrName string) string {
 			return name
 		}
 	} else {
-		name := addrOrName
 		for _, tokenName := range db.validTokens {
-			if tokenName == name {
-				return name
+			if tokenName == strings.ToUpper(addrOrName) {
+				return tokenName
 			}
 		}
 	}
@@ -449,7 +448,7 @@ func (db *RawDB) GetTokenAddress(addrOrName string) string {
 	}
 
 	for addr, tokenName := range db.validTokens {
-		if tokenName == addrOrName {
+		if tokenName == strings.ToUpper(addrOrName) {
 			return addr
 		}
 	}

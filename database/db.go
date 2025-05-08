@@ -611,10 +611,10 @@ func (db *RawDB) GetTokenStatisticsByDateDaysToken(date time.Time, days int, tok
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
-		var dayStat *models.TokenStatistic
-		db.db.Table("token_stats_"+queryDate).Where("address = ?", tokenAddress).Limit(1).Find(dayStat)
+		var dayStat models.TokenStatistic
+		db.db.Table("token_stats_"+queryDate).Where("address = ?", tokenAddress).Limit(1).Find(&dayStat)
 
-		result.Merge(dayStat)
+		result.Merge(&dayStat)
 	}
 	return result
 }
@@ -716,7 +716,7 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 
-		var dayStats []models.ExchangeStatistic
+		var dayStats []*models.ExchangeStatistic
 		db.db.Where("date = ? and token <> ?", queryDate.Format("060102"), "Special").Find(&dayStats)
 
 		for _, es := range dayStats {
@@ -735,12 +735,12 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) 
 			if _, ok := resultMap[es.Name][tokenName]; !ok {
 				resultMap[es.Name][tokenName] = models.NewExchangeStatistic("", "", "")
 			}
-			resultMap[es.Name][tokenName].Merge(&es)
+			resultMap[es.Name][tokenName].Merge(es)
 
 			if _, ok := resultMap["All"][tokenName]; !ok {
 				resultMap["All"][tokenName] = models.NewExchangeStatistic("", "", "")
 			}
-			resultMap["All"][tokenName].Merge(&es)
+			resultMap["All"][tokenName].Merge(es)
 		}
 	}
 
@@ -1030,9 +1030,9 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 }
 
 func (db *RawDB) GetPhishingStatisticsByDate(date string) *models.PhishingStatistic {
-	var phishingStatistic *models.PhishingStatistic
-	db.db.Where("date = ?", date).Limit(1).Find(phishingStatistic)
-	return phishingStatistic
+	var phishingStatistic models.PhishingStatistic
+	db.db.Where("date = ?", date).Limit(1).Find(&phishingStatistic)
+	return &phishingStatistic
 }
 
 func (db *RawDB) GetUSDTStorageStatisticsByDateDays(date time.Time, days int) *models.USDTStorageStatistic {

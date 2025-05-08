@@ -159,7 +159,7 @@ func SaveToken(path string, token *oauth2.Token) {
 }
 
 func (u *Updater) Update(date time.Time) {
-	lastMonth := date.AddDate(0, 0, -30)
+	lastMonth := date.AddDate(0, 0, -31)
 
 	// Update TRX volume sheet
 	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "TRX!A2:D31",

@@ -1030,13 +1030,13 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 }
 
 func (db *RawDB) GetPhishingStatisticsByDate(date string) *models.PhishingStatistic {
-	var phishingStatistic models.PhishingStatistic
-	db.db.Where("date = ?", date).Limit(1).Find(&phishingStatistic)
-	return &phishingStatistic
+	var phishingStatistic *models.PhishingStatistic
+	db.db.Where("date = ?", date).Limit(1).Find(phishingStatistic)
+	return phishingStatistic
 }
 
 func (db *RawDB) GetUSDTStorageStatisticsByDateDays(date time.Time, days int) *models.USDTStorageStatistic {
-	result := models.USDTStorageStatistic{}
+	result := &models.USDTStorageStatistic{}
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
@@ -1047,7 +1047,7 @@ func (db *RawDB) GetUSDTStorageStatisticsByDateDays(date time.Time, days int) *m
 		result.Merge(dayStat)
 	}
 
-	return &result
+	return result
 }
 
 func (db *RawDB) SaveTelegramChatID(chatID int64) {

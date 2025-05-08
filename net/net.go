@@ -186,7 +186,7 @@ func GetTokenListings() (string, []*models.TokenListingStatistic, error) {
 }
 
 func GetFees(startDate time.Time, days int) map[string]float64 {
-	resp, err := client.R().Get(fmt.Sprintf("%s/transfer_fees?start_date=%s&days=%d",
+	resp, err := client.R().Get(fmt.Sprintf("%s/transfer_fee?start_date=%s&days=%d",
 		configs.FeeNode, startDate.Format("060102"), days))
 
 	if err != nil {

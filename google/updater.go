@@ -364,6 +364,15 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 		}
 	}
 
+	volumeChartId := page.PageElements[8].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: volumeChartId,
+			},
+		},
+	}...)
+
 	// Send the batch update request
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
 		&slides.BatchUpdatePresentationRequest{
@@ -445,6 +454,15 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 	reqs = append(reqs, buildUpdateStyleRequest(revenueObjectId, -1, -1, indexes[1][0], indexes[1][1], 11, getColor(usdtRevenue[1][2].(string)), true))
 	reqs = append(reqs, buildUpdateStyleRequest(revenueObjectId, -1, -1, indexes[2][0], indexes[2][1], 11, getColor(otherRevenue[0][2].(string)), true))
 
+	revenueChartId := page.PageElements[3].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: revenueChartId,
+			},
+		},
+	}...)
+
 	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!O14:R16", "USDT!M12:P14", "USDT!M16:P18").Do()
 	totalNote := resp.ValueRanges[0].Values
 	usdtNote := resp.ValueRanges[1].Values
@@ -458,9 +476,9 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 			"Total Revenue from USDT\t\t%s\t\t%s\t%s\t%s\n" +
 			"Burnt Revenue from USDT\t\t%s\t\t%s\t%s\t%s\n" +
 			"Staked Revenue from USDT\t%s\t\t%s\t%s\t%s\n\n" +
-			"Total Revenue from Other\t\t%s\t\t%s\t\t%s\t%s\n" +
-			"Burnt Revenue from other\t\t%s\t\t%s\t%s\t%s\n" +
-			"Staked Revenue from other\t%s\t\t%s\t%s\t%s\n"
+			"Total Revenue from Other\t\t%s\t\t%s\t\t%s\t\t%s\n" +
+			"Burnt Revenue from other\t\t%s\t\t%s\t%s\t\t%s\n" +
+			"Staked Revenue from other\t%s\t\t%s\t%s\t\t%s\n"
 
 	revenueNote := fmt.Sprintf(noteTemplate,
 		totalNote[0][0], totalNote[0][1], pf(totalNote[0][2].(string)), totalNote[0][3],

@@ -164,7 +164,7 @@ func (u *Updater) Update(date time.Time) {
 	// Update TRX volume sheet
 	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "TRX!A2:D31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(lastMonth, "TRX", []string{"Binance", "Kraken", "Total"}),
+			Values: u.getVolumeData(lastMonth, "TRX", []string{"Kraken", "Binance", "Total"}),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update TRX volume sheet: %v", err)

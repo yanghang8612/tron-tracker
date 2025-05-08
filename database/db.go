@@ -16,21 +16,14 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
+	"tron-tracker/common"
+	"tron-tracker/config"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
-	"tron-tracker/types"
-	"tron-tracker/utils"
+	"tron-tracker/tron/types"
 )
 
-type Config struct {
-	Host        string     `toml:"host"`
-	DB          string     `toml:"db"`
-	User        string     `toml:"user"`
-	Password    string     `toml:"password"`
-	StartDate   string     `toml:"start_date"`
-	StartNum    int        `toml:"start_num"`
-	ValidTokens [][]string `toml:"valid_tokens"`
-}
+const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
 type dbCache struct {
 	date           string
@@ -53,7 +46,7 @@ type RawDB struct {
 	db                 *gorm.DB
 	exchanges          map[string]*models.Exchange
 	exchangesUpdatedAt time.Time
-	validTokens        map[string]string
+	validTokens        map[string]string // address -> token name
 
 	lastTrackedBlockNum  uint
 	lastTrackedBlockTime int64
@@ -77,8 +70,8 @@ type RawDB struct {
 	logger *zap.SugaredLogger
 }
 
-func New(config *Config) *RawDB {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", config.User, config.Password, config.Host, config.DB)
+func New(cfg *config.DBConfig) *RawDB {
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", cfg.User, cfg.Password, cfg.Host, cfg.DB)
 	db, dbErr := gorm.Open(mysql.Open(dsn), &gorm.Config{
 		SkipDefaultTransaction: true,
 		Logger:                 logger.Discard,
@@ -118,23 +111,23 @@ func New(config *Config) *RawDB {
 	}
 
 	var trackingDateMeta models.Meta
-	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&trackingDateMeta)
+	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: cfg.StartDate}).FirstOrCreate(&trackingDateMeta)
 
 	var countedDateMeta models.Meta
-	db.Where(models.Meta{Key: models.CountedDateKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedDateMeta)
+	db.Where(models.Meta{Key: models.CountedDateKey}).Attrs(models.Meta{Val: cfg.StartDate}).FirstOrCreate(&countedDateMeta)
 
 	var countedWeekMeta models.Meta
-	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: config.StartDate}).FirstOrCreate(&countedWeekMeta)
+	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: cfg.StartDate}).FirstOrCreate(&countedWeekMeta)
 
 	db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
 	db.Migrator().DropTable("transfers_" + trackingDateMeta.Val)
 
 	var trackingStartBlockNumMeta models.Meta
-	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(config.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
+	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(cfg.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
 	trackingStartBlockNum, _ := strconv.Atoi(trackingStartBlockNumMeta.Val)
 
 	validTokens := make(map[string]string)
-	for _, token := range config.ValidTokens {
+	for _, token := range cfg.ValidTokens {
 		validTokens[token[0]] = token[1]
 	}
 	// TRX token symbol is "TRX"
@@ -209,7 +202,7 @@ func (db *RawDB) loadChargers() {
 		cols := strings.Split(line, ",")
 		chargeToSave = append(chargeToSave, &models.Charger{
 			Address:      cols[0],
-			ExchangeName: utils.TrimExchangeName(cols[1]),
+			ExchangeName: common.TrimExchangeName(cols[1]),
 		})
 		if len(chargeToSave) == 1000 {
 			db.db.Create(&chargeToSave)
@@ -243,8 +236,8 @@ func (db *RawDB) refreshChargers() {
 	chargersToSave := make(map[string]*models.Charger)
 	count := 0
 	for _, charger := range db.chargers {
-		if charger.ExchangeName != utils.TrimExchangeName(charger.ExchangeName) {
-			charger.ExchangeName = utils.TrimExchangeName(charger.ExchangeName)
+		if charger.ExchangeName != common.TrimExchangeName(charger.ExchangeName) {
+			charger.ExchangeName = common.TrimExchangeName(charger.ExchangeName)
 
 			if charger.IsFake && len(charger.BackupAddress) == 0 {
 				charger.IsFake = false
@@ -321,7 +314,7 @@ func (db *RawDB) loadExchanges() {
 
 	exchanges := net.GetExchanges()
 	for _, exchange := range exchanges.Val {
-		exchange.Name = utils.TrimExchangeName(exchange.OriginName)
+		exchange.Name = common.TrimExchangeName(exchange.OriginName)
 		db.db.Create(&exchange)
 		db.exchanges[exchange.Address] = exchange
 	}
@@ -336,7 +329,7 @@ func (db *RawDB) updateExchanges() {
 	for _, newExchange := range exchanges.Val {
 		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
 			if oldExchange.OriginName != newExchange.OriginName {
-				if !utils.IsSameExchange(oldExchange.OriginName, newExchange.OriginName) {
+				if !common.IsSameExchange(oldExchange.OriginName, newExchange.OriginName) {
 					db.logger.Warnf("Exchange origin name mismatch: [%s] - [%s & %s]",
 						oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
 					continue
@@ -346,7 +339,7 @@ func (db *RawDB) updateExchanges() {
 				db.db.Model(&oldExchange).Update("origin_name", newExchange.OriginName)
 			}
 		} else {
-			newExchange.Name = utils.TrimExchangeName(newExchange.OriginName)
+			newExchange.Name = common.TrimExchangeName(newExchange.OriginName)
 			db.db.Create(&newExchange)
 			db.exchanges[newExchange.Address] = newExchange
 			db.logger.Infof("New exchange added: [%s - %s] - [%s]",
@@ -450,6 +443,19 @@ func (db *RawDB) GetTokenName(addrOrName string) string {
 	return ""
 }
 
+func (db *RawDB) GetTokenAddress(addrOrName string) string {
+	if len(addrOrName) == 34 {
+		return addrOrName
+	}
+
+	for addr, tokenName := range db.validTokens {
+		if tokenName == addrOrName {
+			return addr
+		}
+	}
+	return ""
+}
+
 func (db *RawDB) GetChargers() map[string]*models.Charger {
 	return db.chargers
 }
@@ -485,7 +491,7 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] results, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
-func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days int, contract string, result int) []*models.Transaction {
+func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contract string, result int) []*models.Transaction {
 	var results []*models.Transaction
 
 	for i := 0; i < days; i++ {
@@ -506,7 +512,7 @@ func (db *RawDB) GetTxsByDateAndDaysAndContractAndResult(date time.Time, days in
 	return results
 }
 
-func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[string]*models.UserStatistic {
+func (db *RawDB) GetFromStatisticByDateDays(date time.Time, days int) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 
 	for i := 0; i < days; i++ {
@@ -535,7 +541,7 @@ func (db *RawDB) GetFromStatisticByDateAndDays(date time.Time, days int) map[str
 	return resultMap
 }
 
-func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user string, days int) *models.UserStatistic {
+func (db *RawDB) GetFromStatisticByDateUserDays(date time.Time, user string, days int) *models.UserStatistic {
 	result := models.NewUserStatistic(user)
 
 	for i := 0; i < days; i++ {
@@ -550,7 +556,7 @@ func (db *RawDB) GetFromStatisticByDateAndUserAndDays(date time.Time, user strin
 	return result
 }
 
-func (db *RawDB) GetTopNFromStatisticByDateAndDays(date time.Time, days, n int, orderByField string) map[string]*models.UserStatistic {
+func (db *RawDB) GetTopNFromStatisticByDateDays(date time.Time, days, n int, orderByField string) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 
 	for i := 0; i < days; i++ {
@@ -573,7 +579,7 @@ func (db *RawDB) GetTopNFromStatisticByDateAndDays(date time.Time, days, n int, 
 	return resultMap
 }
 
-func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int64, int64) {
+func (db *RawDB) GetFeeAndEnergyByDateUsers(date string, users []string) (int64, int64) {
 	type result struct {
 		F int64
 		E int64
@@ -583,19 +589,37 @@ func (db *RawDB) GetFeeAndEnergyByDateAndUsers(date string, users []string) (int
 	return res.F, res.E
 }
 
-func (db *RawDB) GetTotalStatisticsByDate(date string) *models.UserStatistic {
-	totalStat := models.NewUserStatistic("")
-	db.db.Table("from_stats_"+date).Where("address = ?", "total").Limit(1).Find(totalStat)
-	return totalStat
+func (db *RawDB) GetTotalStatisticsByDateDays(date time.Time, days int) *models.UserStatistic {
+	result := models.NewUserStatistic("")
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+		dayStat := models.NewUserStatistic("")
+		db.db.Table("from_stats_"+queryDate).Where("address = ?", "total").Limit(1).Find(dayStat)
+		result.Merge(dayStat)
+	}
+	return result
 }
 
-func (db *RawDB) GetTokenStatisticsByDateAndToken(date, token string) *models.TokenStatistic {
-	var tokenStat models.TokenStatistic
-	db.db.Table("token_stats_"+date).Where("address = ?", token).Limit(1).Find(&tokenStat)
-	return &tokenStat
+func (db *RawDB) GetTokenStatisticsByDateDaysToken(date time.Time, days int, token string) *models.TokenStatistic {
+	tokenAddress := db.GetTokenAddress(token)
+	if len(tokenAddress) == 0 {
+		db.logger.Errorf("Token address not found for token [%s]", token)
+		return nil
+	}
+
+	result := &models.TokenStatistic{}
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStat *models.TokenStatistic
+		db.db.Table("token_stats_"+queryDate).Where("address = ?", tokenAddress).Limit(1).Find(dayStat)
+
+		result.Merge(dayStat)
+	}
+	return result
 }
 
-func (db *RawDB) GetTokenStatisticsByDateAndDays(date time.Time, days int) map[string]*models.TokenStatistic {
+func (db *RawDB) GetTokenStatisticsByDateDays(date time.Time, days int) map[string]*models.TokenStatistic {
 	resultMap := make(map[string]*models.TokenStatistic)
 
 	for i := 0; i < days; i++ {
@@ -616,7 +640,13 @@ func (db *RawDB) GetTokenStatisticsByDateAndDays(date time.Time, days int) map[s
 	return resultMap
 }
 
-func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.UserTokenStatistic {
+func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int, token string) map[string]*models.UserTokenStatistic {
+	tokenAddress := db.GetTokenAddress(token)
+	if len(tokenAddress) == 0 {
+		db.logger.Errorf("Token address not found for token [%s]", token)
+		return nil
+	}
+
 	resultMap := make(map[string]*models.UserTokenStatistic)
 
 	for i := 0; i < days; i++ {
@@ -638,7 +668,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndToken(date time.Time, day
 	return resultMap
 }
 
-func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndUserAndToken(date time.Time, days int, user, token string) map[string]*models.UserTokenStatistic {
+func (db *RawDB) GetUserTokenStatisticsByDateDaysUserToken(date time.Time, days int, user, token string) map[string]*models.UserTokenStatistic {
 	resultMap := make(map[string]*models.UserTokenStatistic)
 
 	for i := 0; i < days; i++ {
@@ -660,17 +690,26 @@ func (db *RawDB) GetUserTokenStatisticsByDateAndDaysAndUserAndToken(date time.Ti
 	return resultMap
 }
 
-func (db *RawDB) GetExchangeTotalStatisticsByDate(date time.Time) []*models.ExchangeStatistic {
-	return db.GetExchangeStatisticsByDateAndToken(date.Format("060102"), "_")
+func (db *RawDB) GetExchangeStatisticsByDateDays(date time.Time, days int) map[string]*models.ExchangeStatistic {
+	resultMap := make(map[string]*models.ExchangeStatistic)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStats []*models.ExchangeStatistic
+		db.db.Where("date = ? and token = ?", queryDate, "_").Find(&dayStats)
+
+		for _, dayStat := range dayStats {
+			if _, ok := resultMap[dayStat.Name]; !ok {
+				resultMap[dayStat.Name] = models.NewExchangeStatistic("", dayStat.Name, "")
+			}
+			resultMap[dayStat.Name].Merge(dayStat)
+		}
+	}
+	return resultMap
 }
 
-func (db *RawDB) GetExchangeStatisticsByDateAndToken(date, token string) []*models.ExchangeStatistic {
-	var results []*models.ExchangeStatistic
-	db.db.Where("date = ? and token = ?", date, token).Find(&results)
-	return results
-}
-
-func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days int) map[string]map[string]*models.ExchangeStatistic {
+func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) map[string]map[string]*models.ExchangeStatistic {
 	resultMap := make(map[string]map[string]*models.ExchangeStatistic)
 	resultMap["All"] = make(map[string]*models.ExchangeStatistic)
 
@@ -708,15 +747,15 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateAndDays(date time.Time, days in
 	return resultMap
 }
 
-func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint, uint, uint) {
-	USDT := "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
+func (db *RawDB) GetSpecialStatisticByDateAddr(date, addr string) (uint, uint, uint, uint) {
+	USDTAddress := db.GetTokenAddress("USDT")
 	var chargeFee uint
 	db.db.Table("transactions_"+date).
 		Select("SUM(fee)").
 		Where("hash IN (?)",
 			db.db.Table("transfers_"+date).
 				Distinct("hash").
-				Where("to_addr = ? and token = ?", addr, USDT)).
+				Where("to_addr = ? and token = ?", addr, USDTAddress)).
 		Find(&chargeFee)
 
 	var withdrawFee uint
@@ -725,14 +764,14 @@ func (db *RawDB) GetSpecialStatisticByDateAndAddr(date, addr string) (uint, uint
 		Where("hash IN (?)",
 			db.db.Table("transfers_"+date).
 				Distinct("hash").
-				Where("from_addr = ? and token = ?", addr, USDT)).
+				Where("from_addr = ? and token = ?", addr, USDTAddress)).
 		Find(&withdrawFee)
 
 	var chargeCnt int64
-	db.db.Table("transfers_"+date).Where("to_addr = ? and token = ?", addr, USDT).Count(&chargeCnt)
+	db.db.Table("transfers_"+date).Where("to_addr = ? and token = ?", addr, USDTAddress).Count(&chargeCnt)
 
 	var withdrawCnt int64
-	db.db.Table("transfers_"+date).Where("from_addr = ? and token = ?", addr, USDT).Count(&withdrawCnt)
+	db.db.Table("transfers_"+date).Where("from_addr = ? and token = ?", addr, USDTAddress).Count(&withdrawCnt)
 
 	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
@@ -752,7 +791,7 @@ func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 	return earliestPrice
 }
 
-func (db *RawDB) GetMarketPairRuleByExchangeNameAndPair(exchangeName, pair string) *models.Rule {
+func (db *RawDB) GetMarketPairRuleByExchangePair(exchangeName, pair string) *models.Rule {
 	var rule models.Rule
 	db.db.Where("exchange_name = ? and pair = ?", exchangeName, pair).Find(&rule)
 	return &rule
@@ -773,7 +812,7 @@ func (db *RawDB) GetAllMarketPairRules() []*models.Rule {
 	return rules
 }
 
-func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, days int, token string, queryDepth bool) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairStatistics(date time.Time, days int, token string, queryDepth, groupByExchange bool) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
 	var (
@@ -781,20 +820,20 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		emptyDays   int
 	)
 	for i := 0; i < days; i++ {
-		today := date.AddDate(0, 0, i)
-		todayDBName := "market_pair_statistics_" + today.Format("0601")
+		queryDate := date.AddDate(0, 0, i+1)
+		queryDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
 		// First query the earliest datetime of the day
 		var earliestDatetime string
-		db.db.Table(todayDBName).
+		db.db.Table(queryDBName).
 			Select("datetime").
-			Where("datetime like ? and token = ? and percent > 0", today.Format("02")+"%", token).
+			Where("datetime like ? and token = ? and percent > 0", queryDate.Format("02")+"%", token).
 			Order("datetime").Limit(1).
 			Find(&earliestDatetime)
 
 		// Then query the volume statistics
 		var volumeStats []*models.MarketPairStatistic
-		db.db.Table(todayDBName).
+		db.db.Table(queryDBName).
 			Select("exchange_name", "pair", "volume").
 			Where("datetime = ? and token = ? and percent > 0 and volume > 0", earliestDatetime, token).
 			Find(&volumeStats)
@@ -806,6 +845,10 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 
 		for _, dayStat := range volumeStats {
 			key := dayStat.ExchangeName + "_" + dayStat.Pair
+			if groupByExchange {
+				key = dayStat.ExchangeName
+			}
+
 			if _, ok := resultMap[key]; !ok {
 				resultMap[key] = dayStat
 			} else {
@@ -816,16 +859,20 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 		}
 
 		if queryDepth {
-			lastDay := today.AddDate(0, 0, -1)
-			lastDayDBName := "market_pair_statistics_" + lastDay.Format("0601")
+			today := date.AddDate(0, 0, i)
+			todayDBName := "market_pair_statistics_" + today.Format("0601")
 
 			var depthStats []*models.MarketPairStatistic
-			db.db.Table(lastDayDBName).
-				Where("datetime = ? and token = ?", generateMarketPairDepthDailyKey(lastDay), token).
+			db.db.Table(todayDBName).
+				Where("datetime = ? and token = ?", generateMarketPairDepthDailyKey(today), token).
 				Find(&depthStats)
 
 			for _, depthStat := range depthStats {
 				key := depthStat.ExchangeName + "_" + depthStat.Pair
+				if groupByExchange {
+					key = depthStat.ExchangeName
+				}
+
 				if _, ok := resultMap[key]; !ok {
 					resultMap[key] = depthStat
 				} else {
@@ -857,7 +904,7 @@ func (db *RawDB) GetMarketPairStatisticsByDateAndDaysAndToken(date time.Time, da
 	return resultMap
 }
 
-func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairDailyVolumesByDateDaysToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
 	actualDays := days
@@ -908,7 +955,7 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateAndDaysAndToken(date time.Time, 
 	return resultMap
 }
 
-func (db *RawDB) GetMarketPairAverageDepthsByDateAndDaysAndToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairAverageDepthsByDateDaysToken(date time.Time, days int, token string) map[string]*models.MarketPairStatistic {
 	mpsMap := make(map[string]*models.MarketPairStatistic)
 	dateMap := make(map[string]bool)
 
@@ -982,25 +1029,25 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 	return &todayStat
 }
 
-func (db *RawDB) GetPhishingStatisticsByDate(date string) models.PhishingStatistic {
+func (db *RawDB) GetPhishingStatisticsByDate(date string) *models.PhishingStatistic {
 	var phishingStatistic models.PhishingStatistic
 	db.db.Where("date = ?", date).Limit(1).Find(&phishingStatistic)
-	return phishingStatistic
+	return &phishingStatistic
 }
 
-func (db *RawDB) GetUSDTStorageStatisticsByDateAndDays(date time.Time, days int) models.USDTStorageStatistic {
+func (db *RawDB) GetUSDTStorageStatisticsByDateDays(date time.Time, days int) *models.USDTStorageStatistic {
 	result := models.USDTStorageStatistic{}
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 
-		var dayStat models.USDTStorageStatistic
-		db.db.Where("date = ?", queryDate.Format("060102")).Limit(1).Find(&dayStat)
+		var dayStat *models.USDTStorageStatistic
+		db.db.Where("date = ?", queryDate.Format("060102")).Limit(1).Find(dayStat)
 
-		result.Merge(&dayStat)
+		result.Merge(dayStat)
 	}
 
-	return result
+	return &result
 }
 
 func (db *RawDB) SaveTelegramChatID(chatID int64) {
@@ -1499,7 +1546,7 @@ func (db *RawDB) countForDate(date string) {
 	)
 
 	result := db.db.Table("transactions_"+date).
-		Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+		Where("type = ? or name = ?", 1, USDT).
 		FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				if len(result.ToAddr) == 0 || result.Result != 1 {
@@ -1581,7 +1628,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 
 	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ?", 1, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t").
+			Where("type = ? or name = ?", 1, USDT).
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Result != 1 {
@@ -1656,7 +1703,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	fromStatsDBName := "from_stats_" + cache.date
 	db.createTableIfNotExist(fromStatsDBName, models.UserStatistic{})
 
-	reporter := utils.NewReporter(0, 60*time.Second, len(cache.fromStats), makeReporterFunc("from_stats"))
+	reporter := common.NewReporter(0, 60*time.Second, len(cache.fromStats), makeReporterFunc("from_stats"))
 
 	fromStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.fromStats {
@@ -1680,7 +1727,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	toStatsDBName := "to_stats_" + cache.date
 	db.createTableIfNotExist(toStatsDBName, models.UserStatistic{})
 
-	reporter = utils.NewReporter(0, 60*time.Second, len(cache.toStats), makeReporterFunc("to_stats"))
+	reporter = common.NewReporter(0, 60*time.Second, len(cache.toStats), makeReporterFunc("to_stats"))
 
 	toStatsToPersist := make([]*models.UserStatistic, 0)
 	for _, stats := range cache.toStats {
@@ -1704,7 +1751,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	tokenStatsDBName := "token_stats_" + cache.date
 	db.createTableIfNotExist(tokenStatsDBName, models.TokenStatistic{})
 
-	reporter = utils.NewReporter(0, 60*time.Second, len(cache.tokenStats), makeReporterFunc("token_stats"))
+	reporter = common.NewReporter(0, 60*time.Second, len(cache.tokenStats), makeReporterFunc("token_stats"))
 
 	tokenStatsToPersist := make([]*models.TokenStatistic, 0)
 	for _, stats := range cache.tokenStats {
@@ -1728,7 +1775,7 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	userTokenStatsDBName := "user_token_stats_" + cache.date
 	db.createTableIfNotExist(userTokenStatsDBName, models.UserTokenStatistic{})
 
-	reporter = utils.NewReporter(0, 60*time.Second, len(cache.userTokenStats), makeReporterFunc("user_token_stats"))
+	reporter = common.NewReporter(0, 60*time.Second, len(cache.userTokenStats), makeReporterFunc("user_token_stats"))
 
 	userTokenStatsToPersist := make([]*models.UserTokenStatistic, 0)
 	for _, stats := range cache.userTokenStats {
@@ -1785,8 +1832,8 @@ func generateMarketPairDepthDailyKey(day time.Time) string {
 	return day.Format("02") + "2500"
 }
 
-func makeReporterFunc(name string) func(utils.ReporterState) string {
-	return func(rs utils.ReporterState) string {
+func makeReporterFunc(name string) func(common.ReporterState) string {
+	return func(rs common.ReporterState) string {
 		return fmt.Sprintf("Saved [%d] [%s] in [%.2fs], speed [%.2frecords/sec], left [%d/%d] records to save [%.2f%%]",
 			rs.CountInc, name, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime,
 			rs.CurrentCount, rs.FinishCount, float64(rs.CurrentCount*100)/float64(rs.FinishCount))

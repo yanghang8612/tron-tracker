@@ -1,27 +1,19 @@
 package log
 
 import (
+	"strings"
 	"time"
 
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"tron-tracker/config"
 )
 
-type Config struct {
-	Path  string `toml:"log_path"`
-	File  string `toml:"log_file"`
-	Level string `toml:"log_level"`
-}
-
-var rootConfig *Config
-
-func Init(config *Config) {
-	rootConfig = config
-
+func Init(cfg *config.LogConfig) {
 	Encoder := getEncoder()
-	WriteSyncer := getWriteSyncer()
-	LevelEnabler := getLevelEnabler()
+	WriteSyncer := getWriteSyncer(cfg.Path + "/" + cfg.File)
+	LevelEnabler := getLevelEnabler(cfg.Level)
 	newCore := zapcore.NewTee(
 		zapcore.NewCore(Encoder, WriteSyncer, LevelEnabler),
 	)
@@ -49,9 +41,9 @@ func getEncoder() zapcore.Encoder {
 		})
 }
 
-func getWriteSyncer() zapcore.WriteSyncer {
+func getWriteSyncer(filename string) zapcore.WriteSyncer {
 	lumberJackLogger := &lumberjack.Logger{
-		Filename:   rootConfig.Path + "/" + rootConfig.File,
+		Filename:   filename,
 		MaxSize:    200,
 		MaxBackups: 10,
 		MaxAge:     30,
@@ -59,8 +51,8 @@ func getWriteSyncer() zapcore.WriteSyncer {
 	return zapcore.AddSync(lumberJackLogger)
 }
 
-func getLevelEnabler() zapcore.Level {
-	switch rootConfig.Level {
+func getLevelEnabler(level string) zapcore.Level {
+	switch strings.ToLower(level) {
 	case "debug":
 		return zapcore.DebugLevel
 	case "info":

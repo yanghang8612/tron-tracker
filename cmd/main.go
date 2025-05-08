@@ -9,23 +9,28 @@ import (
 	"github.com/robfig/cron/v3"
 	"tron-tracker/api"
 	"tron-tracker/bot"
+	"tron-tracker/config"
 	"tron-tracker/database"
+	"tron-tracker/google"
 	"tron-tracker/log"
 	"tron-tracker/net"
+	"tron-tracker/tron"
 )
 
 func main() {
-	cfg := loadConfig()
+	cfg := config.LoadConfig()
 
 	net.Init(&cfg.Net)
 	log.Init(&cfg.Log)
 
 	db := database.New(&cfg.DB)
 
-	tracker := New(db)
+	updater := google.NewUpdater(db, &cfg.PPT)
+
+	tracker := tron.NewTracker(db)
 	tracker.Start()
 
-	apiSrv := api.New(db, &cfg.Server, &cfg.DeFi)
+	apiSrv := api.New(db, updater, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
 	tgBot := bot.New(cfg.BotToken, db)
@@ -53,7 +58,7 @@ func main() {
 	watchOSSignal(tracker, apiSrv)
 }
 
-func watchOSSignal(tracker *Tracker, apiSrv *api.Server) {
+func watchOSSignal(tracker *tron.Tracker, apiSrv *api.Server) {
 	c := make(chan os.Signal)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c

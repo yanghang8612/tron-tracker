@@ -8,15 +8,10 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
+	"tron-tracker/config"
 	"tron-tracker/database/models"
-	"tron-tracker/types"
+	"tron-tracker/tron/types"
 )
-
-type Config struct {
-	FullNode     string `toml:"full_node"`
-	SlackWebhook string `toml:"slack_webhook"`
-	CMCApiKey    string `toml:"cmc_api_key"`
-}
 
 type slackMessage struct {
 	Text string `json:"text"`
@@ -29,16 +24,16 @@ const (
 )
 
 var (
-	client = resty.New()
-	config *Config
+	client  = resty.New()
+	configs *config.NetConfig
 )
 
-func Init(cfg *Config) {
-	config = cfg
+func Init(cfg *config.NetConfig) {
+	configs = cfg
 }
 
 func ReportToSlack(msg string) {
-	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(config.SlackWebhook)
+	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.SlackWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return
@@ -48,21 +43,21 @@ func ReportToSlack(msg string) {
 }
 
 func GetNowBlock() (*types.Block, error) {
-	url := config.FullNode + GetNowBlockPath
+	url := configs.FullNode + GetNowBlockPath
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetBlockByHeight(height uint) (*types.Block, error) {
-	url := config.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
+	url := configs.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
 	_, err := client.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
-	url := config.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
+	url := configs.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
 	_, err := client.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err
@@ -81,7 +76,7 @@ func GetExchanges() *models.Exchanges {
 	}
 
 	for i := range exchanges.Val {
-		// exchangeList.Exchanges[i].Name = utils.TrimExchangeName(exchangeList.Exchanges[i].Name)
+		// exchangeList.Exchanges[i].Name = common.TrimExchangeName(exchangeList.Exchanges[i].Name)
 
 		if exchanges.Val[i].Name == "BtcTurk" {
 			exchanges.Val[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
@@ -162,7 +157,7 @@ type Coin struct {
 
 func GetTokenListings() (string, []*models.TokenListingStatistic, error) {
 	resp, err := client.R().
-		SetHeader("X-CMC_PRO_API_KEY", config.CMCApiKey).
+		SetHeader("X-CMC_PRO_API_KEY", configs.CMCApiKey).
 		Get("https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest?limit=1000")
 	if err != nil {
 		return "", nil, err
@@ -188,4 +183,23 @@ func GetTokenListings() (string, []*models.TokenListingStatistic, error) {
 	}
 
 	return string(resp.Body()), tokenListings, nil
+}
+
+func GetFees(startDate time.Time, days int) map[string]float64 {
+	resp, err := client.R().Get(fmt.Sprintf("%s/transfer_fees?start_date=%s&days=%d",
+		configs.FeeNode, startDate.Format("060102"), days))
+
+	if err != nil {
+		zap.S().Error(err)
+		return nil
+	}
+
+	var fees = make(map[string]float64)
+	err = json.Unmarshal(resp.Body(), &fees)
+	if err != nil {
+		zap.S().Error(err)
+		return nil
+	}
+
+	return fees
 }

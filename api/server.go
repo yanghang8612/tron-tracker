@@ -17,39 +17,29 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
+	"tron-tracker/common"
+	"tron-tracker/config"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
-	"tron-tracker/utils"
+	"tron-tracker/google"
 )
-
-type ServerConfig struct {
-	HttpPort int `toml:"http_port"`
-}
-
-type DeFiConfig struct {
-	SunSwapV1  []string `toml:"sunswap_v1"`
-	SunSwapV2  []string `toml:"sunswap_v2"`
-	SunSwapV3  []string `toml:"sunswap_v3"`
-	SunPump    []string `toml:"sunpump"`
-	JustLend   []string `toml:"justlend"`
-	BTTC       []string `toml:"bttc"`
-	USDTCasino []string `toml:"usdtcasino"`
-}
 
 type Server struct {
 	router *gin.Engine
 	srv    *http.Server
 
-	db           *database.RawDB
-	serverConfig *ServerConfig
-	defiConfig   *DeFiConfig
+	db        *database.RawDB
+	updater   *google.Updater
+	serverCfg *config.ServerConfig
+	defiCfg   *config.DeFiConfig
 
 	isRepairing bool
+	isUpdating  bool
 
 	logger *zap.SugaredLogger
 }
 
-func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig) *Server {
+func New(db *database.RawDB, updater *google.Updater, serverCfg *config.ServerConfig, defiCfg *config.DeFiConfig) *Server {
 	httpRouter := gin.Default()
 	httpRouter.Use(cors.Default())
 	httpsRouter := gin.Default()
@@ -58,13 +48,14 @@ func New(db *database.RawDB, serverConfig *ServerConfig, deficonfig *DeFiConfig)
 	return &Server{
 		router: httpRouter,
 		srv: &http.Server{
-			Addr:    ":" + strconv.Itoa(serverConfig.HttpPort),
+			Addr:    ":" + strconv.Itoa(serverCfg.HttpPort),
 			Handler: httpRouter,
 		},
 
-		db:           db,
-		serverConfig: serverConfig,
-		defiConfig:   deficonfig,
+		db:        db,
+		updater:   updater,
+		serverCfg: serverCfg,
+		defiCfg:   defiCfg,
 
 		logger: zap.S().Named("[api]"),
 	}
@@ -101,6 +92,7 @@ func (s *Server) Start() {
 	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 	s.router.GET("/token_listing_statistic", s.tokenListingStatistic)
 	s.router.GET("/volume_ppt_data", s.volumePPTData)
+	s.router.GET("/update_ppt_data", s.updatePPTData)
 
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
@@ -117,7 +109,7 @@ func (s *Server) Start() {
 		}
 	}()
 
-	s.logger.Infof("API server started at %d", s.serverConfig.HttpPort)
+	s.logger.Infof("API server started at %d", s.serverCfg.HttpPort)
 }
 
 func (s *Server) Stop() {
@@ -156,37 +148,18 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 		return
 	}
 
-	resultMap := make(map[string]*models.ExchangeStatistic)
+	esMap := s.db.GetExchangeStatisticsByDateDays(startDate, days)
 	totalEnergy, totalFee, totalEnergyUsage := int64(0), int64(0), int64(0)
-	dateRangeStr := startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
-	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(queryDate) {
-			totalEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
-			totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
-			totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage + es.WithdrawEnergyUsage
-
-			// TODO: Remove this when all exchanges are normalized
-			if es.Name == "bybit" {
-				es.Name = "Bybit"
-			}
-
-			if strings.Contains(strings.ToUpper(es.Name), "OKX") {
-				es.Name = "Okex"
-			}
-
-			if _, ok := resultMap[es.Name]; !ok {
-				resultMap[es.Name] = models.NewExchangeStatistic(dateRangeStr, es.Name, "")
-			}
-			resultMap[es.Name].Merge(es)
-		}
-	}
-
 	resultArray := make([]*models.ExchangeStatistic, 0)
-	for _, es := range resultMap {
+	for _, es := range esMap {
+		totalEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
+		totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
+		totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage
+
 		es.ClearAmountFields()
 		resultArray = append(resultArray, es)
 	}
+
 	sort.Slice(resultArray, func(i, j int) bool {
 		return resultArray[i].TotalFee > resultArray[j].TotalFee
 	})
@@ -311,7 +284,7 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 	weeklyStats := make([]map[string]map[string]*models.ExchangeStatistic, 0)
 	for i := 0; i < weeks; i++ {
 		weekStartDate := startDate.AddDate(0, 0, i*7)
-		weeklyStat := s.db.GetExchangeTokenStatisticsByDateAndDays(weekStartDate, 7)
+		weeklyStat := s.db.GetExchangeTokenStatisticsByDateDays(weekStartDate, 7)
 		weeklyStats = append(weeklyStats, weeklyStat)
 	}
 
@@ -357,7 +330,7 @@ func (s *Server) exchangesTokenDailyStatistic(c *gin.Context) {
 		return
 	}
 
-	etsMap := s.db.GetExchangeTokenStatisticsByDateAndDays(startDate, 1)
+	etsMap := s.db.GetExchangeTokenStatisticsByDateDays(startDate, 1)
 
 	token, ok := c.GetQuery("token")
 
@@ -382,7 +355,7 @@ func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
 		return
 	}
 
-	etsMap := s.db.GetExchangeTokenStatisticsByDateAndDays(startDate, 7)
+	etsMap := s.db.GetExchangeTokenStatisticsByDateDays(startDate, 7)
 
 	resultMap := make(map[string]map[string][]*ExchangeTokenStatisticInResult)
 	for exchange, ets := range etsMap {
@@ -425,13 +398,13 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 	}
 
 	for _, res := range chargeResults {
-		res.FeePercent = utils.FormatOfPercent(chargeFee, res.Fee)
-		res.TxCountPercent = utils.FormatOfPercent(chargeCount, res.TxCount)
+		res.FeePercent = common.FormatOfPercent(chargeFee, res.Fee)
+		res.TxCountPercent = common.FormatOfPercent(chargeCount, res.TxCount)
 	}
 
 	for _, res := range withdrawResults {
-		res.FeePercent = utils.FormatOfPercent(withdrawFee, res.Fee)
-		res.TxCountPercent = utils.FormatOfPercent(withdrawCount, res.TxCount)
+		res.FeePercent = common.FormatOfPercent(withdrawFee, res.Fee)
+		res.TxCountPercent = common.FormatOfPercent(withdrawCount, res.TxCount)
 	}
 
 	sort.Slice(chargeResults, func(i, j int) bool {
@@ -459,7 +432,7 @@ func (s *Server) specialStatistic(c *gin.Context) {
 		return
 	}
 
-	chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatisticByDateAndAddr(date.Format("060102"), addr)
+	chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatisticByDateAddr(date.Format("060102"), addr)
 	c.JSON(200, gin.H{
 		"charge_fee":     chargeFee,
 		"withdraw_fee":   withdrawFee,
@@ -474,55 +447,47 @@ func (s *Server) totalStatistics(c *gin.Context) {
 		return
 	}
 
-	currentTotalStatistic := models.NewUserStatistic("")
-	for i := 0; i < days; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		currentTotalStatistic.Merge(dayStatistic)
-	}
+	curTotalStatistic := s.db.GetTotalStatisticsByDateDays(startDate, days)
 
 	currentPhishingStatistic := &models.PhishingStatistic{}
 	for i := 0; i < days; i++ {
 		dayPhishingStatistic := s.db.GetPhishingStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		currentPhishingStatistic.Merge(&dayPhishingStatistic)
+		currentPhishingStatistic.Merge(dayPhishingStatistic)
 	}
 	currentPhishingStatistic.Date = ""
 
 	withComment := c.DefaultQuery("comment", "false")
 	if withComment == "false" {
 		c.JSON(200, gin.H{
-			"total_statistic": currentTotalStatistic,
+			"total_statistic": curTotalStatistic,
 			// "phishing_statistic": currentPhishingStatistic,
 		})
 		return
 	}
 
-	startDate = startDate.AddDate(0, 0, -days)
-	lastTotalStatistic := models.NewUserStatistic("")
-	for i := 0; i < days; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		lastTotalStatistic.Merge(dayStatistic)
-	}
+	lastStartDate := startDate.AddDate(0, 0, -days)
+	lastTotalStatistic := s.db.GetTotalStatisticsByDateDays(lastStartDate, days)
 
 	comment := strings.Builder{}
 	comment.WriteString(fmt.Sprintf(
 		"上周TRX转账: %s笔(%s), 相比上上周 %s笔\n上周低价值TRX转账: %s笔(%s), 相比上上周 %s笔\n\n",
-		humanize.Comma(currentTotalStatistic.TRXTotal),
-		utils.FormatChangePercent(lastTotalStatistic.TRXTotal, currentTotalStatistic.TRXTotal),
-		humanize.Comma(currentTotalStatistic.TRXTotal-lastTotalStatistic.TRXTotal),
-		humanize.Comma(currentTotalStatistic.SmallTRXTotal),
-		utils.FormatChangePercent(lastTotalStatistic.SmallTRXTotal, currentTotalStatistic.SmallTRXTotal),
-		humanize.Comma(currentTotalStatistic.SmallTRXTotal-lastTotalStatistic.SmallTRXTotal)))
+		humanize.Comma(curTotalStatistic.TRXTotal),
+		common.FormatChangePercent(lastTotalStatistic.TRXTotal, curTotalStatistic.TRXTotal),
+		humanize.Comma(curTotalStatistic.TRXTotal-lastTotalStatistic.TRXTotal),
+		humanize.Comma(curTotalStatistic.SmallTRXTotal),
+		common.FormatChangePercent(lastTotalStatistic.SmallTRXTotal, curTotalStatistic.SmallTRXTotal),
+		humanize.Comma(curTotalStatistic.SmallTRXTotal-lastTotalStatistic.SmallTRXTotal)))
 	comment.WriteString(fmt.Sprintf(
 		"上周USDT转账: %s笔(%s), 相比上上周 %s笔\n上周低价值USDT转账: %s笔(%s), 相比上上周 %s笔",
-		humanize.Comma(currentTotalStatistic.USDTTotal),
-		utils.FormatChangePercent(lastTotalStatistic.USDTTotal, currentTotalStatistic.USDTTotal),
-		humanize.Comma(currentTotalStatistic.USDTTotal-lastTotalStatistic.USDTTotal),
-		humanize.Comma(currentTotalStatistic.SmallUSDTTotal),
-		utils.FormatChangePercent(lastTotalStatistic.SmallUSDTTotal, currentTotalStatistic.SmallUSDTTotal),
-		humanize.Comma(currentTotalStatistic.SmallUSDTTotal-lastTotalStatistic.SmallUSDTTotal)))
+		humanize.Comma(curTotalStatistic.USDTTotal),
+		common.FormatChangePercent(lastTotalStatistic.USDTTotal, curTotalStatistic.USDTTotal),
+		humanize.Comma(curTotalStatistic.USDTTotal-lastTotalStatistic.USDTTotal),
+		humanize.Comma(curTotalStatistic.SmallUSDTTotal),
+		common.FormatChangePercent(lastTotalStatistic.SmallUSDTTotal, curTotalStatistic.SmallUSDTTotal),
+		humanize.Comma(curTotalStatistic.SmallUSDTTotal-lastTotalStatistic.SmallUSDTTotal)))
 
 	c.JSON(200, gin.H{
-		"total_statistic": currentTotalStatistic,
+		"total_statistic": curTotalStatistic,
 		// "phishing_statistic": currentPhishingStatistic,
 		"comment": comment.String(),
 	})
@@ -600,7 +565,7 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 		result[name] = &JsonStat{
 			Name:               name,
 			FeePerDay:          fee / 7_000_000,
-			ChangeFromLastWeek: utils.FormatChangePercent(lastWeekStats[name], fee),
+			ChangeFromLastWeek: common.FormatChangePercent(lastWeekStats[name], fee),
 		}
 	}
 
@@ -618,14 +583,11 @@ func (s *Server) exchangesWeeklyStatistic(c *gin.Context) {
 
 func (s *Server) getOneWeekExchangeStatistics(startDate time.Time) map[string]int64 {
 	resultMap := make(map[string]int64)
-	for i := 0; i < 7; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(queryDate) {
-			resultMap[es.Name] += es.TotalFee
-			resultMap["total_fee"] += es.TotalFee
-		}
+	esMap := s.db.GetExchangeStatisticsByDateDays(startDate, 7)
+	for _, es := range esMap {
+		resultMap[es.Name] += es.TotalFee
+		resultMap["total_fee"] += es.TotalFee
 	}
-
 	return resultMap
 }
 
@@ -635,47 +597,30 @@ func (s *Server) tronWeeklyStatistics(c *gin.Context) {
 		return
 	}
 
-	curWeekTotalStatistic := models.NewUserStatistic("")
-	for i := 0; i < 7; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		curWeekTotalStatistic.Merge(dayStatistic)
-	}
+	curWeekTotalStatistic := s.db.GetTotalStatisticsByDateDays(startDate, 7)
+	curWeekUSDTStatistic := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, "USDT")
 
-	curWeekUSDTStatistic := &models.TokenStatistic{}
-	for i := 0; i < 7; i++ {
-		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
-		curWeekUSDTStatistic.Merge(dayStatistic)
-	}
-
-	lastWeekTotalStatistic := models.NewUserStatistic("")
-	for i := 1; i <= 7; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, -i).Format("060102"))
-		lastWeekTotalStatistic.Merge(dayStatistic)
-	}
-
-	lastWeekUSDTStatistic := &models.TokenStatistic{}
-	for i := 1; i <= 7; i++ {
-		dayStatistic := s.db.GetTokenStatisticsByDateAndToken(startDate.AddDate(0, 0, -i).Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
-		lastWeekUSDTStatistic.Merge(dayStatistic)
-	}
+	lastWeekStartDate := startDate.AddDate(0, 0, -7)
+	lastWeekTotalStatistic := s.db.GetTotalStatisticsByDateDays(lastWeekStartDate, 7)
+	lastWeekUSDTStatistic := s.db.GetTokenStatisticsByDateDaysToken(lastWeekStartDate, 7, "USDT")
 
 	c.JSON(200, gin.H{
 		"fee":                humanize.Comma(curWeekTotalStatistic.Fee / 7_000_000),
-		"fee_change":         utils.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
+		"fee_change":         common.FormatChangePercent(lastWeekTotalStatistic.Fee, curWeekTotalStatistic.Fee),
 		"usdt_fee":           humanize.Comma(curWeekUSDTStatistic.Fee / 7_000_000),
-		"usdt_fee_change":    utils.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
+		"usdt_fee_change":    common.FormatChangePercent(lastWeekUSDTStatistic.Fee, curWeekUSDTStatistic.Fee),
 		"tx_total":           humanize.Comma(curWeekTotalStatistic.TxTotal / 7),
-		"tx_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.TxTotal, curWeekTotalStatistic.TxTotal),
+		"tx_total_change":    common.FormatChangePercent(lastWeekTotalStatistic.TxTotal, curWeekTotalStatistic.TxTotal),
 		"trx_total":          humanize.Comma(curWeekTotalStatistic.TRXTotal / 7),
-		"trx_total_change":   utils.FormatChangePercent(lastWeekTotalStatistic.TRXTotal, curWeekTotalStatistic.TRXTotal),
+		"trx_total_change":   common.FormatChangePercent(lastWeekTotalStatistic.TRXTotal, curWeekTotalStatistic.TRXTotal),
 		"trc10_total":        humanize.Comma(curWeekTotalStatistic.TRC10Total / 7),
-		"trc10_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.TRC10Total, curWeekTotalStatistic.TRC10Total),
+		"trc10_total_change": common.FormatChangePercent(lastWeekTotalStatistic.TRC10Total, curWeekTotalStatistic.TRC10Total),
 		"sc_total":           humanize.Comma(curWeekTotalStatistic.SCTotal / 7),
-		"sc_total_change":    utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal, curWeekTotalStatistic.SCTotal),
+		"sc_total_change":    common.FormatChangePercent(lastWeekTotalStatistic.SCTotal, curWeekTotalStatistic.SCTotal),
 		"usdt_total":         humanize.Comma(curWeekTotalStatistic.USDTTotal / 7),
-		"usdt_total_change":  utils.FormatChangePercent(lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.USDTTotal),
+		"usdt_total_change":  common.FormatChangePercent(lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.USDTTotal),
 		"other_total":        humanize.Comma((curWeekTotalStatistic.SCTotal - curWeekTotalStatistic.USDTTotal) / 7),
-		"other_total_change": utils.FormatChangePercent(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal),
+		"other_total_change": common.FormatChangePercent(lastWeekTotalStatistic.SCTotal-lastWeekTotalStatistic.USDTTotal, curWeekTotalStatistic.SCTotal-curWeekTotalStatistic.USDTTotal),
 	})
 }
 
@@ -685,21 +630,17 @@ func (s *Server) revenueWeeklyStatistics(c *gin.Context) {
 		return
 	}
 
-	curWeekStats := s.getOneWeekRevenueStatistics(startDate)
-	totalWeekStats := models.NewUserStatistic("")
-	for i := 0; i < 7; i++ {
-		dayStatistic := s.db.GetTotalStatisticsByDate(startDate.AddDate(0, 0, i).Format("060102"))
-		totalWeekStats.Merge(dayStatistic)
-	}
-	lastWeekStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
+	curWeekRevenueStats := s.getOneWeekRevenueStatistics(startDate)
+	curWeekTotalStats := s.db.GetTotalStatisticsByDateDays(startDate, 7)
+	lastWeekRevenueStats := s.getOneWeekRevenueStatistics(startDate.AddDate(0, 0, -7))
 
 	result := make(map[string]any)
-	for k, v := range curWeekStats {
+	for k, v := range curWeekRevenueStats {
 		if strings.Contains(k, "fee") {
-			result[k] = fmt.Sprintf("%s TRX (%s)", humanize.Comma(v), utils.FormatChangePercent(lastWeekStats[k], v))
-			result[k+"_of_total"] = utils.FormatOfPercent(totalWeekStats.Fee/7_000_000, v)
+			result[k] = fmt.Sprintf("%s TRX (%s)", humanize.Comma(v), common.FormatChangePercent(lastWeekRevenueStats[k], v))
+			result[k+"_of_total"] = common.FormatOfPercent(curWeekTotalStats.Fee/7_000_000, v)
 		} else {
-			result[k] = fmt.Sprintf("%s (%s)", humanize.Comma(v), utils.FormatChangePercent(lastWeekStats[k], v))
+			result[k] = fmt.Sprintf("%s (%s)", humanize.Comma(v), common.FormatChangePercent(lastWeekRevenueStats[k], v))
 		}
 	}
 
@@ -727,59 +668,57 @@ func (s *Server) getOneWeekRevenueStatistics(startDate time.Time) map[string]int
 		usdtcasinoFee    int64
 		usdtcasinoEnergy int64
 	)
-	for i := 0; i < 7; i++ {
-		date := startDate.AddDate(0, 0, i).Format("060102")
 
-		totalFee += s.db.GetTotalStatisticsByDate(date).Fee
-		totalEnergy += s.db.GetTotalStatisticsByDate(date).EnergyTotal
+	totalStats := s.db.GetTotalStatisticsByDateDays(startDate, 7)
+	totalFee = totalStats.Fee
+	totalEnergy = totalStats.EnergyTotal
 
-		for _, es := range s.db.GetExchangeTotalStatisticsByDate(startDate.AddDate(0, 0, i)) {
-			fee := es.ChargeFee + es.CollectFee + es.WithdrawFee
-			exchangeFee += fee
-			exchangeEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
-		}
+	esMap := s.db.GetExchangeStatisticsByDateDays(startDate, 7)
+	for _, es := range esMap {
+		exchangeFee += es.TotalFee
+		exchangeEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.SunSwapV1 {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			sunswapV1Fee += tokenStats.Fee
-			sunswapV1Energy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.SunSwapV1 {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		sunswapV1Fee += tokenStats.Fee
+		sunswapV1Energy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.SunSwapV2 {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			sunswapV2Fee += tokenStats.Fee
-			sunswapV2Energy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.SunSwapV2 {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		sunswapV2Fee += tokenStats.Fee
+		sunswapV2Energy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.SunSwapV3 {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			sunswapV3Fee += tokenStats.Fee
-			sunswapV3Energy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.SunSwapV3 {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		sunswapV3Fee += tokenStats.Fee
+		sunswapV3Energy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.SunPump {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			sunpumpFee += tokenStats.Fee
-			sunpumpEnergy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.SunPump {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		sunpumpFee += tokenStats.Fee
+		sunpumpEnergy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.JustLend {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			justlendFee += tokenStats.Fee
-			justlendEnergy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.JustLend {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		justlendFee += tokenStats.Fee
+		justlendEnergy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.BTTC {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			bttcFee += tokenStats.Fee
-			bttcEnergy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.BTTC {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		bttcFee += tokenStats.Fee
+		bttcEnergy += tokenStats.EnergyTotal
+	}
 
-		for _, addr := range s.defiConfig.USDTCasino {
-			tokenStats := s.db.GetTokenStatisticsByDateAndToken(date, addr)
-			usdtcasinoFee += tokenStats.Fee
-			usdtcasinoEnergy += tokenStats.EnergyTotal
-		}
+	for _, addr := range s.defiCfg.USDTCasino {
+		tokenStats := s.db.GetTokenStatisticsByDateDaysToken(startDate, 7, addr)
+		usdtcasinoFee += tokenStats.Fee
+		usdtcasinoEnergy += tokenStats.EnergyTotal
 	}
 
 	return map[string]int64{
@@ -829,20 +768,20 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
 			trxPrice := s.db.GetTRXPriceByDate(queryDate.AddDate(0, 0, 1))
-			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
-			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+			totalStats := s.db.GetTotalStatisticsByDateDays(queryDate, 1)
+			usdtStats := s.db.GetTokenStatisticsByDateDaysToken(queryDate, 1, "USDT")
 
 			result = append(result, ResEntity{
 				Date:             queryDate.Format("2006-01-02"),
 				TrxPrice:         trxPrice,
-				TotalEnergyFee:   totalStat.EnergyFee,
-				TotalNetFee:      totalStat.NetFee,
-				TotalEnergyUsage: totalStat.EnergyUsage + totalStat.EnergyOriginUsage,
-				TotalNetUsage:    totalStat.NetUsage,
-				UsdtEnergyFee:    usdtStat.EnergyFee,
-				UsdtNetFee:       usdtStat.NetFee,
-				UsdtEnergyUsage:  usdtStat.EnergyUsage + usdtStat.EnergyOriginUsage,
-				UsdtNetUsage:     usdtStat.NetUsage,
+				TotalEnergyFee:   totalStats.EnergyFee,
+				TotalNetFee:      totalStats.NetFee,
+				TotalEnergyUsage: totalStats.EnergyUsage + totalStats.EnergyOriginUsage,
+				TotalNetUsage:    totalStats.NetUsage,
+				UsdtEnergyFee:    usdtStats.EnergyFee,
+				UsdtNetFee:       usdtStats.NetFee,
+				UsdtEnergyUsage:  usdtStats.EnergyUsage + usdtStats.EnergyOriginUsage,
+				UsdtNetUsage:     usdtStats.NetUsage,
 			})
 		}
 
@@ -852,12 +791,12 @@ func (s *Server) revenuePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
 			trxPrice := s.db.GetTRXPriceByDate(queryDate.AddDate(0, 0, 1))
-			totalStat := s.db.GetTotalStatisticsByDate(queryDate.Format("060102"))
-			usdtStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+			totalStats := s.db.GetTotalStatisticsByDateDays(queryDate, 1)
+			usdtStats := s.db.GetTokenStatisticsByDateDaysToken(queryDate, 1, "USDT")
 
 			result.WriteString(fmt.Sprintf("%s %f %d %d %d %d %d %d %d %d\n", queryDate.Format("2006-01-02"), trxPrice,
-				totalStat.EnergyFee, totalStat.NetFee, totalStat.EnergyUsage+totalStat.EnergyOriginUsage, totalStat.NetUsage,
-				usdtStat.EnergyFee, usdtStat.NetFee, usdtStat.EnergyUsage+usdtStat.EnergyOriginUsage, usdtStat.NetUsage))
+				totalStats.EnergyFee, totalStats.NetFee, totalStats.EnergyUsage+totalStats.EnergyOriginUsage, totalStats.NetUsage,
+				usdtStats.EnergyFee, usdtStats.NetFee, usdtStats.EnergyUsage+usdtStats.EnergyOriginUsage, usdtStats.NetUsage))
 		}
 
 		c.String(200, result.String())
@@ -876,8 +815,8 @@ func (s *Server) trxStatistics(c *gin.Context) {
 		return
 	}
 
-	curWeekStats := s.db.GetFromStatisticByDateAndDays(startDate, days)
-	lastWeekStats := s.db.GetFromStatisticByDateAndDays(startDate.AddDate(0, 0, -7), days)
+	curWeekStats := s.db.GetFromStatisticByDateDays(startDate, days)
+	lastWeekStats := s.db.GetFromStatisticByDateDays(startDate.AddDate(0, 0, -7), days)
 
 	changedStats := make([]*models.UserStatistic, 0)
 
@@ -940,7 +879,7 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
-	usdtStatsMap := s.db.GetUserTokenStatisticsByDateAndDaysAndToken(startDate, days, "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t")
+	usdtStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, "USDT")
 
 	filterExchange := c.DefaultQuery("filter_exchange", "false")
 
@@ -957,15 +896,15 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 	var topNFrom []*models.UserTokenStatistic
 	switch orderBy {
 	case "fee":
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNFrom = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.FromFee > b.FromFee
 		})
 	case "tx":
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNFrom = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.FromTXCount > b.FromTXCount
 		})
 	case "energy":
-		topNFrom = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNFrom = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.FromEnergyTotal > b.FromEnergyTotal
 		})
 	default:
@@ -979,15 +918,15 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 	var topNTo []*models.UserTokenStatistic
 	switch orderBy {
 	case "fee":
-		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToFee > b.ToFee
 		})
 	case "tx":
-		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToTXCount > b.ToTXCount
 		})
 	default:
-		topNTo = utils.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
+		topNTo = common.TopN(usdtStats, n, func(a, b *models.UserTokenStatistic) bool {
 			return a.ToEnergyTotal > b.ToEnergyTotal
 		})
 	}
@@ -1004,7 +943,7 @@ func (s *Server) usdtStorageStatistics(c *gin.Context) {
 		return
 	}
 
-	curStats := s.db.GetUSDTStorageStatisticsByDateAndDays(startDate, days)
+	curStats := s.db.GetUSDTStorageStatisticsByDateDays(startDate, days)
 
 	withComment := c.DefaultQuery("comment", "false")
 	if withComment == "false" {
@@ -1012,47 +951,9 @@ func (s *Server) usdtStorageStatistics(c *gin.Context) {
 		return
 	}
 
-	lastStats := s.db.GetUSDTStorageStatisticsByDateAndDays(startDate.AddDate(0, 0, -7), days)
+	lastStats := s.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), days)
 
-	comment := strings.Builder{}
-	comment.WriteString(fmt.Sprintf("SetStorage:\n"+
-		"Average Fee Per Tx: %.2f TRX (%s)\n"+
-		"Daily transactions: %s (%s)\n"+
-		"Daily total energy: %s (%s)\n"+
-		"Daily energy with staking: %s (%s)\n"+
-		"Daily energy fee: %s TRX (%s)\n"+
-		"Burn energy: %.2f%%\n"+
-		"ResetStorage:\n"+
-		"Average Fee Per Tx: %.2f TRX (%s)\n"+
-		"Daily transactions: %s (%s)\n"+
-		"Daily total energy: %s (%s)\n"+
-		"Daily energy with staking: %s (%s)\n"+
-		"Daily energy fee: %s TRX (%s)\n"+
-		"Burn energy: %.2f%%",
-		float64(curStats.SetEnergyFee)/float64(curStats.SetTxCount)/1e6,
-		utils.FormatChangePercent(int64(lastStats.SetEnergyFee/uint64(lastStats.SetTxCount)), int64(curStats.SetEnergyFee/uint64(curStats.SetTxCount))),
-		humanize.Comma(int64(curStats.SetTxCount/7)),
-		utils.FormatChangePercent(int64(lastStats.SetTxCount), int64(curStats.SetTxCount)),
-		humanize.Comma(int64(curStats.SetEnergyTotal/7)),
-		utils.FormatChangePercent(int64(lastStats.SetEnergyTotal), int64(curStats.SetEnergyTotal)),
-		humanize.Comma(int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/7),
-		utils.FormatChangePercent(int64(lastStats.SetEnergyUsage+lastStats.SetEnergyOriginUsage), int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)),
-		humanize.Comma(int64(curStats.SetEnergyFee/7_000_000)),
-		utils.FormatChangePercent(int64(lastStats.SetEnergyFee), int64(curStats.SetEnergyFee)),
-		100.0-float64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/float64(curStats.SetEnergyTotal)*100,
-		float64(curStats.ResetEnergyFee)/float64(curStats.ResetTxCount)/1e6,
-		utils.FormatChangePercent(int64(lastStats.ResetEnergyFee/uint64(lastStats.ResetTxCount)), int64(curStats.ResetEnergyFee/uint64(curStats.ResetTxCount))),
-		humanize.Comma(int64(curStats.ResetTxCount/7)),
-		utils.FormatChangePercent(int64(lastStats.ResetTxCount), int64(curStats.ResetTxCount)),
-		humanize.Comma(int64(curStats.ResetEnergyTotal/7)),
-		utils.FormatChangePercent(int64(lastStats.ResetEnergyTotal), int64(curStats.ResetEnergyTotal)),
-		humanize.Comma(int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/7),
-		utils.FormatChangePercent(int64(lastStats.ResetEnergyUsage+lastStats.ResetEnergyOriginUsage), int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)),
-		humanize.Comma(int64(curStats.ResetEnergyFee/7_000_000)),
-		utils.FormatChangePercent(int64(lastStats.ResetEnergyFee), int64(curStats.ResetEnergyFee)),
-		100.0-float64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/float64(curStats.ResetEnergyTotal)*100))
-
-	c.String(200, comment.String())
+	c.String(200, common.FormatStorageDiffReport(curStats, lastStats))
 }
 
 func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
@@ -1090,7 +991,7 @@ func (s *Server) userStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, s.db.GetFromStatisticByDateAndUserAndDays(startDate, user, days))
+	c.JSON(200, s.db.GetFromStatisticByDateUserDays(startDate, user, days))
 }
 
 func (s *Server) userTokenStatistics(c *gin.Context) {
@@ -1117,7 +1018,7 @@ func (s *Server) userTokenStatistics(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, s.db.GetUserTokenStatisticsByDateAndDaysAndUserAndToken(startDate, days, user, token))
+	c.JSON(200, s.db.GetUserTokenStatisticsByDateDaysUserToken(startDate, days, user, token))
 }
 
 func (s *Server) topUsers(c *gin.Context) {
@@ -1133,7 +1034,7 @@ func (s *Server) topUsers(c *gin.Context) {
 
 	orderBy := c.DefaultQuery("order_by", "fee")
 
-	fromStatsMap := s.db.GetTopNFromStatisticByDateAndDays(startDate, days, n, orderBy)
+	fromStatsMap := s.db.GetTopNFromStatisticByDateDays(startDate, days, n, orderBy)
 
 	fromStats := make([]*models.UserStatistic, 0)
 
@@ -1193,14 +1094,7 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 
 	token, ok := c.GetQuery("token")
 	if ok {
-		result := &models.TokenStatistic{}
-		for i := 0; i < days; i++ {
-			queryDate := startDate.AddDate(0, 0, i)
-			dayStat := s.db.GetTokenStatisticsByDateAndToken(queryDate.Format("060102"), token)
-			result.Merge(dayStat)
-		}
-
-		c.JSON(200, result)
+		c.JSON(200, s.db.GetTokenStatisticsByDateDaysToken(startDate, days, token))
 		return
 	}
 
@@ -1214,12 +1108,12 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		NonUSDTStat = &models.TokenStatistic{Address: "Other Contract"}
 		resultArray = make([]*models.TokenStatistic, 0)
 	)
-	for _, ts := range s.db.GetTokenStatisticsByDateAndDays(startDate, days) {
+	for _, ts := range s.db.GetTokenStatisticsByDateDays(startDate, days) {
 		switch len(ts.Address) {
 		case 7:
 			TRC10Stat.Merge(ts)
 		case 34:
-			if ts.Address != "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" {
+			if ts.Address != s.db.GetTokenAddress("USDT") {
 				NonUSDTStat.Merge(ts)
 			}
 		}
@@ -1302,14 +1196,10 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	curMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(startDate, days, token, true)
-	lastStartDate := startDate.AddDate(0, 0, -days)
-	lastMarketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(lastStartDate, days, token, true)
+	_, groupByExchange := c.GetQuery("group_by")
 
-	if _, ok = c.GetQuery("group_by"); ok {
-		curMarketPairStats = s.dealWithGroupByTag(curMarketPairStats)
-		lastMarketPairStats = s.dealWithGroupByTag(lastMarketPairStats)
-	}
+	curMarketPairStats := s.db.GetMarketPairStatistics(startDate, days, token, true, groupByExchange)
+	lastMarketPairStats := s.db.GetMarketPairStatistics(startDate.AddDate(0, 0, -days), days, token, true, groupByExchange)
 
 	type JsonStat struct {
 		ID                        float64 `json:"-"`
@@ -1338,13 +1228,13 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		}
 
 		if lastStat, ok := lastMarketPairStats[key]; ok {
-			jsonStat.VolumeChange = utils.FormatChangePercent(int64(lastStat.Volume), int64(curStat.Volume))
-			jsonStat.PercentChange = utils.FormatPercentWithSign((curStat.Percent - lastStat.Percent) * 100)
-			jsonStat.DepthUsdPositiveTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdPositiveTwo), int64(curStat.DepthUsdPositiveTwo))
-			jsonStat.DepthUsdNegativeTwoChange = utils.FormatChangePercent(int64(lastStat.DepthUsdNegativeTwo), int64(curStat.DepthUsdNegativeTwo))
+			jsonStat.VolumeChange = common.FormatChangePercent(int64(lastStat.Volume), int64(curStat.Volume))
+			jsonStat.PercentChange = common.FormatPercentWithSign((curStat.Percent - lastStat.Percent) * 100)
+			jsonStat.DepthUsdPositiveTwoChange = common.FormatChangePercent(int64(lastStat.DepthUsdPositiveTwo), int64(curStat.DepthUsdPositiveTwo))
+			jsonStat.DepthUsdNegativeTwoChange = common.FormatChangePercent(int64(lastStat.DepthUsdNegativeTwo), int64(curStat.DepthUsdNegativeTwo))
 		} else {
 			jsonStat.VolumeChange = "+∞%"
-			jsonStat.PercentChange = utils.FormatPercentWithSign(curStat.Percent * 100)
+			jsonStat.PercentChange = common.FormatPercentWithSign(curStat.Percent * 100)
 			jsonStat.DepthUsdPositiveTwoChange = "+∞%"
 			jsonStat.DepthUsdNegativeTwoChange = "+∞%"
 		}
@@ -1361,7 +1251,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 				Volume:              "0",
 				VolumeChange:        "-100%",
 				Percent:             "0%",
-				PercentChange:       utils.FormatPercentWithSign(-lastStat.Percent * 100),
+				PercentChange:       common.FormatPercentWithSign(-lastStat.Percent * 100),
 				DepthUsdPositiveTwo: "-100%",
 				DepthUsdNegativeTwo: "-100%",
 			}
@@ -1404,25 +1294,6 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 	}
 }
 
-func (s *Server) dealWithGroupByTag(stats map[string]*models.MarketPairStatistic) map[string]*models.MarketPairStatistic {
-	result := make(map[string]*models.MarketPairStatistic)
-
-	for _, stat := range stats {
-		if _, ok := result[stat.ExchangeName]; !ok {
-			result[stat.ExchangeName] = stat
-			result[stat.ExchangeName].Reputation = 0
-			result[stat.ExchangeName].Pair = ""
-		} else {
-			result[stat.ExchangeName].Volume += stat.Volume
-			result[stat.ExchangeName].Percent += stat.Percent
-			result[stat.ExchangeName].DepthUsdPositiveTwo += stat.DepthUsdPositiveTwo
-			result[stat.ExchangeName].DepthUsdNegativeTwo += stat.DepthUsdNegativeTwo
-		}
-	}
-
-	return result
-}
-
 func (s *Server) marketPairVolumes(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
@@ -1431,7 +1302,7 @@ func (s *Server) marketPairVolumes(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, days, token)
+	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateDaysToken(startDate, days, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
 	for _, mps := range marketPairDailyVolumes {
@@ -1453,7 +1324,7 @@ func (s *Server) marketPairWeeklyVolumes(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateAndDaysAndToken(startDate, 7, token)
+	marketPairDailyVolumes := s.db.GetMarketPairDailyVolumesByDateDaysToken(startDate, 7, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
 	for _, mps := range marketPairDailyVolumes {
@@ -1475,7 +1346,7 @@ func (s *Server) marketPairWeeklyDepths(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	marketPairAverageDepths := s.db.GetMarketPairAverageDepthsByDateAndDaysAndToken(startDate, 7, token)
+	marketPairAverageDepths := s.db.GetMarketPairAverageDepthsByDateDaysToken(startDate, 7, token)
 
 	result := make([]*models.MarketPairStatistic, 0)
 	for _, mps := range marketPairAverageDepths {
@@ -1504,8 +1375,8 @@ func (s *Server) tokenListingStatistic(c *gin.Context) {
 
 	result := StatEntity{
 		TokenListingStatistic: *curWeekStat,
-		PriceChange7Days:      utils.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price),
-		MarketCapChange7Days:  utils.FormatFloatChangePercent(lastWeekStat.MarketCap, curWeekStat.MarketCap),
+		PriceChange7Days:      common.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price),
+		MarketCapChange7Days:  common.FormatFloatChangePercent(lastWeekStat.MarketCap, curWeekStat.MarketCap),
 	}
 
 	c.JSON(200, result)
@@ -1539,8 +1410,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
 			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
-			marketPairStats = s.dealWithGroupByTag(marketPairStats)
+			marketPairStats := s.db.GetMarketPairStatistics(queryDate, 1, token, false, true)
 
 			entity := ResEntity{
 				Date:    curDate.Format("2006-01-02"),
@@ -1569,8 +1439,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
 			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMarketPairStatisticsByDateAndDaysAndToken(queryDate, 1, token, false)
-			marketPairStats = s.dealWithGroupByTag(marketPairStats)
+			marketPairStats := s.db.GetMarketPairStatistics(queryDate, 1, token, false, true)
 
 			result.WriteString(curDate.Format("2006-01-02") + " ")
 			for _, exchange := range exchanges {
@@ -1590,6 +1459,29 @@ func (s *Server) volumePPTData(c *gin.Context) {
 
 		c.String(200, result.String())
 	}
+}
+
+func (s *Server) updatePPTData(c *gin.Context) {
+	date, ok := getDateParam(c, "date", today())
+	if !ok {
+		return
+	}
+
+	if s.isUpdating {
+		c.JSON(500, gin.H{
+			"code":  500,
+			"error": "updating in progress",
+		})
+		return
+	}
+
+	s.isUpdating = true
+	go func() {
+		s.updater.Update(date)
+		s.isUpdating = false
+	}()
+
+	c.JSON(200, "ok")
 }
 
 // Helper function to convert size string to bytes
@@ -1680,7 +1572,7 @@ func (s *Server) txAnalyze(c *gin.Context) {
 		return
 	}
 
-	results := s.db.GetTxsByDateAndDaysAndContractAndResult(startDate, days, contract, result)
+	results := s.db.GetTxsByDateDaysContractResult(startDate, days, contract, result)
 
 	type Transaction struct {
 		Height   uint   `json:"height"`

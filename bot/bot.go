@@ -10,10 +10,10 @@ import (
 	"github.com/dustin/go-humanize"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"go.uber.org/zap"
+	"tron-tracker/common"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
-	"tron-tracker/utils"
 )
 
 type TelegramBot struct {
@@ -114,7 +114,7 @@ func (tb *TelegramBot) Start() {
 						DepthUsdNegativeTwo: depth,
 					}
 
-					if tb.db.GetMarketPairRuleByExchangeNameAndPair(exchangeName, pair).ID == 0 {
+					if tb.db.GetMarketPairRuleByExchangePair(exchangeName, pair).ID == 0 {
 						tb.db.SaveMarketPairRule(rule)
 						textMsg = fmt.Sprintf("Added rule %s-%s [volume]: $%s, [+/-2%% Depth]: $%s", exchangeName, pair, data[3], data[4])
 					} else {
@@ -161,7 +161,7 @@ func (tb *TelegramBot) Start() {
 				}
 
 				if textMsg != "" {
-					tb.SendMessage(update.Message.MessageID, utils.EscapeMarkdownV2(textMsg), nil)
+					tb.SendMessage(update.Message.MessageID, common.EscapeMarkdownV2(textMsg), nil)
 				}
 			}
 		}
@@ -208,13 +208,13 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
 		for _, marketPair := range marketPairs {
-			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
+			rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
 			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
 				msg, shouldReport := tb.buildMarketPairStatisticsMsg(marketPair, rule)
 				if shouldReport {
 					textMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
 						marketPair.ExchangeName, marketPair.Pair,
-						utils.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
+						common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
 				}
 			}
 		}
@@ -235,7 +235,7 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 	// if len(textMsg) > 0 {
 	// 	loc, _ := time.LoadLocation("Asia/Shanghai")
 	// 	textMsg = fmt.Sprintf("Rules Alarm at \\- \\[%s\\]\n%s",
-	// 		utils.EscapeMarkdownV2(time.Now().In(loc).Format("01-02 15:04")), textMsg)
+	// 		common.EscapeMarkdownV2(time.Now().In(loc).Format("01-02 15:04")), textMsg)
 	// 	tb.SendMessage(0, textMsg, nil)
 	// } else if time.Now().Minute() == 0 {
 	// 	tb.SendMessage(0, "All rules are OK", nil)
@@ -270,12 +270,12 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 		}
 
 		for _, marketPair := range marketPairs {
-			rule := tb.db.GetMarketPairRuleByExchangeNameAndPair(marketPair.ExchangeName, marketPair.Pair)
+			rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
 			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
 				msg, _ := tb.buildMarketPairStatisticsMsg(marketPair, rule)
 				allPairsMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
 					marketPair.ExchangeName, marketPair.Pair,
-					utils.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
+					common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
 			}
 		}
 
@@ -297,7 +297,7 @@ func (tb *TelegramBot) buildMarketPairStatisticsMsg(marketPair *models.MarketPai
 	msg := ""
 
 	msg += fmt.Sprintf(">\\- \\[24h Volume\\]: *$%s* \\(*$%s*\\)",
-		utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.Volume, 2, "")),
+		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.Volume, 2, "")),
 		humanize.SIWithDigits(rule.Volume, 0, ""))
 	if marketPair.Volume < rule.Volume {
 		hasRuleBroken = true
@@ -307,7 +307,7 @@ func (tb *TelegramBot) buildMarketPairStatisticsMsg(marketPair *models.MarketPai
 	}
 
 	msg += fmt.Sprintf(">\\- \\[\\+2%% Depth\\]: *$%s* \\(*$%s*\\)",
-		utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 2, "")),
+		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 2, "")),
 		humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 	if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
 		hasRuleBroken = true
@@ -317,7 +317,7 @@ func (tb *TelegramBot) buildMarketPairStatisticsMsg(marketPair *models.MarketPai
 	}
 
 	msg += fmt.Sprintf(">\\- \\[\\-2%% Depth\\]: *$%s* \\(*$%s*\\)",
-		utils.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 2, "")),
+		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 2, "")),
 		humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
 	if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
 		hasRuleBroken = true

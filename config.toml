@@ -1,8 +1,13 @@
 bot_token = "...(your bot token)..."
+[ppt]
+  slide_id = "..."
+  volume_id = "..."
+  revenue_id = "..."
 [server]
   http_port = 8080
 [net]
   full_node = "https://api.trongrid.io"
+  fee_node = "...(your fee node)..."
   slack_webhook = "...(your slack webhook url)..."
   cmc_api_key = "...(your cmc api key)..."
 [log]

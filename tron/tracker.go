@@ -1,4 +1,4 @@
-package main
+package tron
 
 import (
 	"encoding/hex"
@@ -7,31 +7,31 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"tron-tracker/common"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	modeltypes "tron-tracker/database/models/types"
 	"tron-tracker/net"
-	"tron-tracker/types"
-	"tron-tracker/utils"
+	"tron-tracker/tron/types"
 )
 
 type Tracker struct {
 	db *database.RawDB
 
 	isCatching bool
-	reporter   *utils.Reporter
+	reporter   *common.Reporter
 	loopWG     sync.WaitGroup
 	quitCh     chan struct{}
 
 	logger *zap.SugaredLogger
 }
 
-func New(db *database.RawDB) *Tracker {
+func NewTracker(db *database.RawDB) *Tracker {
 	return &Tracker{
 		db: db,
 
 		isCatching: true,
-		reporter: utils.NewReporter(1000, 60*time.Second, 0, func(rs utils.ReporterState) string {
+		reporter: common.NewReporter(1000, 60*time.Second, 0, func(rs common.ReporterState) string {
 			return fmt.Sprintf("Tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 		quitCh: make(chan struct{}),
@@ -112,7 +112,7 @@ func (t *Tracker) doTrackBlock() {
 	for idx, tx := range block.Transactions {
 		var txToDB = &models.Transaction{
 			Index:     uint16(idx),
-			OwnerAddr: utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
+			OwnerAddr: common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["owner_address"].(string)),
 			Height:    block.BlockHeader.RawData.Number,
 			Type:      types.ConvertType(tx.RawData.Contract[0].Type),
 			Fee:       txInfoList[idx].Fee,
@@ -125,7 +125,7 @@ func (t *Tracker) doTrackBlock() {
 		if txToDB.Type == 1 {
 			txToDB.Name = "TRX"
 			txToDB.FromAddr = txToDB.OwnerAddr
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
+			txToDB.ToAddr = common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 
 			amount := int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64))
 			txToDB.SetAmount(amount)
@@ -137,14 +137,14 @@ func (t *Tracker) doTrackBlock() {
 			name, _ := hex.DecodeString(tx.RawData.Contract[0].Parameter.Value["asset_name"].(string))
 			txToDB.Name = string(name)
 			txToDB.FromAddr = txToDB.OwnerAddr
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
+			txToDB.ToAddr = common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64)))
 		} else if txToDB.Type == 12 {
 			txToDB.SetAmount(txInfoList[idx].UnfreezeAmount)
 		} else if txToDB.Type == 13 {
 			txToDB.SetAmount(txInfoList[idx].WithdrawAmount)
 		} else if txToDB.Type == 30 || txToDB.Type == 31 {
-			txToDB.Name = utils.EncodeToBase58(txInfoList[idx].ContractAddress)
+			txToDB.Name = common.EncodeToBase58(txInfoList[idx].ContractAddress)
 			if value, ok := tx.RawData.Contract[0].Parameter.Value["data"]; ok && txToDB.Type == 31 {
 				data := value.(string)
 				if len(data) >= 8 {
@@ -153,14 +153,14 @@ func (t *Tracker) doTrackBlock() {
 
 				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
 					txToDB.FromAddr = txToDB.OwnerAddr
-					txToDB.ToAddr = utils.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64 : 8+64*2]))
+					txToDB.ToAddr = common.EncodeToBase58(data[8+24 : 8+64])
+					txToDB.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64 : 8+64*2]))
 				}
 
 				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
-					txToDB.FromAddr = utils.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.ToAddr = utils.EncodeToBase58(data[8+24+64 : 8+64*2])
-					txToDB.Amount = modeltypes.NewBigInt(utils.ConvertHexToBigInt(data[8+64*2 : 8+64*3]))
+					txToDB.FromAddr = common.EncodeToBase58(data[8+24 : 8+64])
+					txToDB.ToAddr = common.EncodeToBase58(data[8+24+64 : 8+64*2])
+					txToDB.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64*2 : 8+64*3]))
 				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal
@@ -174,10 +174,10 @@ func (t *Tracker) doTrackBlock() {
 		} else if txToDB.Type == 56 {
 			txToDB.SetAmount(txInfoList[idx].WithdrawExpireAmount)
 		} else if txToDB.Type == 57 {
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 58 {
-			txToDB.ToAddr = utils.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
+			txToDB.ToAddr = common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["receiver_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["balance"].(float64)))
 		} else if txToDB.Type == 59 {
 			amount := int64(0)
@@ -197,12 +197,12 @@ func (t *Tracker) doTrackBlock() {
 
 		for _, log := range txInfoList[idx].Log {
 			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
-				fromAddr := utils.EncodeToBase58(log.Topics[1][24:])
-				toAddr := utils.EncodeToBase58(log.Topics[2][24:])
+				fromAddr := common.EncodeToBase58(log.Topics[1][24:])
+				toAddr := common.EncodeToBase58(log.Topics[2][24:])
 
 				// Filter zero value charger
-				if txToDB.FromAddr == fromAddr || utils.ConvertHexToBigInt(log.Data).Int64() > 0 {
-					t.db.SaveCharger(fromAddr, toAddr, utils.EncodeToBase58(log.Address))
+				if txToDB.FromAddr == fromAddr || common.ConvertHexToBigInt(log.Data).Int64() > 0 {
+					t.db.SaveCharger(fromAddr, toAddr, common.EncodeToBase58(log.Address))
 				}
 			}
 		}

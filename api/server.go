@@ -150,12 +150,14 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 
 	esMap := s.db.GetExchangeStatisticsByDateDays(startDate, days)
 	totalEnergy, totalFee, totalEnergyUsage := int64(0), int64(0), int64(0)
+	dateRangeStr := startDate.Format("060102") + "~" + startDate.AddDate(0, 0, days-1).Format("060102")
 	resultArray := make([]*models.ExchangeStatistic, 0)
 	for _, es := range esMap {
 		totalEnergy += es.ChargeEnergyTotal + es.CollectEnergyTotal + es.WithdrawEnergyTotal
 		totalFee += es.ChargeFee + es.CollectFee + es.WithdrawFee
 		totalEnergyUsage += es.ChargeEnergyUsage + es.CollectEnergyUsage
 
+		es.Date = dateRangeStr
 		es.ClearAmountFields()
 		resultArray = append(resultArray, es)
 	}

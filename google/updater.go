@@ -278,9 +278,13 @@ func (u *Updater) updateUSDTTransferFee(page *slides.Page, startDate time.Time) 
 
 	curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
 	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
+	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, -7).Format("2006-01-02"))
+	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, -7), "TRX").Price)
 	storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats)
-	storageNoteObjectId := page.SlideProperties.NotesPage.PageElements[1].ObjectId
-	reqs = append(reqs, buildUpdateTextRequests(storageNoteObjectId, -1, -1, 0, 0, storageNote)...)
+
+	note := fmt.Sprintf("%s%s%s", dateNote, priceNote, storageNote)
+	noteObjectId := page.SlideProperties.NotesPage.PageElements[1].ObjectId
+	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
 		&slides.BatchUpdatePresentationRequest{

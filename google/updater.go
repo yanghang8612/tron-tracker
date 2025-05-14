@@ -278,8 +278,8 @@ func (u *Updater) updateUSDTTransferFee(page *slides.Page, startDate time.Time) 
 
 	curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
 	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
-	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, -7).Format("2006-01-02"))
-	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, -7), "TRX").Price)
+	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, 7).Format("2006-01-02"))
+	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, 7), "TRX").Price)
 	storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats)
 
 	note := fmt.Sprintf("%s%s%s", dateNote, priceNote, storageNote)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -21,6 +22,7 @@ import (
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database"
+	"tron-tracker/database/models"
 	"tron-tracker/net"
 )
 
@@ -333,35 +335,49 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 	volumeObjectId := page.PageElements[7].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 15, 9, true)...)
 
-	tableObjectId := page.PageElements[5].ObjectId
-	rowIndex := int64(1)
+	statsToInsert := make([]*models.MarketPairStatistic, 0)
 	for key, stat := range curMarketPairStats {
 		if exchanges[key] {
-			// Update name cell
-			name := key
-			if strings.Contains(key, "_") {
-				name = fmt.Sprintf("%s\n%s", stat.Pair, stat.ExchangeName)
-			}
-			reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 0, name, 10, false)...)
-
-			// Update volume cell
-			volume := "$" + common.FormatWithUnits(stat.Volume)
-			volumeChange := common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume)
-			reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 1, volume, volumeChange, 10, 8, false)...)
-
-			// Update depth cell
-			depth := fmt.Sprintf("%s / %s",
-				common.FormatWithUnits(stat.DepthUsdPositiveTwo),
-				common.FormatWithUnits(stat.DepthUsdNegativeTwo))
-			reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 2, depth, 10, false)...)
-
-			// Update percent cell
-			percent := fmt.Sprintf("%.2f%%", stat.Percent*100)
-			percentChange := fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))
-			reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 3, percent, percentChange, 10, 8, false)...)
-
-			rowIndex++
+			// Use datetime to store the key
+			stat.Datetime = key
+			statsToInsert = append(statsToInsert, stat)
 		}
+	}
+
+	sort.Slice(statsToInsert, func(i, j int) bool {
+		return statsToInsert[i].Volume > statsToInsert[j].Volume
+	})
+
+	tableObjectId := page.PageElements[5].ObjectId
+	rowIndex := int64(1)
+	for _, stat := range statsToInsert {
+		// Key is stored in the datetime field
+		key := stat.Datetime
+
+		// Update name cell
+		name := key
+		if strings.Contains(key, "_") {
+			name = fmt.Sprintf("%s\n%s", stat.Pair, stat.ExchangeName)
+		}
+		reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 0, name, 10, false)...)
+
+		// Update volume cell
+		volume := "$" + common.FormatWithUnits(stat.Volume)
+		volumeChange := common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume)
+		reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 1, volume, volumeChange, 10, 8, false)...)
+
+		// Update depth cell
+		depth := fmt.Sprintf("%s / %s",
+			common.FormatWithUnits(stat.DepthUsdPositiveTwo),
+			common.FormatWithUnits(stat.DepthUsdNegativeTwo))
+		reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 2, depth, 10, false)...)
+
+		// Update percent cell
+		percent := fmt.Sprintf("%.2f%%", stat.Percent*100)
+		percentChange := fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))
+		reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 3, percent, percentChange, 10, 8, false)...)
+
+		rowIndex++
 	}
 
 	volumeChartId := page.PageElements[8].ObjectId

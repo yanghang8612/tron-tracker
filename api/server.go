@@ -1128,9 +1128,13 @@ func (s *Server) topTokens(c *gin.Context) {
 			return (resultArray[i].Fee - preFeeWithI) > (resultArray[j].Fee - preFeeWithJ)
 		})
 		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			preFee := int64(0)
+			if preTokenStats[t.Address] != nil {
+				preFee = preTokenStats[t.Address].Fee
+			}
 			return &ResEntity{
 				Address: t.Address,
-				Change:  t.Fee - preTokenStats[t.Address].Fee,
+				Change:  t.Fee - preFee,
 			}
 		})
 	} else if orderBy == "tx" {
@@ -1146,9 +1150,13 @@ func (s *Server) topTokens(c *gin.Context) {
 			return (resultArray[i].TxTotal - preTxWithI) > (resultArray[j].TxTotal - preTxWithJ)
 		})
 		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			preTx := int64(0)
+			if preTokenStats[t.Address] != nil {
+				preTx = preTokenStats[t.Address].TxTotal
+			}
 			return &ResEntity{
 				Address: t.Address,
-				Change:  t.TxTotal - preTokenStats[t.Address].TxTotal,
+				Change:  t.TxTotal - preTx,
 			}
 		})
 	} else if orderBy == "energy_total" {
@@ -1164,9 +1172,13 @@ func (s *Server) topTokens(c *gin.Context) {
 			return (resultArray[i].EnergyTotal - preEnergyWithI) > (resultArray[j].EnergyTotal - preEnergyWithJ)
 		})
 		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			preEnergy := int64(0)
+			if preTokenStats[t.Address] != nil {
+				preEnergy = preTokenStats[t.Address].EnergyTotal
+			}
 			return &ResEntity{
 				Address: t.Address,
-				Change:  t.EnergyTotal - preTokenStats[t.Address].EnergyTotal,
+				Change:  t.EnergyTotal - preEnergy,
 			}
 		})
 	} else {

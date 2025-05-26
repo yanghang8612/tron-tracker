@@ -82,7 +82,7 @@ func (s *Server) Start() {
 	s.router.GET("/user_statistics", s.userStatistics)
 	s.router.GET("/user_token_statistics", s.userTokenStatistics)
 	s.router.GET("/top_users", s.topUsers)
-	s.router.GET("/top_users", s.topTokens)
+	s.router.GET("/top_tokens", s.topTokens)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)

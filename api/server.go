@@ -82,6 +82,7 @@ func (s *Server) Start() {
 	s.router.GET("/user_statistics", s.userStatistics)
 	s.router.GET("/user_token_statistics", s.userTokenStatistics)
 	s.router.GET("/top_users", s.topUsers)
+	s.router.GET("/top_users", s.topTokens)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
@@ -1086,6 +1087,97 @@ func (s *Server) topUsers(c *gin.Context) {
 			"error": orderBy + " not supported",
 		})
 	}
+}
+
+func (s *Server) topTokens(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
+	if !ok {
+		return
+	}
+
+	n, ok := getIntParam(c, "n", 10)
+	if !ok {
+		return
+	}
+
+	orderBy := c.DefaultQuery("order_by", "fee")
+
+	curTokenStats := s.db.GetTokenStatisticsByDateDays(startDate, days)
+	preTokenStats := s.db.GetTokenStatisticsByDateDays(startDate.AddDate(0, 0, -days), days)
+
+	var resultArray []*models.TokenStatistic
+	for _, ts := range curTokenStats {
+		resultArray = append(resultArray, ts)
+	}
+
+	type ResEntity struct {
+		Address string `json:"address"`
+		Change  int64  `json:"change"`
+	}
+	var results []*ResEntity
+	if orderBy == "fee" {
+		sort.Slice(resultArray, func(i, j int) bool {
+			preFeeWithI := int64(0)
+			if preTokenStats[resultArray[i].Address] != nil {
+				preFeeWithI = preTokenStats[resultArray[i].Address].Fee
+			}
+			preFeeWithJ := int64(0)
+			if preTokenStats[resultArray[j].Address] != nil {
+				preFeeWithJ = preTokenStats[resultArray[j].Address].Fee
+			}
+			return (resultArray[i].Fee - preFeeWithI) > (resultArray[j].Fee - preFeeWithJ)
+		})
+		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			return &ResEntity{
+				Address: t.Address,
+				Change:  t.Fee - preTokenStats[t.Address].Fee,
+			}
+		})
+	} else if orderBy == "tx" {
+		sort.Slice(resultArray, func(i, j int) bool {
+			preTxWithI := int64(0)
+			if preTokenStats[resultArray[i].Address] != nil {
+				preTxWithI = preTokenStats[resultArray[i].Address].TxTotal
+			}
+			preTxWithJ := int64(0)
+			if preTokenStats[resultArray[j].Address] != nil {
+				preTxWithJ = preTokenStats[resultArray[j].Address].TxTotal
+			}
+			return (resultArray[i].TxTotal - preTxWithI) > (resultArray[j].TxTotal - preTxWithJ)
+		})
+		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			return &ResEntity{
+				Address: t.Address,
+				Change:  t.TxTotal - preTokenStats[t.Address].TxTotal,
+			}
+		})
+	} else if orderBy == "energy_total" {
+		sort.Slice(resultArray, func(i, j int) bool {
+			preEnergyWithI := int64(0)
+			if preTokenStats[resultArray[i].Address] != nil {
+				preEnergyWithI = preTokenStats[resultArray[i].Address].EnergyTotal
+			}
+			preEnergyWithJ := int64(0)
+			if preTokenStats[resultArray[j].Address] != nil {
+				preEnergyWithJ = preTokenStats[resultArray[j].Address].EnergyTotal
+			}
+			return (resultArray[i].EnergyTotal - preEnergyWithI) > (resultArray[j].EnergyTotal - preEnergyWithJ)
+		})
+		results = pickTopNAndLastN(resultArray, n, func(t *models.TokenStatistic) *ResEntity {
+			return &ResEntity{
+				Address: t.Address,
+				Change:  t.EnergyTotal - preTokenStats[t.Address].EnergyTotal,
+			}
+		})
+	} else {
+		c.JSON(200, gin.H{
+			"code":  500,
+			"error": orderBy + " not supported",
+		})
+		return
+	}
+
+	c.JSON(200, results)
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {

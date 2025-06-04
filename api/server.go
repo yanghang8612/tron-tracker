@@ -1682,6 +1682,8 @@ func (s *Server) topDelegate(c *gin.Context) {
 	txs := s.db.GetTopDelegateTxsByDateAndN(date, n)
 
 	type ResEntity struct {
+		Height   uint   `json:"height"`
+		Index    uint16 `json:"index"`
 		From     string `json:"from"`
 		To       string `json:"to"`
 		Amount   string `json:"amount"`
@@ -1691,7 +1693,9 @@ func (s *Server) topDelegate(c *gin.Context) {
 	results := make([]*ResEntity, 0)
 	for _, tx := range txs {
 		resEntity := &ResEntity{
-			From:   tx.FromAddr,
+			Height: tx.Height,
+			Index:  tx.Index,
+			From:   tx.OwnerAddr,
 			To:     tx.ToAddr,
 			Amount: tx.Amount.String(),
 		}

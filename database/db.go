@@ -494,7 +494,7 @@ func (db *RawDB) GetTopDelegateTxsByDateAndN(date time.Time, n int) []*models.Tr
 	var txs []*models.Transaction
 
 	queryDate := date.Format("060102")
-	db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("amount DESC").Limit(n).Find(&txs)
+	db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
 
 	return txs
 }

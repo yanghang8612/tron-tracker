@@ -490,6 +490,15 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] results, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
+func (db *RawDB) GetTopDelegateTxsByDateAndN(date time.Time, n int) []*models.Transaction {
+	var txs []*models.Transaction
+
+	queryDate := date.Format("060102")
+	db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("amount DESC").Limit(n).Find(&txs)
+
+	return txs
+}
+
 func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contract string, result int) []*models.Transaction {
 	var results []*models.Transaction
 

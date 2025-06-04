@@ -95,6 +95,7 @@ func (s *Server) Start() {
 	s.router.GET("/volume_ppt_data", s.volumePPTData)
 	s.router.GET("/update_ppt_data", s.updatePPTData)
 
+	s.router.GET("/top_delegate", s.topDelegate)
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
@@ -1663,6 +1664,48 @@ func getEthereumDailyStats(day string) ethStatistics {
 	}
 
 	return result
+}
+
+func (s *Server) topDelegate(c *gin.Context) {
+	date, ok := getDateParam(c, "date", yesterday())
+
+	if !ok {
+		return
+	}
+
+	n, ok := getIntParam(c, "n", 20)
+
+	if !ok {
+		return
+	}
+
+	txs := s.db.GetTopDelegateTxsByDateAndN(date, n)
+
+	type ResEntity struct {
+		From     string `json:"from"`
+		To       string `json:"to"`
+		Amount   string `json:"amount"`
+		Resource string `json:"resource"`
+	}
+
+	results := make([]*ResEntity, 0)
+	for _, tx := range txs {
+		resEntity := &ResEntity{
+			From:   tx.FromAddr,
+			To:     tx.ToAddr,
+			Amount: tx.Amount.String(),
+		}
+
+		if tx.Type == 57 {
+			resEntity.Resource = "Bandwidth"
+		} else {
+			resEntity.Resource = "Energy"
+		}
+
+		results = append(results, resEntity)
+	}
+
+	c.JSON(200, results)
 }
 
 func (s *Server) txAnalyze(c *gin.Context) {

@@ -203,3 +203,80 @@ func GetFees(startDate time.Time, days int) map[string]float64 {
 
 	return fees
 }
+
+type USDTSupplyResponse struct {
+	DataFormatted []struct {
+		ID          uint        `json:"id"`
+		ISO         string      `json:"iso"`
+		Name        string      `json:"name"`
+		BlockChains []ChainData `json:"blockChains"`
+	} `json:"data_formatted"`
+}
+
+type ChainData struct {
+	TotalAuthorized number `json:"totalAuthorized"`
+	NotIssued       number `json:"notIssued"`
+	Quarantined     number `json:"quarantined"`
+	Name            string `json:"name"`
+}
+
+// Number is a custom type that can handle JSON values
+// which are either numeric (e.g. 123, 45.67) or string-formatted numbers (e.g. "123", "45.67").
+// Underlying storage is float64.
+type number float64
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+// It tries to parse the raw data first as a JSON number; if that fails,
+// it tries to parse it as a JSON string and then converts the string to float64.
+func (n *number) UnmarshalJSON(data []byte) error {
+	// Attempt to unmarshal as a JSON number.
+	var num float64
+	if err := json.Unmarshal(data, &num); err == nil {
+		*n = number(num)
+		return nil
+	}
+
+	// If parsing as number failed, attempt to unmarshal as a JSON string.
+	var str string
+	if err := json.Unmarshal(data, &str); err != nil {
+		return fmt.Errorf("Number.UnmarshalJSON: unable to parse %s as number or string", string(data))
+	}
+
+	// Convert the string to float64.
+	parsed, err := strconv.ParseFloat(str, 64)
+	if err != nil {
+		return fmt.Errorf("Number.UnmarshalJSON: failed to convert string %q to float64: %w", str, err)
+	}
+	*n = number(parsed)
+	return nil
+}
+
+func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
+	resp, err := client.R().Get("https://app.tether.to/transparency.json")
+	if err != nil {
+		return nil, err
+	}
+
+	var response USDTSupplyResponse
+	err = json.Unmarshal(resp.Body(), &response)
+	if err != nil {
+		return nil, err
+	}
+
+	var USDTSupply = make([]*models.USDTSupplyStatistic, 0)
+	for _, chainData := range response.DataFormatted {
+		if chainData.ISO == "usdt" {
+			for _, data := range chainData.BlockChains {
+				USDTSupply = append(USDTSupply, &models.USDTSupplyStatistic{
+					Datetime:        time.Now().Format("06010215"),
+					Chain:           data.Name,
+					TotalAuthorized: float64(data.TotalAuthorized),
+					NotIssued:       float64(data.NotIssued),
+					Quarantined:     float64(data.Quarantined),
+				})
+			}
+		}
+	}
+
+	return USDTSupply, nil
+}

@@ -37,6 +37,9 @@ func main() {
 	tgBot.Start()
 
 	c := cron.New(cron.WithSeconds())
+	_, _ = c.AddFunc("0 0 */1 * * *", func() {
+		db.DoUSDTSupplyStatistics()
+	})
 	_, _ = c.AddFunc("0 */5 5-12 * * *", func() {
 		db.DoTronLinkWeeklyStatistics(time.Now(), false)
 	})

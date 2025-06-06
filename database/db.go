@@ -105,6 +105,11 @@ func New(cfg *config.DBConfig) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.USDTSupplyStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	dbErr = db.AutoMigrate(&models.USDTStorageStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
@@ -1217,6 +1222,25 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
 	}
 	stats[tx.ToAddr+tx.Name].AddTo(tx)
+}
+
+func (db *RawDB) DoUSDTSupplyStatistics() {
+	db.logger.Infof("Start doing USDT supply statistics")
+
+	USDTSupply, err := net.GetUSDTSupply()
+	if err != nil {
+		db.logger.Errorf("Get USDT supply error: [%s]", err.Error())
+		return
+	}
+
+	res := db.db.Create(USDTSupply)
+	if res.Error != nil {
+		db.logger.Warnf("Save USDT supply error: [%s]", res.Error)
+	} else {
+		db.logger.Infof("Save USDT supply success, affected rows: %d", res.RowsAffected)
+	}
+
+	db.logger.Infof("Finish doing USDT supply statistics")
 }
 
 func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {

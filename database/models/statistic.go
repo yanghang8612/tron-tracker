@@ -436,6 +436,15 @@ type TokenListingStatistic struct {
 	MarketCap       float64 `json:"market_cap,omitempty"`
 }
 
+type USDTSupplyStatistic struct {
+	ID              uint    `gorm:"primaryKey" json:"-"`
+	Datetime        string  `gorm:"size:8;index" json:"date,omitempty"`
+	Chain           string  `json:"name"`
+	TotalAuthorized float64 `json:"total_authorized,omitempty"`
+	NotIssued       float64 `json:"not_issued,omitempty"`
+	Quarantined     float64 `json:"quarantined,omitempty"`
+}
+
 type PhishingStatistic struct {
 	ID                          uint   `gorm:"primaryKey" json:"-"`
 	Date                        string `gorm:"size:6;index" json:"date,omitempty"`

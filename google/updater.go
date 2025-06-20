@@ -161,7 +161,7 @@ func SaveToken(path string, token *oauth2.Token) {
 }
 
 func (u *Updater) Update(date time.Time) {
-	lastMonth := date.AddDate(0, 0, -31)
+	lastMonth := date.AddDate(0, 0, -30)
 
 	// Update TRX volume sheet
 	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "TRX!A2:D31",
@@ -527,8 +527,7 @@ func (u *Updater) getVolumeData(startDate time.Time, token string, exchanges []s
 	result := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
 		curDate := startDate.AddDate(0, 0, i)
-		queryDate := curDate.AddDate(0, 0, 1)
-		marketPairStats := u.db.GetMarketPairStatistics(queryDate, 1, token, false, true)
+		marketPairStats := u.db.GetMarketPairStatistics(curDate, 1, token, false, true)
 
 		row := make([]interface{}, 0)
 		row = append(row, curDate.Format("2006-01-02"))

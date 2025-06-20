@@ -98,6 +98,7 @@ func (s *Server) Start() {
 	s.router.GET("/top_delegate", s.topDelegate)
 	s.router.GET("/tx_analyse", s.txAnalyze)
 
+	s.router.GET("/", s.lastTrackedBlockNumber)
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/system/exchanges", s.getExchange)
 	s.router.GET("/system/add_exchange", s.addExchange)

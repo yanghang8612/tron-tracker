@@ -160,6 +160,35 @@ func SaveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
+func (u *Updater) Update1(date time.Time) {
+	// Get full presentation
+	presentation, err := u.slidesService.Presentations.Get(u.presentationId).Do()
+	if err != nil {
+		log.Fatalf("Unable to retrieve presentation: %v", err)
+	}
+
+	fmt.Printf("Presentation title: %s\n", presentation.Title)
+
+	// Traverse all slides
+	for _, slide := range presentation.Slides {
+		fmt.Printf("Processing Slide ID: %s\n", slide.ObjectId)
+
+		for _, element := range slide.PageElements {
+			objectId := element.ObjectId
+			fmt.Printf("Object ID: %s\n", objectId)
+
+			// Check if the element is a TEXT_BOX
+			if element.Shape != nil && element.Shape.ShapeType == "TEXT_BOX" {
+				textContent := extractText(element)
+				fmt.Printf("Text: %s\n", textContent)
+			} else if element.Shape != nil {
+				fmt.Printf("Shape: %s\n", element.Shape.ShapeType)
+			}
+			fmt.Println("----------")
+		}
+	}
+}
+
 func (u *Updater) Update(date time.Time) {
 	lastMonth := date.AddDate(0, 0, -30)
 
@@ -330,8 +359,8 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 	if token == "STEEM" {
 		groupByExchange = false
 	}
-	curMarketPairStats := u.db.GetMarketPairStatistics(date.AddDate(0, 0, -7), 7, token, true, groupByExchange)
-	lastMarketPairStats := u.db.GetMarketPairStatistics(date.AddDate(0, 0, -14), 7, token, true, groupByExchange)
+	curMarketPairStats := u.db.GetMergedMarketPairStatistics(date.AddDate(0, 0, -7), 7, token, true, groupByExchange)
+	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(date.AddDate(0, 0, -14), 7, token, true, groupByExchange)
 
 	// Update the 24h volume
 	volume24H := "$" + common.FormatWithUnits(curMarketPairStats["Total"].Volume)
@@ -523,11 +552,15 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 	}
 }
 
+func (u *Updater) updateMonitoringData(page *slides.Page, date time.Time) {
+
+}
+
 func (u *Updater) getVolumeData(startDate time.Time, token string, exchanges []string) [][]interface{} {
 	result := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
 		curDate := startDate.AddDate(0, 0, i)
-		marketPairStats := u.db.GetMarketPairStatistics(curDate, 1, token, false, true)
+		marketPairStats := u.db.GetMergedMarketPairStatistics(curDate, 1, token, false, true)
 
 		row := make([]interface{}, 0)
 		row = append(row, curDate.Format("2006-01-02"))

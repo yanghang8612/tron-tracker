@@ -804,6 +804,12 @@ func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 	return earliestPrice
 }
 
+func (db *RawDB) GetMarketPairRuleByToken(token string) []*models.Rule {
+	var rules []*models.Rule
+	db.db.Where("pair like ?", token+"/%").Find(&rules)
+	return rules
+}
+
 func (db *RawDB) GetMarketPairRuleByExchangePair(exchangeName, pair string) *models.Rule {
 	var rule models.Rule
 	db.db.Where("exchange_name = ? and pair = ?", exchangeName, pair).Find(&rule)
@@ -825,7 +831,25 @@ func (db *RawDB) GetAllMarketPairRules() []*models.Rule {
 	return rules
 }
 
-func (db *RawDB) GetMarketPairStatistics(date time.Time, days int, token string, queryDepth, groupByExchange bool) map[string]*models.MarketPairStatistic {
+func (db *RawDB) GetMarketPairStatistics(data time.Time, days int, token string) []*models.MarketPairStatistic {
+	var stats []*models.MarketPairStatistic
+
+	for i := 0; i < days; i++ {
+		queryDate := data.AddDate(0, 0, i+1)
+		queryDBName := "market_pair_statistics_" + queryDate.Format("0601")
+
+		var dayStats []*models.MarketPairStatistic
+		db.db.Table(queryDBName).
+			Where("datetime like ? and token = ?", queryDate.Format("02")+"%", token).
+			Find(&dayStats)
+
+		stats = append(stats, dayStats...)
+	}
+
+	return stats
+}
+
+func (db *RawDB) GetMergedMarketPairStatistics(date time.Time, days int, token string, queryDepth, groupByExchange bool) map[string]*models.MarketPairStatistic {
 	resultMap := make(map[string]*models.MarketPairStatistic)
 
 	var (

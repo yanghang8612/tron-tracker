@@ -1306,8 +1306,8 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	_, groupByExchange := c.GetQuery("group_by")
 
-	curMarketPairStats := s.db.GetMarketPairStatistics(startDate, days, token, true, groupByExchange)
-	lastMarketPairStats := s.db.GetMarketPairStatistics(startDate.AddDate(0, 0, -days), days, token, true, groupByExchange)
+	curMarketPairStats := s.db.GetMergedMarketPairStatistics(startDate, days, token, true, groupByExchange)
+	lastMarketPairStats := s.db.GetMergedMarketPairStatistics(startDate.AddDate(0, 0, -days), days, token, true, groupByExchange)
 
 	type JsonStat struct {
 		ID                        float64 `json:"-"`
@@ -1518,7 +1518,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
 			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMarketPairStatistics(queryDate, 1, token, false, true)
+			marketPairStats := s.db.GetMergedMarketPairStatistics(queryDate, 1, token, false, true)
 
 			entity := ResEntity{
 				Date:    curDate.Format("2006-01-02"),
@@ -1547,7 +1547,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
 			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMarketPairStatistics(queryDate, 1, token, false, true)
+			marketPairStats := s.db.GetMergedMarketPairStatistics(queryDate, 1, token, false, true)
 
 			result.WriteString(curDate.Format("2006-01-02") + " ")
 			for _, exchange := range exchanges {

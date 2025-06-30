@@ -1,20 +1,38 @@
 package bot
 
 import (
+	"bytes"
 	"fmt"
 	"log"
+	"math"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dustin/go-humanize"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
 	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
 )
+
+type ruleStats struct {
+	Rule                     *models.Rule
+	ExchangeName             string
+	Pair                     string
+	DepthUsdPositiveTwoSum   float64
+	DepthUsdNegativeTwoSum   float64
+	VolumeSum                float64
+	HitsCount                int
+	DepthPositiveBrokenCount int
+	DepthNegativeBrokenCount int
+	VolumeBrokenCount        int
+}
 
 type TelegramBot struct {
 	api    *tgbotapi.BotAPI
@@ -84,7 +102,7 @@ func (tb *TelegramBot) Start() {
 								humanize.SIWithDigits(rule.Volume, 0, ""),
 								humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 						}
-						tb.SendMessage(update.Message.MessageID, rulesMsg, nil)
+						tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, rulesMsg, nil)
 					}
 				case "addrule":
 					data := strings.Fields(update.Message.Text)
@@ -161,20 +179,20 @@ func (tb *TelegramBot) Start() {
 				}
 
 				if textMsg != "" {
-					tb.SendMessage(update.Message.MessageID, common.EscapeMarkdownV2(textMsg), nil)
+					tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
 				}
 			}
 		}
 	}()
 }
 
-func (tb *TelegramBot) SendMessage(msgID int, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+func (tb *TelegramBot) sendMessage(msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
 	if tb.chatID == 0 {
 		return -1
 	}
 
 	msg := tgbotapi.NewMessage(tb.chatID, textMsg)
-	msg.ParseMode = "MarkdownV2"
+	msg.ParseMode = mode
 	msg.DisableWebPagePreview = true
 	if msgID != 0 {
 		msg.ReplyToMessageID = msgID
@@ -197,7 +215,7 @@ func (tb *TelegramBot) SendMessage(msgID int, textMsg string, replyMarkup *tgbot
 func (tb *TelegramBot) DoMarketPairStatistics() {
 	tb.logger.Infof("Start doing market pair statistics")
 
-	textMsg := ""
+	// textMsg := ""
 	for i, token := range tb.tokens {
 		originData, marketPairs, err := net.GetMarketPairs(token, tb.slugs[i])
 		if err != nil {
@@ -207,17 +225,17 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
-		for _, marketPair := range marketPairs {
-			rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
-			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
-				msg, shouldReport := tb.buildMarketPairStatisticsMsg(marketPair, rule)
-				if shouldReport {
-					textMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
-						marketPair.ExchangeName, marketPair.Pair,
-						common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
-				}
-			}
-		}
+		// for _, marketPair := range marketPairs {
+		// 	rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
+		// 	if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
+		// 		msg, shouldReport := tb.buildMarketPairStatisticsMsg(marketPair, rule)
+		// 		if shouldReport {
+		// 			textMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
+		// 				marketPair.ExchangeName, marketPair.Pair,
+		// 				common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
+		// 		}
+		// 	}
+		// }
 
 		time.Sleep(time.Second * 1)
 	}
@@ -261,33 +279,93 @@ func (tb *TelegramBot) DoTokenListingStatistics() {
 func (tb *TelegramBot) ReportMarketPairStatistics() {
 	tb.logger.Infof("Start reporting market pair statistics")
 
+	textMsg := "<strong>[Statistics for the past 7 days]</strong>\n\n"
 	allPairsMsg := ""
-	for i, token := range tb.tokens {
-		_, marketPairs, err := net.GetMarketPairs(token, tb.slugs[i])
-		if err != nil {
-			tb.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
-			return
-		}
-
-		for _, marketPair := range marketPairs {
-			rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
-			if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
-				msg, _ := tb.buildMarketPairStatisticsMsg(marketPair, rule)
-				allPairsMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
-					marketPair.ExchangeName, marketPair.Pair,
-					common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
+	lastWeek := time.Now().AddDate(0, 0, -7)
+	for _, token := range tb.tokens {
+		rulesStats := make(map[string]*ruleStats)
+		for _, rule := range tb.db.GetMarketPairRuleByToken(token) {
+			rulesStats[rule.ExchangeName+"-"+rule.Pair] = &ruleStats{
+				Rule:         rule,
+				ExchangeName: rule.ExchangeName,
+				Pair:         rule.Pair,
 			}
 		}
+
+		if len(rulesStats) == 0 {
+			continue
+		}
+
+		data := [][]string{
+			{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"},
+		}
+		for _, marketPair := range tb.db.GetMarketPairStatistics(lastWeek, 7, token) {
+			key := marketPair.ExchangeName + "-" + marketPair.Pair
+			if ruleStat, ok := rulesStats[key]; ok {
+				ruleStat.DepthUsdPositiveTwoSum += marketPair.DepthUsdPositiveTwo
+				ruleStat.DepthUsdNegativeTwoSum += marketPair.DepthUsdNegativeTwo
+				ruleStat.VolumeSum += marketPair.Volume
+				ruleStat.HitsCount++
+
+				if marketPair.DepthUsdPositiveTwo < ruleStat.Rule.DepthUsdPositiveTwo {
+					ruleStat.DepthPositiveBrokenCount++
+				}
+				if marketPair.DepthUsdNegativeTwo < ruleStat.Rule.DepthUsdNegativeTwo {
+					ruleStat.DepthNegativeBrokenCount++
+				}
+				if marketPair.Volume < ruleStat.Rule.Volume {
+					ruleStat.VolumeBrokenCount++
+				}
+			}
+		}
+
+		sortedRulesStats := make([]*ruleStats, 0, len(rulesStats))
+		for _, ruleStat := range rulesStats {
+			if ruleStat.HitsCount > 0 {
+				sortedRulesStats = append(sortedRulesStats, ruleStat)
+			}
+		}
+		sort.Slice(sortedRulesStats, func(i, j int) bool {
+			return sortedRulesStats[i].Rule.ID < sortedRulesStats[j].Rule.ID
+		})
+
+		for _, ruleStat := range sortedRulesStats {
+			data = append(data, []string{
+				ruleStat.ExchangeName + "-" + ruleStat.Pair,
+				fmt.Sprintf("%s(%s/%s)",
+					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthPositiveBrokenCount),
+					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount)),
+					formatFloatWithUnit(ruleStat.Rule.DepthUsdPositiveTwo)),
+				fmt.Sprintf("%s(%s/%s)",
+					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthNegativeBrokenCount),
+					formatFloatWithUnit(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount)),
+					formatFloatWithUnit(ruleStat.Rule.DepthUsdNegativeTwo)),
+				fmt.Sprintf("%s(%s/%s)",
+					formatComplianceRate(ruleStat.HitsCount, ruleStat.VolumeBrokenCount),
+					formatFloatWithUnit(ruleStat.VolumeSum/float64(ruleStat.HitsCount)),
+					formatFloatWithUnit(ruleStat.Rule.Volume)),
+			})
+		}
+
+		var tableString bytes.Buffer
+		table := tablewriter.NewTable(&tableString, tablewriter.WithRenderer(renderer.NewMarkdown()))
+		table.Header(data[0])
+		table.Bulk(data[1:])
+		table.Render()
+
+		allPairsMsg += fmt.Sprintf("<b>%s</b>\n", token)
+		allPairsMsg += "<pre>\n" + tableString.String() + "</pre>\n"
 
 		time.Sleep(time.Second * 1)
 	}
 
-	textMsg := "*Heartbeat*: System is running 🔥\n"
+	// textMsg := "*Heartbeat*: System is running 🔥\n"
+
 	if len(allPairsMsg) > 0 {
 		textMsg += allPairsMsg
 	}
 
-	tb.SendMessage(0, textMsg, nil)
+	tb.sendMessage(0, tgbotapi.ModeHTML, textMsg, nil)
 
 	tb.logger.Infof("Finish reporting market pair statistics")
 }
@@ -327,4 +405,15 @@ func (tb *TelegramBot) buildMarketPairStatisticsMsg(marketPair *models.MarketPai
 	}
 
 	return msg, hasRuleBroken
+}
+
+func formatComplianceRate(hitsCount, brokenCount int) string {
+	if brokenCount > hitsCount/10 {
+		return fmt.Sprintf("🚨%.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
+	}
+	return fmt.Sprintf("%.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
+}
+
+func formatFloatWithUnit(f float64) string {
+	return strings.ReplaceAll(humanize.SIWithDigits(f, 0, ""), " ", "")
 }

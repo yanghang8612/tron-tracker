@@ -301,7 +301,9 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 
 		var data [][]string
 		for _, marketPair := range tb.db.GetMarketPairStatistics(lastWeek, 7, token) {
-			key := marketPair.ExchangeName + "-" + marketPair.Pair
+			// Special handling for APENFT pair
+			pair, _ := strings.CutPrefix(marketPair.Pair, "APE")
+			key := marketPair.ExchangeName + "-" + pair
 			if ruleStat, ok := rulesStats[key]; ok {
 				ruleStat.DepthUsdPositiveTwoSum += marketPair.DepthUsdPositiveTwo
 				ruleStat.DepthUsdNegativeTwoSum += marketPair.DepthUsdNegativeTwo

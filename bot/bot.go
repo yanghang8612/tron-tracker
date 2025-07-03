@@ -43,6 +43,8 @@ type TelegramBot struct {
 
 	tokens []string
 	slugs  []string
+
+	isAddingRules bool // Flag to indicate if the bot is currently adding rules
 }
 
 func New(token string, db *database.RawDB) *TelegramBot {
@@ -100,6 +102,7 @@ func (tb *TelegramBot) Start() {
 				case "addrule":
 					data := strings.Fields(update.Message.Text)
 					if len(data) == 1 {
+						tb.isAddingRules = true
 						textMsg = "OK. Send me a list of rules. Please use this format:\n\n[exchange_name pair volume +/-2%depth]\n"
 						break
 					}
@@ -154,7 +157,12 @@ func (tb *TelegramBot) Start() {
 					textMsg = "Unknown command. Available commands: /start, /listrules, /addrule, /editrule, /report"
 				}
 			} else if update.Message.Text != "" {
+				if !tb.isAddingRules {
+					continue
+				}
+
 				// Handle rules list to add
+				tb.isAddingRules = false
 				lines := strings.Split(update.Message.Text, "\n")
 				addedCount := 0
 				if len(lines) > 1 {

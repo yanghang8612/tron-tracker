@@ -806,7 +806,7 @@ func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
 
 func (db *RawDB) GetMarketPairRuleByToken(token string) []*models.Rule {
 	var rules []*models.Rule
-	db.db.Where("pair like ?", token+"/%").Find(&rules)
+	db.db.Where("pair like ?", "%"+token+"/%").Find(&rules)
 	return rules
 }
 
@@ -829,6 +829,17 @@ func (db *RawDB) GetAllMarketPairRules() []*models.Rule {
 	var rules []*models.Rule
 	db.db.Find(&rules)
 	return rules
+}
+
+func (db *RawDB) ContainExchangeAndPairInMarketPairStatistics(exchangeName, pair string) bool {
+	queryDBName := "market_pair_statistics_" + time.Now().Format("0601")
+
+	var count int64
+	db.db.Table(queryDBName).
+		Where("exchange_name = ? and pair = ?", exchangeName, pair).
+		Count(&count)
+
+	return count > 0
 }
 
 func (db *RawDB) GetMarketPairStatistics(data time.Time, days int, token string) []*models.MarketPairStatistic {

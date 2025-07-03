@@ -60,8 +60,8 @@ func New(token string, db *database.RawDB) *TelegramBot {
 		db:     db,
 		logger: zap.S().Named("[bot]"),
 
-		tokens: []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT"},
-		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft"},
+		tokens: []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT", "HTX", "USDD"},
+		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft", "htx", "usdd"},
 	}
 
 	tgBot.logger.Infof("Telegram bot authorized on account %s", botApi.Self.UserName)
@@ -82,8 +82,8 @@ func (tb *TelegramBot) Start() {
 				continue
 			}
 
+			textMsg := ""
 			if update.Message.IsCommand() {
-				textMsg := ""
 				switch update.Message.Command() {
 				case "start":
 					tb.chatID = update.Message.Chat.ID
@@ -95,49 +95,21 @@ func (tb *TelegramBot) Start() {
 					if len(rules) == 0 {
 						textMsg = "No rules found"
 					} else {
-						rulesMsg := "Rules:\n"
-						for _, rule := range rules {
-							rulesMsg += fmt.Sprintf(">\\[%2d\\] %s\\-%s, \\[Volume\\]: *$%s*, \\[\\+/\\-2%% Depth\\]: *$%s*\n",
-								rule.ID, rule.ExchangeName, rule.Pair,
-								humanize.SIWithDigits(rule.Volume, 0, ""),
-								humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
-						}
-						tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, rulesMsg, nil)
+						tb.reportRules(rules, false)
 					}
 				case "addrule":
 					data := strings.Fields(update.Message.Text)
+					if len(data) == 1 {
+						textMsg = "OK. Send me a list of rules. Please use this format:\n\n[exchange_name pair volume +/-2%depth]\n"
+						break
+					}
+
 					if len(data) != 5 {
 						textMsg = "You need to specify the exchange_name, pari, volume and +/-2% depth"
 						break
 					}
 
-					exchangeName := data[1]
-					pair := data[2]
-					volume, _, err := humanize.ParseSI(data[3])
-					if err != nil {
-						textMsg = "Invalid volume format, please use SI format like 1k, 1M, 1G"
-						break
-					}
-					depth, _, err := humanize.ParseSI(data[4])
-					if err != nil {
-						textMsg = "Invalid depth format, please use SI format like 1k, 1M, 1G"
-						break
-					}
-
-					rule := &models.Rule{
-						ExchangeName:        exchangeName,
-						Pair:                pair,
-						Volume:              volume,
-						DepthUsdPositiveTwo: depth,
-						DepthUsdNegativeTwo: depth,
-					}
-
-					if tb.db.GetMarketPairRuleByExchangePair(exchangeName, pair).ID == 0 {
-						tb.db.SaveMarketPairRule(rule)
-						textMsg = fmt.Sprintf("Added rule %s-%s [volume]: $%s, [+/-2%% Depth]: $%s", exchangeName, pair, data[3], data[4])
-					} else {
-						textMsg = fmt.Sprintf("Rule for %s-%s aleady exists", exchangeName, pair)
-					}
+					_, textMsg = tb.addRule(data[1:])
 				case "editrule":
 					data := strings.Fields(update.Message.Text)
 					if len(data) != 4 {
@@ -175,12 +147,29 @@ func (tb *TelegramBot) Start() {
 							humanize.SIWithDigits(rule.Volume, 0, ""),
 							humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 					}
-
+				case "report":
+					// data := strings.Fields(update.Message.Text)
+					tb.ReportMarketPairStatistics()
+				default:
+					textMsg = "Unknown command. Available commands: /start, /listrules, /addrule, /editrule, /report"
 				}
-
-				if textMsg != "" {
-					tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
+			} else if update.Message.Text != "" {
+				// Handle rules list to add
+				lines := strings.Split(update.Message.Text, "\n")
+				addedCount := 0
+				if len(lines) > 1 {
+					for _, line := range lines {
+						data := strings.Fields(line)
+						if ok, _ := tb.addRule(data); ok {
+							addedCount++
+						}
+					}
 				}
+				textMsg = fmt.Sprintf("Input rules: %d, total added: %d, invalid or duplicate: %d", len(lines), addedCount, len(lines)-addedCount)
+			}
+
+			if textMsg != "" {
+				tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
 			}
 		}
 	}()
@@ -212,10 +201,42 @@ func (tb *TelegramBot) sendMessage(msgID int, mode, textMsg string, replyMarkup 
 	return msgSent.MessageID
 }
 
+func (tb *TelegramBot) addRule(data []string) (bool, string) {
+	exchangeName := strings.ReplaceAll(data[0], "#", " ")
+	pair := data[1]
+
+	if !tb.db.ContainExchangeAndPairInMarketPairStatistics(exchangeName, pair) {
+		return false, fmt.Sprintf("Exchange %s and pair %s not found in database", exchangeName, pair)
+	}
+
+	volume, _, err := humanize.ParseSI(data[2])
+	if err != nil {
+		return false, "Invalid volume format, please use SI format like 1k, 1M, 1G"
+	}
+	depth, _, err := humanize.ParseSI(data[3])
+	if err != nil {
+		return false, "Invalid depth format, please use SI format like 1k, 1M, 1G"
+	}
+
+	rule := &models.Rule{
+		ExchangeName:        exchangeName,
+		Pair:                pair,
+		Volume:              volume,
+		DepthUsdPositiveTwo: depth,
+		DepthUsdNegativeTwo: depth,
+	}
+
+	if tb.db.GetMarketPairRuleByExchangePair(exchangeName, pair).ID == 0 {
+		tb.db.SaveMarketPairRule(rule)
+		return true, fmt.Sprintf("Added rule %s-%s [volume]: $%s, [+/-2%% Depth]: $%s", exchangeName, pair, data[2], data[3])
+	} else {
+		return false, fmt.Sprintf("Rule for %s-%s aleady exists", exchangeName, pair)
+	}
+}
+
 func (tb *TelegramBot) DoMarketPairStatistics() {
 	tb.logger.Infof("Start doing market pair statistics")
 
-	// textMsg := ""
 	for i, token := range tb.tokens {
 		originData, marketPairs, err := net.GetMarketPairs(token, tb.slugs[i])
 		if err != nil {
@@ -225,41 +246,10 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
 
-		// for _, marketPair := range marketPairs {
-		// 	rule := tb.db.GetMarketPairRuleByExchangePair(marketPair.ExchangeName, marketPair.Pair)
-		// 	if rule.ID != 0 && strings.HasPrefix(marketPair.Pair, token) {
-		// 		msg, shouldReport := tb.buildMarketPairStatisticsMsg(marketPair, rule)
-		// 		if shouldReport {
-		// 			textMsg += fmt.Sprintf(">\\[%s\\] %s $%s\n%s\n",
-		// 				marketPair.ExchangeName, marketPair.Pair,
-		// 				common.EscapeMarkdownV2(humanize.Ftoa(marketPair.Price)), msg)
-		// 		}
-		// 	}
-		// }
-
 		time.Sleep(time.Second * 1)
 	}
 
 	tb.logger.Infof("Finish doing market pair statistics")
-
-	// if time.Now().Minute() != 0 ||
-	// 	time.Now().Hour() == 0 ||
-	// 	time.Now().Hour() == 6 ||
-	// 	time.Now().Hour() == 12 ||
-	// 	time.Now().Hour() == 18 {
-	// 	return
-	// }
-	//
-	// if len(textMsg) > 0 {
-	// 	loc, _ := time.LoadLocation("Asia/Shanghai")
-	// 	textMsg = fmt.Sprintf("Rules Alarm at \\- \\[%s\\]\n%s",
-	// 		common.EscapeMarkdownV2(time.Now().In(loc).Format("01-02 15:04")), textMsg)
-	// 	tb.SendMessage(0, textMsg, nil)
-	// } else if time.Now().Minute() == 0 {
-	// 	tb.SendMessage(0, "All rules are OK", nil)
-	// }
-	//
-	// tb.logger.Infof("Finish reporting rulse alarm")
 }
 
 func (tb *TelegramBot) DoTokenListingStatistics() {
@@ -280,12 +270,17 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 	tb.logger.Infof("Start reporting market pair statistics")
 
 	textMsg := "<strong>[Statistics for the past 7 days]</strong>\n\n"
-	allPairsMsg := ""
+	tb.sendMessage(0, tgbotapi.ModeHTML, textMsg, nil)
+
 	lastWeek := time.Now().AddDate(0, 0, -7)
 	for _, token := range tb.tokens {
+		statsMsg := ""
+
 		rulesStats := make(map[string]*ruleStats)
 		for _, rule := range tb.db.GetMarketPairRuleByToken(token) {
-			rulesStats[rule.ExchangeName+"-"+rule.Pair] = &ruleStats{
+			// Special handling for APENFT pair
+			pair, _ := strings.CutPrefix(rule.Pair, "APE")
+			rulesStats[rule.ExchangeName+"-"+pair] = &ruleStats{
 				Rule:         rule,
 				ExchangeName: rule.ExchangeName,
 				Pair:         rule.Pair,
@@ -296,9 +291,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 			continue
 		}
 
-		data := [][]string{
-			{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"},
-		}
+		var data [][]string
 		for _, marketPair := range tb.db.GetMarketPairStatistics(lastWeek, 7, token) {
 			key := marketPair.ExchangeName + "-" + marketPair.Pair
 			if ruleStat, ok := rulesStats[key]; ok {
@@ -331,7 +324,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 
 		for _, ruleStat := range sortedRulesStats {
 			data = append(data, []string{
-				ruleStat.ExchangeName + "-" + ruleStat.Pair,
+				strings.Split(ruleStat.ExchangeName, " ")[0] + "-" + ruleStat.Pair,
 				fmt.Sprintf("%s(%s/%s)",
 					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthPositiveBrokenCount),
 					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount)),
@@ -349,71 +342,81 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 
 		var tableString bytes.Buffer
 		table := tablewriter.NewTable(&tableString, tablewriter.WithRenderer(renderer.NewMarkdown()))
-		table.Header(data[0])
-		table.Bulk(data[1:])
+		table.Header([]string{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"})
+		table.Bulk(data)
 		table.Render()
 
-		allPairsMsg += fmt.Sprintf("<b>%s</b>\n", token)
-		allPairsMsg += "<pre>\n" + tableString.String() + "</pre>\n"
+		statsMsg += fmt.Sprintf("<b>%s</b>\n", token)
+		statsMsg += "<pre>\n" + tableString.String() + "</pre>\n\n"
+
+		tb.sendMessage(0, tgbotapi.ModeHTML, statsMsg, nil)
 
 		time.Sleep(time.Second * 1)
 	}
 
-	// textMsg := "*Heartbeat*: System is running 🔥\n"
-
-	if len(allPairsMsg) > 0 {
-		textMsg += allPairsMsg
-	}
-
-	tb.sendMessage(0, tgbotapi.ModeHTML, textMsg, nil)
-
 	tb.logger.Infof("Finish reporting market pair statistics")
-}
-
-func (tb *TelegramBot) buildMarketPairStatisticsMsg(marketPair *models.MarketPairStatistic, rule *models.Rule) (string, bool) {
-	hasRuleBroken := false
-	msg := ""
-
-	msg += fmt.Sprintf(">\\- \\[24h Volume\\]: *$%s* \\(*$%s*\\)",
-		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.Volume, 2, "")),
-		humanize.SIWithDigits(rule.Volume, 0, ""))
-	if marketPair.Volume < rule.Volume {
-		hasRuleBroken = true
-		msg += " 🚨\n"
-	} else {
-		msg += " ✅\n"
-	}
-
-	msg += fmt.Sprintf(">\\- \\[\\+2%% Depth\\]: *$%s* \\(*$%s*\\)",
-		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdPositiveTwo, 2, "")),
-		humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
-	if marketPair.DepthUsdPositiveTwo < rule.DepthUsdPositiveTwo {
-		hasRuleBroken = true
-		msg += " 🚨\n"
-	} else {
-		msg += " ✅\n"
-	}
-
-	msg += fmt.Sprintf(">\\- \\[\\-2%% Depth\\]: *$%s* \\(*$%s*\\)",
-		common.EscapeMarkdownV2(humanize.SIWithDigits(marketPair.DepthUsdNegativeTwo, 2, "")),
-		humanize.SIWithDigits(rule.DepthUsdNegativeTwo, 0, ""))
-	if marketPair.DepthUsdNegativeTwo < rule.DepthUsdNegativeTwo {
-		hasRuleBroken = true
-		msg += " 🚨\n"
-	} else {
-		msg += " ✅\n"
-	}
-
-	return msg, hasRuleBroken
 }
 
 func formatComplianceRate(hitsCount, brokenCount int) string {
 	if brokenCount > hitsCount/10 {
-		return fmt.Sprintf("🚨%.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
+		return fmt.Sprintf("✘ %.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
 	}
-	return fmt.Sprintf("%.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
+	return fmt.Sprintf("✓ %.0f%%", 100-math.Ceil(float64(brokenCount)*100/float64(hitsCount)))
 }
 
 func formatFloatWithUnit(f float64) string {
 	return strings.ReplaceAll(humanize.SIWithDigits(f, 0, ""), " ", "")
+}
+
+func (tb *TelegramBot) reportRules(allRules []*models.Rule, byExchange bool) {
+	if byExchange {
+		rulesMap := make(map[string][]*models.Rule)
+		for _, rule := range allRules {
+			if _, ok := rulesMap[rule.ExchangeName]; !ok {
+				rulesMap[rule.ExchangeName] = make([]*models.Rule, 0)
+			}
+			rulesMap[rule.ExchangeName] = append(rulesMap[rule.ExchangeName], rule)
+		}
+
+		for exchange, rules := range rulesMap {
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf(">Exchange: *%s*\n", exchange))
+
+			for _, rule := range rules {
+				sb.WriteString(fmt.Sprintf(">\\[%2d\\] %s\\-%s, \\[Vol\\]: *$%s*, \\[\\+/\\-2%%Dp\\]: *$%s*\n",
+					rule.ID, rule.ExchangeName, rule.Pair,
+					humanize.SIWithDigits(rule.Volume, 0, ""),
+					humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, "")))
+			}
+
+			tb.sendMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
+		}
+	} else {
+		rulesMap := make(map[string][]*models.Rule)
+		for _, rule := range allRules {
+			// Special handling for APENFT pair
+			token, _ := strings.CutPrefix(strings.Split(rule.Pair, "/")[0], "APE")
+			if _, ok := rulesMap[token]; !ok {
+				rulesMap[token] = make([]*models.Rule, 0)
+			}
+			rulesMap[token] = append(rulesMap[token], rule)
+		}
+
+		for _, token := range tb.tokens {
+			if _, ok := rulesMap[token]; !ok {
+				continue
+			}
+			var sb strings.Builder
+			sb.WriteString(fmt.Sprintf(">Token: *%s*\n\n", token))
+
+			for _, rule := range rulesMap[token] {
+				sb.WriteString(fmt.Sprintf(">\\[%2d\\] %s\\-%s, \\[Vol\\]: *$%s*, \\[\\+/\\-2%%Dp\\]: *$%s*\n",
+					rule.ID, rule.ExchangeName, rule.Pair,
+					humanize.SIWithDigits(rule.Volume, 0, ""),
+					humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, "")))
+			}
+
+			tb.sendMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
+		}
+	}
 }

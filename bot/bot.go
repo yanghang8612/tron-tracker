@@ -14,6 +14,7 @@ import (
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
 	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/database"
@@ -350,8 +351,24 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 			})
 		}
 
+		md := renderer.NewMarkdown(
+			tw.Rendition{
+				Borders: tw.Border{
+					Left:   tw.Off,
+					Right:  tw.Off,
+					Top:    tw.Off,
+					Bottom: tw.Off,
+				},
+			},
+		)
+
 		var tableString bytes.Buffer
-		table := tablewriter.NewTable(&tableString, tablewriter.WithRenderer(renderer.NewMarkdown()))
+		table := tablewriter.NewTable(&tableString,
+			tablewriter.WithRenderer(md),
+			tablewriter.WithHeaderAutoFormat(tw.Off),
+			tablewriter.WithHeaderAlignment(tw.AlignNone),
+			tablewriter.WithRowAlignment(tw.AlignNone),
+		)
 		table.Header([]string{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"})
 		table.Bulk(data)
 		table.Render()

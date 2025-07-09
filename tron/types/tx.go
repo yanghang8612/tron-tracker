@@ -162,6 +162,7 @@ type Log struct {
 }
 
 type InternalTx struct {
+	From       string `json:"caller_address"`
 	To         string `json:"transferTo_address"`
 	Note       string `json:"note"`
 	Rejected   bool   `json:"rejected"`

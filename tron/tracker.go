@@ -213,7 +213,7 @@ func (t *Tracker) doTrackBlock() {
 		for _, internalTx := range txInfoList[idx].InternalTxs {
 			if !internalTx.Rejected && internalTx.Note == "63616c6c" &&
 				common.EncodeToBase58(internalTx.To) == database.USDT {
-				if td, isTransfer := convertTransferData(internalTx.From, internalTx.Data); isTransfer {
+				if td, isTransfer := convertTransferData(common.EncodeToBase58(internalTx.From), internalTx.Data); isTransfer {
 					var transferTxToDB = &models.Transaction{
 						Height: block.BlockHeader.RawData.Number,
 						Index:  uint16(idx),

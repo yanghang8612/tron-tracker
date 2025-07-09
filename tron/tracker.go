@@ -226,9 +226,9 @@ func (t *Tracker) doTrackBlock() {
 					transferTxToDB.ToAddr = td.To
 					transferTxToDB.Amount = td.Amount
 
-					transferTxToDB.EnergyTotal = internalTx.EnergyUsed
-					var percent = 1 - float64(transferTxToDB.EnergyTotal)/float64(txToDB.EnergyTotal)
+					var percent = float64(internalTx.EnergyUsed) / float64(txToDB.EnergyTotal)
 					transferTxToDB.Fee = int64(float64(txToDB.Fee) * percent)
+					transferTxToDB.EnergyTotal = internalTx.EnergyUsed
 					transferTxToDB.EnergyUsage = int64(float64(txToDB.EnergyUsage) * percent)
 					transferTxToDB.EnergyOriginUsage = int64(float64(txToDB.EnergyOriginUsage) * percent)
 

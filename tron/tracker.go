@@ -261,7 +261,7 @@ func (t *Tracker) doTrackUSDT() {
 	var date string
 	transactions := make([]*models.Transaction, 0)
 	for idx, txInfo := range txInfoList {
-		date = time.Unix(txInfo.BlockTimeStamp, 0).In(time.FixedZone("UTC", 0)).Format("060102")
+		date = time.Unix(txInfo.BlockTimeStamp/1000, 0).In(time.FixedZone("UTC", 0)).Format("060102")
 		if date >= "250709" {
 			return
 		}

@@ -27,6 +27,8 @@ type Tracker struct {
 	quitCh     chan struct{}
 
 	logger *zap.SugaredLogger
+
+	usdtBlockNum uint
 }
 
 type transferData struct {
@@ -46,6 +48,8 @@ func NewTracker(db *database.RawDB) *Tracker {
 		quitCh: make(chan struct{}),
 
 		logger: zap.S().Named("[tracker]"),
+
+		usdtBlockNum: 73000000,
 	}
 }
 
@@ -82,6 +86,7 @@ func (t *Tracker) loop() {
 			return
 		default:
 			t.doTrackBlock()
+			t.doTrackUSDT()
 		}
 	}
 }
@@ -238,6 +243,61 @@ func (t *Tracker) doTrackBlock() {
 		}
 	}
 	t.db.SaveTransactions(transactions)
+}
+
+func (t *Tracker) doTrackUSDT() {
+	nowBlock, _ := net.GetNowBlockForUSDT()
+	if nowBlock.BlockHeader.RawData.Number <= t.usdtBlockNum {
+		time.Sleep(1 * time.Second)
+		return
+	}
+
+	txInfoList, err := net.GetTransactionInfoListForUSDT(t.usdtBlockNum + 1)
+	if err != nil {
+		t.logger.Error(err)
+		return
+	}
+
+	var date string
+	transactions := make([]*models.Transaction, 0)
+	for idx, txInfo := range txInfoList {
+		date = time.Unix(txInfo.BlockTimeStamp, 0).In(time.FixedZone("UTC", 0)).Format("060102")
+		if date >= "250709" {
+			return
+		}
+		for _, internalTx := range txInfo.InternalTxs {
+			if !internalTx.Rejected && internalTx.Note == "63616c6c" &&
+				common.EncodeToBase58(internalTx.To) == database.USDT {
+				if td, isTransfer := convertTransferData(common.EncodeToBase58(internalTx.From), internalTx.Data); isTransfer {
+					var transferTxToDB = &models.Transaction{
+						Height: txInfo.BlockNumber,
+						Index:  uint16(idx),
+						Type:   255,
+						Result: 1,
+						Name:   database.USDT,
+					}
+
+					transferTxToDB.FromAddr = td.From
+					transferTxToDB.ToAddr = td.To
+					transferTxToDB.Amount = td.Amount
+
+					var percent = float64(internalTx.EnergyUsed) / float64(txInfo.Receipt.EnergyUsageTotal)
+					transferTxToDB.Fee = int64(float64(txInfo.Fee) * percent)
+					transferTxToDB.EnergyTotal = internalTx.EnergyUsed
+					transferTxToDB.EnergyUsage = int64(float64(txInfo.Receipt.EnergyUsage) * percent)
+					transferTxToDB.EnergyOriginUsage = int64(float64(txInfo.Receipt.OriginEnergyUsage) * percent)
+
+					transactions = append(transactions, transferTxToDB)
+				}
+			}
+		}
+	}
+
+	if len(transactions) != 0 {
+		t.db.SaveHistoryTransactions(date, transactions)
+	}
+
+	t.usdtBlockNum += 1
 }
 
 func convertTransferData(owner, data string) (*transferData, bool) {

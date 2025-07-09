@@ -1132,6 +1132,15 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
 	db.db.Table(dbName).Create(transactions)
 }
 
+func (db *RawDB) SaveHistoryTransactions(date string, transactions []*models.Transaction) {
+	if transactions == nil || len(transactions) == 0 {
+		return
+	}
+
+	dbName := "transactions_" + date
+	db.db.Table(dbName).Create(transactions)
+}
+
 func (db *RawDB) SaveMarketPairRule(rule *models.Rule) {
 	result := db.db.Save(rule)
 	if result.Error != nil {

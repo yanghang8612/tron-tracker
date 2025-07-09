@@ -49,6 +49,13 @@ func GetNowBlock() (*types.Block, error) {
 	return &block, err
 }
 
+func GetNowBlockForUSDT() (*types.Block, error) {
+	url := "http://127.0.0.1:9088" + GetNowBlockPath
+	var block types.Block
+	_, err := client.R().SetResult(&block).Get(url)
+	return &block, err
+}
+
 func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := configs.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
@@ -58,6 +65,13 @@ func GetBlockByHeight(height uint) (*types.Block, error) {
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := configs.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
+	var txInfoList = make([]*types.TransactionInfo, 0)
+	_, err := client.R().SetResult(&txInfoList).Get(url)
+	return txInfoList, err
+}
+
+func GetTransactionInfoListForUSDT(height uint) ([]*types.TransactionInfo, error) {
+	url := "http://127.0.0.1:9088" + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
 	_, err := client.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err

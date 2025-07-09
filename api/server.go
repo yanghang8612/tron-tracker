@@ -68,7 +68,6 @@ func (s *Server) Start() {
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
 	s.router.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
 	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
-	s.router.GET("/special_statistics", s.specialStatistic)
 	s.router.GET("/total_statistics", s.totalStatistics)
 	s.router.GET("/do-tronlink-users-weekly-statistics", s.doTronlinkUsersWeeklyStatistics)
 	s.router.GET("/tronlink-users-weekly-statistics", s.tronlinkUsersWeeklyStatistics)
@@ -426,26 +425,6 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 	}
 }
 
-func (s *Server) specialStatistic(c *gin.Context) {
-	date, ok := getDateParam(c, "date", yesterday())
-	if !ok {
-		return
-	}
-
-	addr, ok := c.GetQuery("addr")
-	if !ok {
-		return
-	}
-
-	chargeFee, withdrawFee, chargeCount, withdrawCount := s.db.GetSpecialStatisticByDateAddr(date.Format("060102"), addr)
-	c.JSON(200, gin.H{
-		"charge_fee":     chargeFee,
-		"withdraw_fee":   withdrawFee,
-		"charge_count":   chargeCount,
-		"withdraw_count": withdrawCount,
-	})
-}
-
 func (s *Server) totalStatistics(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
@@ -503,6 +482,8 @@ func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
 		go func() {
 			s.db.DoTronLinkWeeklyStatistics(date, true)
 		}()
+
+		c.String(200, "ok")
 	}
 }
 
@@ -1589,7 +1570,7 @@ func (s *Server) updatePPTData(c *gin.Context) {
 		s.isUpdating = false
 	}()
 
-	c.JSON(200, "ok")
+	c.String(200, "ok")
 }
 
 // Helper function to convert size string to bytes

@@ -6,6 +6,8 @@ import (
 	"tron-tracker/database/models/types"
 )
 
+const TransferType = 255
+
 type Transaction struct {
 	ID                uint `gorm:"primaryKey"`
 	Height            uint

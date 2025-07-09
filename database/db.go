@@ -480,19 +480,21 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 		count   = 0
 	)
 
-	result := db.db.Table("transactions_"+date).FindInBatches(&results, batchSize, func(_ *gorm.DB, _ int) error {
-		for _, tx := range results {
-			handler(tx)
+	result := db.db.Table("transactions_"+date).
+		Where("type <> ?", models.TransferType).
+		FindInBatches(&results, batchSize, func(_ *gorm.DB, _ int) error {
+			for _, tx := range results {
+				handler(tx)
 
-			count++
-			if count%1_000_000 == 0 {
-				db.logger.Infof("Traversed [%s] transactions", humanize.Comma(int64(count)))
+				count++
+				if count%1_000_000 == 0 {
+					db.logger.Infof("Traversed [%s] transactions", humanize.Comma(int64(count)))
+				}
 			}
-		}
-		return nil
-	})
+			return nil
+		})
 
-	db.logger.Infof("Traversed [%d] results, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
+	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
 func (db *RawDB) GetTopDelegateTxsByDateAndN(date time.Time, n int) []*models.Transaction {
@@ -758,35 +760,6 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) 
 	}
 
 	return resultMap
-}
-
-func (db *RawDB) GetSpecialStatisticByDateAddr(date, addr string) (uint, uint, uint, uint) {
-	USDTAddress := db.GetTokenAddress("USDT")
-	var chargeFee uint
-	db.db.Table("transactions_"+date).
-		Select("SUM(fee)").
-		Where("hash IN (?)",
-			db.db.Table("transfers_"+date).
-				Distinct("hash").
-				Where("to_addr = ? and token = ?", addr, USDTAddress)).
-		Find(&chargeFee)
-
-	var withdrawFee uint
-	db.db.Table("transactions_"+date).
-		Select("SUM(fee)").
-		Where("hash IN (?)",
-			db.db.Table("transfers_"+date).
-				Distinct("hash").
-				Where("from_addr = ? and token = ?", addr, USDTAddress)).
-		Find(&withdrawFee)
-
-	var chargeCnt int64
-	db.db.Table("transfers_"+date).Where("to_addr = ? and token = ?", addr, USDTAddress).Count(&chargeCnt)
-
-	var withdrawCnt int64
-	db.db.Table("transfers_"+date).Where("from_addr = ? and token = ?", addr, USDTAddress).Count(&withdrawCnt)
-
-	return chargeFee, withdrawFee, uint(chargeCnt), uint(withdrawCnt)
 }
 
 func (db *RawDB) GetTRXPriceByDate(date time.Time) float64 {
@@ -1333,37 +1306,31 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		db.logger.Infof("Start querying transactions for date: %s", queryDate)
 
 		txCount := 0
-		results := make([]*models.Transaction, 0)
-		result := db.db.Table("transactions_"+queryDate).FindInBatches(&results, 100, func(_ *gorm.DB, _ int) error {
-			for _, result := range results {
-				user := result.OwnerAddr
-				if _, ok := users[user]; !ok {
-					continue
-				}
-
-				if db.IsExchange(user) {
-					withdrawFee += result.Fee
-					withdrawEnergy += result.EnergyTotal
-				} else if _, ok := db.isCharger(user); ok {
-					collectFee += result.Fee
-					collectEnergy += result.EnergyTotal
-				} else if _, ok := db.isCharger(result.ToAddr); ok {
-					chargeFee += result.Fee
-					chargeEnergy += result.EnergyTotal
-				} else {
-					totalFee += result.Fee
-					totalEnergy += result.EnergyTotal
-				}
+		db.TraverseTransactions(queryDate, 500, func(tx *models.Transaction) {
+			user := tx.OwnerAddr
+			if _, ok := users[user]; !ok {
+				return
 			}
-			txCount += 100
+
+			if db.IsExchange(user) {
+				withdrawFee += tx.Fee
+				withdrawEnergy += tx.EnergyTotal
+			} else if _, ok := db.isCharger(user); ok {
+				collectFee += tx.Fee
+				collectEnergy += tx.EnergyTotal
+			} else if _, ok := db.isCharger(tx.ToAddr); ok {
+				chargeFee += tx.Fee
+				chargeEnergy += tx.EnergyTotal
+			} else {
+				totalFee += tx.Fee
+				totalEnergy += tx.EnergyTotal
+			}
+			txCount++
 
 			if txCount%1_000_000 == 0 {
 				db.logger.Infof("Queried rows: %d", txCount)
 			}
-
-			return nil
 		})
-		db.logger.Infof("Finish querying transactions for date: %s, query rows: %d, error: %v", queryDate, result.RowsAffected, result.Error)
 		db.logger.Infof("Total fee: %d, total energy: %d", totalFee, totalEnergy)
 		db.logger.Infof("Withdraw fee: %d, withdraw energy: %d", withdrawFee, withdrawEnergy)
 		db.logger.Infof("Collect fee: %d, collect energy: %d", collectFee, collectEnergy)
@@ -1613,7 +1580,7 @@ func (db *RawDB) countForDate(date string) {
 	)
 
 	result := db.db.Table("transactions_"+date).
-		Where("type = ? or name = ?", 1, USDT).
+		Where("type = ? or name = ? and type <>", 1, USDT, models.TransferType).
 		FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				if len(result.ToAddr) == 0 || result.Result != 1 {
@@ -1695,7 +1662,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 
 	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ?", 1, USDT).
+			Where("type = ? or name = ? and type <> ?", 1, USDT, models.TransferType).
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Result != 1 {

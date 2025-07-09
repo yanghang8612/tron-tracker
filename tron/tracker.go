@@ -3,6 +3,7 @@ package tron
 import (
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	"tron-tracker/tron/types"
 )
 
+const TransferTopic = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
 type Tracker struct {
 	db *database.RawDB
 
@@ -24,6 +27,12 @@ type Tracker struct {
 	quitCh     chan struct{}
 
 	logger *zap.SugaredLogger
+}
+
+type transferData struct {
+	From   string
+	To     string
+	Amount modeltypes.BigInt
 }
 
 func NewTracker(db *database.RawDB) *Tracker {
@@ -151,16 +160,10 @@ func (t *Tracker) doTrackBlock() {
 					txToDB.Method = data[:8]
 				}
 
-				if txToDB.Method == "a9059cbb" && len(data) >= 8+64*2 {
-					txToDB.FromAddr = txToDB.OwnerAddr
-					txToDB.ToAddr = common.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64 : 8+64*2]))
-				}
-
-				if txToDB.Method == "23b872dd" && len(data) >= 8+64*3 {
-					txToDB.FromAddr = common.EncodeToBase58(data[8+24 : 8+64])
-					txToDB.ToAddr = common.EncodeToBase58(data[8+24+64 : 8+64*2])
-					txToDB.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64*2 : 8+64*3]))
+				if td, isTransfer := convertTransferData(txToDB.OwnerAddr, data); isTransfer {
+					txToDB.FromAddr = td.From
+					txToDB.ToAddr = td.To
+					txToDB.Amount = td.Amount
 				}
 			}
 			txToDB.EnergyTotal = txInfoList[idx].Receipt.EnergyUsageTotal
@@ -195,8 +198,8 @@ func (t *Tracker) doTrackBlock() {
 		transactions = append(transactions, txToDB)
 		t.db.UpdateStatistics(block.BlockHeader.RawData.Timestamp, txToDB)
 
-		for _, log := range txInfoList[idx].Log {
-			if len(log.Topics) == 3 && log.Topics[0] == "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" {
+		for _, log := range txInfoList[idx].Logs {
+			if len(log.Topics) == 3 && log.Topics[0] == TransferTopic {
 				fromAddr := common.EncodeToBase58(log.Topics[1][24:])
 				toAddr := common.EncodeToBase58(log.Topics[2][24:])
 
@@ -206,6 +209,49 @@ func (t *Tracker) doTrackBlock() {
 				}
 			}
 		}
+
+		for _, internalTx := range txInfoList[idx].InternalTxs {
+			if !internalTx.Rejected && common.EncodeToBase58(internalTx.To) == database.USDT {
+				if td, isTransfer := convertTransferData(txToDB.OwnerAddr, internalTx.Data); isTransfer {
+					var transferTxToDB = &models.Transaction{
+						Height: block.BlockHeader.RawData.Number,
+						Index:  uint16(idx),
+						Type:   255,
+						Result: 1,
+						Name:   database.USDT,
+					}
+
+					transferTxToDB.FromAddr = td.From
+					transferTxToDB.ToAddr = td.To
+					transferTxToDB.Amount = td.Amount
+
+					transferTxToDB.EnergyTotal = internalTx.EnergyUsed
+					var percent = 1 - float64(transferTxToDB.EnergyTotal)/float64(txToDB.EnergyTotal)
+					transferTxToDB.Fee = int64(float64(txToDB.Fee) * percent)
+					transferTxToDB.EnergyUsage = int64(float64(txToDB.EnergyUsage) * percent)
+					transferTxToDB.EnergyOriginUsage = int64(float64(txToDB.EnergyOriginUsage) * percent)
+
+					transactions = append(transactions, transferTxToDB)
+				}
+			}
+		}
 	}
 	t.db.SaveTransactions(transactions)
+}
+
+func convertTransferData(owner, data string) (*transferData, bool) {
+	var t transferData
+
+	if len(data) >= 8+64*2 && strings.HasPrefix(data, "a9059cbb") {
+		t.From = owner
+		t.To = common.EncodeToBase58(data[8+24 : 8+64])
+		t.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64 : 8+64*2]))
+		return &t, true
+	} else if len(data) >= 8+64*3 && strings.HasPrefix(data, "23b872dd") {
+		t.From = common.EncodeToBase58(data[8+24 : 8+64])
+		t.To = common.EncodeToBase58(data[8+24+64 : 8+64*2])
+		t.Amount = modeltypes.NewBigInt(common.ConvertHexToBigInt(data[8+64*2 : 8+64*3]))
+		return &t, true
+	}
+	return nil, false
 }

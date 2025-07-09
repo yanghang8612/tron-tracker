@@ -161,19 +161,28 @@ type Log struct {
 	Data    string   `json:"data"`
 }
 
+type InternalTx struct {
+	To         string `json:"transferTo_address"`
+	Note       string `json:"note"`
+	Rejected   bool   `json:"rejected"`
+	Data       string `json:"data"`
+	EnergyUsed int64  `json:"energyUsed"`
+}
+
 type TransactionInfo struct {
-	ID                     string   `json:"id"`
-	Fee                    int64    `json:"fee"`
-	BlockNumber            uint     `json:"blockNumber"`
-	BlockTimeStamp         int64    `json:"blockTimeStamp"`
-	ContractResult         []string `json:"contractResult"`
-	ContractAddress        string   `json:"contract_address"`
-	Receipt                Receipt  `json:"receipt"`
-	Log                    []Log    `json:"log"`
-	Result                 string   `json:"result"`
-	WithdrawAmount         int64    `json:"withdraw_amount"`
-	UnfreezeAmount         int64    `json:"unfreeze_amount"`
-	WithdrawExpireAmount   int64    `json:"withdraw_expire_amount"`
+	ID                     string       `json:"id"`
+	Fee                    int64        `json:"fee"`
+	BlockNumber            uint         `json:"blockNumber"`
+	BlockTimeStamp         int64        `json:"blockTimeStamp"`
+	ContractResult         []string     `json:"contractResult"`
+	ContractAddress        string       `json:"contract_address"`
+	Receipt                Receipt      `json:"receipt"`
+	Logs                   []Log        `json:"logs"`
+	InternalTxs            []InternalTx `json:"internal_transactions"`
+	Result                 string       `json:"result"`
+	WithdrawAmount         int64        `json:"withdraw_amount"`
+	UnfreezeAmount         int64        `json:"unfreeze_amount"`
+	WithdrawExpireAmount   int64        `json:"withdraw_expire_amount"`
 	CancelUnfreezeV2Amount []struct {
 		Key   string `json:"key"`
 		Value int64  `json:"value"`

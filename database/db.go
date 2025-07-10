@@ -160,7 +160,7 @@ func New(cfg *config.DBConfig) *RawDB {
 
 	rawDB.loadExchanges()
 	rawDB.loadChargers()
-	rawDB.refreshChargers()
+	// rawDB.refreshChargers()
 
 	return rawDB
 }

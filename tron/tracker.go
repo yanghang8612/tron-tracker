@@ -50,7 +50,7 @@ func NewTracker(db *database.RawDB) *Tracker {
 
 		logger: zap.S().Named("[tracker]"),
 
-		usdtBlockNum: 73094833,
+		usdtBlockNum: 73111417,
 		isDone:       false,
 	}
 }

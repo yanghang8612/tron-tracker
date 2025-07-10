@@ -22,19 +22,6 @@ import (
 	"tron-tracker/net"
 )
 
-type ruleStats struct {
-	Rule                     *models.Rule
-	ExchangeName             string
-	Pair                     string
-	DepthUsdPositiveTwoSum   float64
-	DepthUsdNegativeTwoSum   float64
-	VolumeSum                float64
-	HitsCount                int
-	DepthPositiveBrokenCount int
-	DepthNegativeBrokenCount int
-	VolumeBrokenCount        int
-}
-
 type TelegramBot struct {
 	api    *tgbotapi.BotAPI
 	chatID int64
@@ -283,71 +270,37 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 
 	lastWeek := time.Now().AddDate(0, 0, -7)
 	for _, token := range tb.tokens {
-		statsMsg := ""
-
-		rulesStats := make(map[string]*ruleStats)
-		for _, rule := range tb.db.GetMarketPairRuleByToken(token) {
-			// Special handling for APENFT pair
-			pair, _ := strings.CutPrefix(rule.Pair, "APE")
-			rulesStats[rule.ExchangeName+"-"+pair] = &ruleStats{
-				Rule:         rule,
-				ExchangeName: rule.ExchangeName,
-				Pair:         rule.Pair,
-			}
-		}
-
+		rulesStats := tb.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, lastWeek, 7)
 		if len(rulesStats) == 0 {
 			continue
 		}
 
-		var data [][]string
-		for _, marketPair := range tb.db.GetMarketPairStatistics(lastWeek, 7, token) {
-			// Special handling for APENFT pair
-			pair, _ := strings.CutPrefix(marketPair.Pair, "APE")
-			key := marketPair.ExchangeName + "-" + pair
-			if ruleStat, ok := rulesStats[key]; ok {
-				ruleStat.DepthUsdPositiveTwoSum += marketPair.DepthUsdPositiveTwo
-				ruleStat.DepthUsdNegativeTwoSum += marketPair.DepthUsdNegativeTwo
-				ruleStat.VolumeSum += marketPair.Volume
-				ruleStat.HitsCount++
-
-				if marketPair.DepthUsdPositiveTwo < ruleStat.Rule.DepthUsdPositiveTwo {
-					ruleStat.DepthPositiveBrokenCount++
-				}
-				if marketPair.DepthUsdNegativeTwo < ruleStat.Rule.DepthUsdNegativeTwo {
-					ruleStat.DepthNegativeBrokenCount++
-				}
-				if marketPair.Volume < ruleStat.Rule.Volume {
-					ruleStat.VolumeBrokenCount++
-				}
-			}
-		}
-
-		sortedRulesStats := make([]*ruleStats, 0, len(rulesStats))
+		sortedRulesStats := make([]*models.Rule, 0, len(rulesStats))
 		for _, ruleStat := range rulesStats {
 			if ruleStat.HitsCount > 0 {
 				sortedRulesStats = append(sortedRulesStats, ruleStat)
 			}
 		}
 		sort.Slice(sortedRulesStats, func(i, j int) bool {
-			return sortedRulesStats[i].Rule.ID < sortedRulesStats[j].Rule.ID
+			return sortedRulesStats[i].ID < sortedRulesStats[j].ID
 		})
 
+		var data [][]string
 		for _, ruleStat := range sortedRulesStats {
 			data = append(data, []string{
 				strings.Split(ruleStat.ExchangeName, " ")[0] + "-" + ruleStat.Pair,
 				fmt.Sprintf("%s(%s/%s)",
 					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthPositiveBrokenCount),
 					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.Rule.DepthUsdPositiveTwo)),
+					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwo)),
 				fmt.Sprintf("%s(%s/%s)",
 					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthNegativeBrokenCount),
 					formatFloatWithUnit(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.Rule.DepthUsdNegativeTwo)),
+					formatFloatWithUnit(ruleStat.DepthUsdNegativeTwo)),
 				fmt.Sprintf("%s(%s/%s)",
 					formatComplianceRate(ruleStat.HitsCount, ruleStat.VolumeBrokenCount),
 					formatFloatWithUnit(ruleStat.VolumeSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.Rule.Volume)),
+					formatFloatWithUnit(ruleStat.Volume)),
 			})
 		}
 
@@ -373,6 +326,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 		table.Bulk(data)
 		table.Render()
 
+		var statsMsg string
 		statsMsg += fmt.Sprintf("<b>%s</b>\n", token)
 		statsMsg += "<pre>\n" + tableString.String() + "</pre>\n\n"
 

@@ -824,22 +824,26 @@ func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate ti
 		queryDate := startDate.AddDate(0, 0, i)
 		queryDateDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
-		var prices []float64
-		db.db.Table(queryDateDBName).
-			Select("min(price), max(price)").
+		var minPrice, maxPrice float64
+		row := db.db.Table(queryDateDBName).
+			Select("min(price) AS min_price, max(price) AS max_price").
 			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
 				queryDate.Format("02")+"%", "Binance", token+"/USDT").
-			Find(&prices)
+			Row()
 
-		if len(prices) == 2 && prices[0] > 0 && prices[1] > 0 {
-			if lowPrice == 0 || prices[0] < lowPrice {
-				lowPrice = prices[0]
+		if err := row.Scan(&minPrice, &maxPrice); err != nil {
+			db.logger.Warnf("Error scanning price range for token [%s] on date [%s]: %v", token, queryDate.Format("060102"), err)
+			continue
+		}
+		if minPrice > 0 {
+			if lowPrice == 0 || minPrice < lowPrice {
+				lowPrice = minPrice
 			}
-			if highPrice == 0 || prices[1] > highPrice {
-				highPrice = prices[1]
+		}
+		if maxPrice > 0 {
+			if highPrice == 0 || maxPrice > highPrice {
+				highPrice = maxPrice
 			}
-		} else {
-			db.logger.Warnf("No valid price found for token [%s] on date [%s]", token, queryDate.Format("060102"))
 		}
 	}
 

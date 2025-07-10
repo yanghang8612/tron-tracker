@@ -161,40 +161,44 @@ func SaveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
-func (u *Updater) Update1(date time.Time) {
+func (u *Updater) TraverseAllObjectsInPPT() string {
 	// Get full presentation
 	presentation, err := u.slidesService.Presentations.Get(u.presentationId).Do()
 	if err != nil {
 		log.Fatalf("Unable to retrieve presentation: %v", err)
 	}
 
-	fmt.Printf("Presentation title: %s\n", presentation.Title)
+	var sb strings.Builder
+
+	sb.WriteString(fmt.Sprintf("Presentation title: %s\n", presentation.Title))
 
 	// Traverse all slides
 	for i, slide := range presentation.Slides {
-		fmt.Printf("Processing Slide ID: [%d] - %s\n", i, slide.ObjectId)
+		sb.WriteString(fmt.Sprintf("Processing Slide ID: [%d] - %s\n", i, slide.ObjectId))
 
 		for j, element := range slide.PageElements {
 			objectId := element.ObjectId
-			fmt.Printf("Object ID: [%d] - %s\n", j, objectId)
+			sb.WriteString(fmt.Sprintf("Object ID: [%d] - %s\n", j, objectId))
 
 			// Check if the element is a TEXT_BOX
 			if element.Shape != nil && element.Shape.ShapeType == "TEXT_BOX" {
 				textContent := extractText(element)
-				fmt.Printf("Text: %s\n", textContent)
+				sb.WriteString(fmt.Sprintf("Text: %s\n", textContent))
 			} else if element.Shape != nil {
-				fmt.Printf("Shape: %s\n", element.Shape.ShapeType)
+				sb.WriteString(fmt.Sprintf("Shape: %s\n", element.Shape.ShapeType))
 			} else if element.Table != nil {
-				fmt.Printf("Table: %s\n", objectId)
+				sb.WriteString(fmt.Sprintf("Table: %s\n", objectId))
 			} else if element.SheetsChart != nil {
-				fmt.Printf("Sheets Chart: %s\n", element.ObjectId)
+				sb.WriteString(fmt.Sprintf("Sheets Chart: %s\n", element.ObjectId))
 			} else {
-				fmt.Printf("Unknown: %s\n", element.ObjectId)
+				sb.WriteString(fmt.Sprintf("Unknown: %s\n", element.ObjectId))
 			}
-			fmt.Println("------------------------------")
+			sb.WriteString(fmt.Sprint("------------------------------\n"))
 		}
-		fmt.Println("##############################")
+		sb.WriteString(fmt.Sprint("##############################\n\n"))
 	}
+
+	return sb.String()
 }
 
 func (u *Updater) Update(date time.Time) {

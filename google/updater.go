@@ -343,12 +343,11 @@ func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 	}...)
 
 	// Update note
-	// curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
-	// lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
+	curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
+	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
 	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, 7).Format("2006-01-02"))
 	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, 7), "TRX").Price)
-	// storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats) + "\n"
-	storageNote := "\n"
+	storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats) + "\n"
 	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.volumeId).Ranges("USDT!F2:H8").Do()
 	supplyNote := common.FormatUSDTSupplyReport(resp.ValueRanges[0].Values)
 
@@ -456,7 +455,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	// Update the 24h volume / market cap
 	thisVolumeToMarketCapRatio := thisMarketPairStats["Total"].Volume / curWeekStat.MarketCap
 	lastVolumeToMarketCapRatio := lastMarketPairStats["Total"].Volume / lastWeekStat.MarketCap
-	VolumeToMarketCapRatio := fmt.Sprintf("%.2f%%%", thisVolumeToMarketCapRatio*100)
+	VolumeToMarketCapRatio := fmt.Sprintf("%.2f%%", thisVolumeToMarketCapRatio*100)
 	VolumeToMarketCapRatioChange := common.FormatPercentWithSign(thisVolumeToMarketCapRatio - lastVolumeToMarketCapRatio)
 	VolumeToMarketCapRatioObjectId := page.PageElements[18].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(VolumeToMarketCapRatioObjectId, -1, -1, VolumeToMarketCapRatio, VolumeToMarketCapRatioChange, 11, 7, true)...)
@@ -483,8 +482,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 		var color string
 
 		// Update +2% depth cell
-		depthPositiveCell, color := getComplianceRateEmojiAndColor(ruleStat.DepthPositiveBrokenCount, ruleStat.HitsCount)
-		if ruleStat.DepthPositiveBrokenCount != 0 {
+		depthPositiveCell, color, shouldAppendStat := getComplianceRateEmojiAndColor(ruleStat.DepthPositiveBrokenCount, ruleStat.HitsCount)
+		if shouldAppendStat {
 			depthPositiveCell += fmt.Sprintf(" %s\n(Dp: %s / %s)",
 				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.DepthPositiveBrokenCount)),
 				humanize.SIWithDigits(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount), 0, ""),
@@ -493,8 +492,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 		reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 2, depthPositiveCell, 8, color, false)...)
 
 		// Update +2% depth cell
-		depthNegativeCell, color := getComplianceRateEmojiAndColor(ruleStat.DepthNegativeBrokenCount, ruleStat.HitsCount)
-		if ruleStat.DepthNegativeBrokenCount != 0 {
+		depthNegativeCell, color, shouldAppendStat := getComplianceRateEmojiAndColor(ruleStat.DepthNegativeBrokenCount, ruleStat.HitsCount)
+		if shouldAppendStat {
 			depthNegativeCell += fmt.Sprintf(" %s\n(Dp: %s / %s)",
 				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.DepthNegativeBrokenCount)),
 				humanize.SIWithDigits(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount), 0, ""),
@@ -503,8 +502,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 		reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 3, depthNegativeCell, 8, color, false)...)
 
 		// Update +2% depth cell
-		volumeCell, color := getComplianceRateEmojiAndColor(ruleStat.VolumeBrokenCount, ruleStat.HitsCount)
-		if ruleStat.VolumeBrokenCount != 0 {
+		volumeCell, color, shouldAppendStat := getComplianceRateEmojiAndColor(ruleStat.VolumeBrokenCount, ruleStat.HitsCount)
+		if shouldAppendStat {
 			volumeCell += fmt.Sprintf(" %s\n(Vol: %s / %s)",
 				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.VolumeBrokenCount)),
 				humanize.SIWithDigits(ruleStat.VolumeSum/float64(ruleStat.HitsCount), 0, ""),
@@ -749,14 +748,14 @@ func extractText(element *slides.PageElement) string {
 	return result
 }
 
-func getComplianceRateEmojiAndColor(brokenCount, hitsCount int) (string, string) {
-	if brokenCount == 0 {
-		return "✅", "white"
+func getComplianceRateEmojiAndColor(brokenCount, hitsCount int) (string, string, bool) {
+	if brokenCount < hitsCount/100 {
+		return "✅", "white", false
 	}
 	if brokenCount < hitsCount/2 {
-		return "⚠️", "orange"
+		return "⚠️", "orange", true
 	}
-	return "❌", "red"
+	return "❌", "red", true
 }
 
 func buildFullTextRequests(objectId string, i, j int64, text string, fontSize float64, color string, bold bool) []*slides.Request {

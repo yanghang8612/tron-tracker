@@ -824,19 +824,19 @@ func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate ti
 		queryDate := startDate.AddDate(0, 0, i)
 		queryDateDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
-		var lowPriceTmp, highPriceTmp float64
+		var prices []float64
 		db.db.Table(queryDateDBName).
 			Select("min(price), max(price)").
 			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
 				queryDate.Format("02")+"%", "Binance", token+"/USDT").
-			Find(&lowPriceTmp, &highPriceTmp)
+			Find(&prices)
 
-		if lowPriceTmp > 0 && highPriceTmp > 0 {
-			if lowPrice == 0 || lowPriceTmp < lowPrice {
-				lowPrice = lowPriceTmp
+		if len(prices) == 2 && prices[0] > 0 && prices[1] > 0 {
+			if lowPrice == 0 || prices[0] < lowPrice {
+				lowPrice = prices[0]
 			}
-			if highPrice == 0 || highPriceTmp > highPrice {
-				highPrice = highPriceTmp
+			if highPrice == 0 || prices[1] > highPrice {
+				highPrice = prices[1]
 			}
 		} else {
 			db.logger.Warnf("No valid price found for token [%s] on date [%s]", token, queryDate.Format("060102"))

@@ -29,6 +29,7 @@ type Tracker struct {
 	logger *zap.SugaredLogger
 
 	usdtBlockNum uint
+	isDone       bool
 }
 
 type transferData struct {
@@ -49,7 +50,8 @@ func NewTracker(db *database.RawDB) *Tracker {
 
 		logger: zap.S().Named("[tracker]"),
 
-		usdtBlockNum: 73000000,
+		usdtBlockNum: 73094833,
+		isDone:       false,
 	}
 }
 
@@ -86,7 +88,9 @@ func (t *Tracker) loop() {
 			return
 		default:
 			t.doTrackBlock()
-			t.doTrackUSDT()
+			if !t.isDone {
+				t.doTrackUSDT()
+			}
 		}
 	}
 }
@@ -246,12 +250,6 @@ func (t *Tracker) doTrackBlock() {
 }
 
 func (t *Tracker) doTrackUSDT() {
-	nowBlock, _ := net.GetNowBlockForUSDT()
-	if nowBlock.BlockHeader.RawData.Number <= t.usdtBlockNum {
-		time.Sleep(1 * time.Second)
-		return
-	}
-
 	txInfoList, err := net.GetTransactionInfoListForUSDT(t.usdtBlockNum + 1)
 	if err != nil {
 		t.logger.Error(err)
@@ -263,6 +261,7 @@ func (t *Tracker) doTrackUSDT() {
 	for idx, txInfo := range txInfoList {
 		date = time.Unix(txInfo.BlockTimeStamp/1000, 0).In(time.FixedZone("UTC", 0)).Format("060102")
 		if date >= "250709" {
+			t.isDone = true
 			return
 		}
 		for _, internalTx := range txInfo.InternalTxs {
@@ -298,6 +297,9 @@ func (t *Tracker) doTrackUSDT() {
 	}
 
 	t.usdtBlockNum += 1
+	if t.usdtBlockNum%1000 == 0 {
+		t.logger.Infof("Tracked USDT block [%d]", t.usdtBlockNum)
+	}
 }
 
 func convertTransferData(owner, data string) (*transferData, bool) {

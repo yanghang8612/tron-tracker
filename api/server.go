@@ -92,6 +92,7 @@ func (s *Server) Start() {
 	s.router.GET("/market_pair_weekly_depths", s.marketPairWeeklyDepths)
 	s.router.GET("/token_listing_statistic", s.tokenListingStatistic)
 	s.router.GET("/volume_ppt_data", s.volumePPTData)
+	s.router.GET("/traverse_ppt_objects", s.traversePPTObjects)
 	s.router.GET("/update_ppt_data", s.updatePPTData)
 
 	s.router.GET("/top_delegate", s.topDelegate)
@@ -1540,6 +1541,10 @@ func (s *Server) volumePPTData(c *gin.Context) {
 
 		c.String(200, result.String())
 	}
+}
+
+func (s *Server) traversePPTObjects(c *gin.Context) {
+	c.String(200, s.updater.TraverseAllObjectsInPPT())
 }
 
 func (s *Server) updatePPTData(c *gin.Context) {

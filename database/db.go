@@ -497,11 +497,15 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
-func (db *RawDB) GetTopDelegateTxsByDateAndN(date time.Time, n int) []*models.Transaction {
+func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnDelegate bool) []*models.Transaction {
 	var txs []*models.Transaction
 
 	queryDate := date.Format("060102")
-	db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+	if isUnDelegate {
+		db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 58, 158).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+	} else {
+		db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+	}
 
 	return txs
 }

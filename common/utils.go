@@ -76,7 +76,7 @@ func FormatStorageDiffReport(curStats, lastStats *models.USDTStorageStatistic) s
 		"\tDaily total energy: %s (%s)\n"+
 		"\tDaily energy with staking: %s (%s)\n"+
 		"\tDaily energy fee: %s TRX (%s)\n"+
-		"\tBurn energy: %.2f%%",
+		"\tBurn energy: %.2f%%\n",
 		float64(curStats.SetEnergyFee)/float64(curStats.SetTxCount)/1e6,
 		FormatChangePercent(int64(lastStats.SetEnergyFee/uint64(lastStats.SetTxCount)), int64(curStats.SetEnergyFee/uint64(curStats.SetTxCount))),
 		humanize.Comma(int64(curStats.SetTxCount/7)),
@@ -99,6 +99,21 @@ func FormatStorageDiffReport(curStats, lastStats *models.USDTStorageStatistic) s
 		humanize.Comma(int64(curStats.ResetEnergyFee/7_000_000)),
 		FormatChangePercent(int64(lastStats.ResetEnergyFee), int64(curStats.ResetEnergyFee)),
 		100.0-float64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/float64(curStats.ResetEnergyTotal)*100)
+}
+
+func FormatUSDTSupplyReport(data [][]interface{}) string {
+	title := "Multi-Chain USDT Supply\n"
+	var content strings.Builder
+	for _, row := range data {
+		if len(row[0].(string)) > 6 {
+			content.WriteString(
+				fmt.Sprintf("\t%s\t%s\t%s\n", row[0], row[1], row[2]))
+		} else {
+			content.WriteString(
+				fmt.Sprintf("\t%s\t\t%s\t%s\n", row[0], row[1], row[2]))
+		}
+	}
+	return title + content.String()
 }
 
 func EscapeMarkdownV2(text string) string {

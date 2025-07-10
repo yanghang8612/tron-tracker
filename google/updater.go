@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"github.com/dustin/go-humanize"
 	"github.com/goccy/go-json"
 	"go.uber.org/zap"
 	"golang.org/x/oauth2"
@@ -170,12 +171,12 @@ func (u *Updater) Update1(date time.Time) {
 	fmt.Printf("Presentation title: %s\n", presentation.Title)
 
 	// Traverse all slides
-	for _, slide := range presentation.Slides {
-		fmt.Printf("Processing Slide ID: %s\n", slide.ObjectId)
+	for i, slide := range presentation.Slides {
+		fmt.Printf("Processing Slide ID: [%d] - %s\n", i, slide.ObjectId)
 
-		for _, element := range slide.PageElements {
+		for j, element := range slide.PageElements {
 			objectId := element.ObjectId
-			fmt.Printf("Object ID: %s\n", objectId)
+			fmt.Printf("Object ID: [%d] - %s\n", j, objectId)
 
 			// Check if the element is a TEXT_BOX
 			if element.Shape != nil && element.Shape.ShapeType == "TEXT_BOX" {
@@ -183,9 +184,16 @@ func (u *Updater) Update1(date time.Time) {
 				fmt.Printf("Text: %s\n", textContent)
 			} else if element.Shape != nil {
 				fmt.Printf("Shape: %s\n", element.Shape.ShapeType)
+			} else if element.Table != nil {
+				fmt.Printf("Table: %s\n", objectId)
+			} else if element.SheetsChart != nil {
+				fmt.Printf("Sheets Chart: %s\n", element.ObjectId)
+			} else {
+				fmt.Printf("Unknown: %s\n", element.ObjectId)
 			}
-			fmt.Println("----------")
+			fmt.Println("------------------------------")
 		}
+		fmt.Println("##############################")
 	}
 }
 
@@ -228,11 +236,20 @@ func (u *Updater) Update(date time.Time) {
 		u.logger.Errorf("Unable to update WIN volume sheet: %v", err)
 	}
 
+	// Update USDT Supply
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "USDT!A2:D19",
+		&sheets.ValueRange{
+			Values: u.getUSDTSupplyData(time.Now()),
+		}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update USDT supply sheet: %v", err)
+	}
+
 	// Update revenue sheet
 	revenueData := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
 		queryDate := lastMonth.AddDate(0, 0, i)
-		trxPrice := u.db.GetTRXPriceByDate(queryDate.AddDate(0, 0, 1))
+		trxPrice := u.db.GetTokenPriceByDate("TRX", queryDate.AddDate(0, 0, 1))
 		totalStats := u.db.GetTotalStatisticsByDateDays(queryDate, 1)
 		usdtStats := u.db.GetTokenStatisticsByDateDaysToken(queryDate, 1, "USDT")
 
@@ -265,25 +282,32 @@ func (u *Updater) Update(date time.Time) {
 		return
 	}
 
-	// Update the first slide with USDT transfer fee
-	u.updateUSDTTransferFee(ppt.Slides[0], date.AddDate(0, 0, -7))
+	// Update the first slide with Chain data
+	u.updateChainData(ppt.Slides[0], date.AddDate(0, 0, -7))
 
 	// Update the next four slides with CEX data
-	u.updateCexData(ppt.Slides[1], date, "TRX", map[string]bool{"Binance": true, "Kraken": true})
-	u.updateCexData(ppt.Slides[2], date, "STEEM", map[string]bool{"Binance_STEEM/USDT": true, "Binance_STEEM/USDC": true})
-	u.updateCexData(ppt.Slides[3], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true})
-	u.updateCexData(ppt.Slides[4], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true})
+	u.updateCexData(ppt.Slides[1], date, "TRX", map[string]bool{"Binance": true, "Kraken": true},
+		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
+
+	u.updateCexData(ppt.Slides[2], date, "STEEM", map[string]bool{"Binance-STEEM/USDT": true, "Binance-STEEM/USDC": true},
+		[]string{"Binance-STEEM/USDT", "Binance-STEEM/USDC", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
+
+	u.updateCexData(ppt.Slides[3], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "OKX-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
+
+	u.updateCexData(ppt.Slides[4], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+		[]string{"Binance-WIN/USDT", "Binance-WIN/TRX", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
 
 	// Update the last slide with Revenue data
 	u.updateRevenueData(ppt.Slides[5], date)
 }
 
-func (u *Updater) updateUSDTTransferFee(page *slides.Page, startDate time.Time) {
+func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 	reqs := make([]*slides.Request, 0)
 
+	// Update USDT tranfer fee
 	usdtStats := u.db.GetTokenStatisticsByDateDaysToken(startDate, 7, "USDT")
 	burnPercent := 1.0 - (float64(usdtStats.EnergyUsage)+float64(usdtStats.EnergyOriginUsage))/float64(usdtStats.EnergyTotal)
-	burnPercent = 0.16
 
 	fees := make([]string, 0)
 	allFees := net.GetFees(startDate, 7)
@@ -305,13 +329,30 @@ func (u *Updater) updateUSDTTransferFee(page *slides.Page, startDate time.Time) 
 		reqs = append(reqs, buildUpdateTextRequests(feeObjectId, -1, -1, start, end, fees[i])...)
 	}
 
-	curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
-	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
+	// Update USDT Statistics
+	// TODO, no statistics data now
+
+	// Update Supply Sheet Chart
+	supplyChartId := page.PageElements[8].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: supplyChartId,
+			},
+		},
+	}...)
+
+	// Update note
+	// curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
+	// lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
 	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, 7).Format("2006-01-02"))
 	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, 7), "TRX").Price)
-	storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats)
+	// storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats) + "\n"
+	storageNote := "\n"
+	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.volumeId).Ranges("USDT!F2:H8").Do()
+	supplyNote := common.FormatUSDTSupplyReport(resp.ValueRanges[0].Values)
 
-	note := fmt.Sprintf("%s%s%s", dateNote, priceNote, storageNote)
+	note := fmt.Sprintf("%s%s%s%s", dateNote, priceNote, storageNote, supplyNote)
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[1].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 
@@ -324,11 +365,13 @@ func (u *Updater) updateUSDTTransferFee(page *slides.Page, startDate time.Time) 
 	}
 }
 
-func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string, exchanges map[string]bool) {
+func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string, exchanges map[string]bool, concernedPairs []string) {
 	reqs := make([]*slides.Request, 0)
 
-	curWeekStat := u.db.GetTokenListingStatistic(date, token)
-	lastWeekStat := u.db.GetTokenListingStatistic(date.AddDate(0, 0, -7), token)
+	oneWeekAgo := today.AddDate(0, 0, -7)
+
+	curWeekStat := u.db.GetTokenListingStatistic(today, token)
+	lastWeekStat := u.db.GetTokenListingStatistic(oneWeekAgo, token)
 
 	// Update date in the title
 	title := extractText(page.PageElements[0])
@@ -337,7 +380,7 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 	if len(matches) > 0 {
 		start := utf16Len(title[:matches[0][0]])
 		end := utf16Len(title[:matches[0][1]])
-		reqs = append(reqs, buildUpdateTextRequests(titleObjectId, -1, -1, start, end, date.Format("01-02"))...)
+		reqs = append(reqs, buildUpdateTextRequests(titleObjectId, -1, -1, start, end, today.Format("01-02"))...)
 	}
 
 	// Update the token price
@@ -346,30 +389,80 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 		price = fmt.Sprintf("$0.0₄%d ", int(curWeekStat.Price*1e7))
 	}
 	priceChange := common.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price)
-	priceObjectId := page.PageElements[2].ObjectId
+	priceObjectId := page.PageElements[4].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
+
+	thisWeek := today.AddDate(0, 0, -7)
+	lastWeek := oneWeekAgo.AddDate(0, 0, -7)
+
+	thisLowPrice, thisHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, thisWeek, 7)
+	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, lastWeek, 7)
+
+	// Update the token low price
+	lowPrice := fmt.Sprintf("$%.4f", thisLowPrice)
+	if token == "WIN" {
+		lowPrice = fmt.Sprintf("$0.0₄%d ", int(thisLowPrice*1e7))
+	}
+	lowPriceChange := common.FormatFloatChangePercent(lastLowPrice, thisLowPrice)
+	lowPriceObjectId := page.PageElements[8].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(lowPriceObjectId, -1, -1, lowPrice, lowPriceChange, 7, 5, false)...)
+
+	// Update the token high price
+	higPrice := fmt.Sprintf("$%.4f", thisHighPrice)
+	if token == "WIN" {
+		higPrice = fmt.Sprintf("$0.0₄%d ", int(thisHighPrice*1e7))
+	}
+	highPriceChange := common.FormatFloatChangePercent(lastHighPrice, thisHighPrice)
+	highPriceObjectId := page.PageElements[9].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
 	// Update the market cap
 	marketCap := "$" + common.FormatWithUnits(curWeekStat.MarketCap)
 	marketCapChange := common.FormatFloatChangePercent(lastWeekStat.MarketCap, curWeekStat.MarketCap)
-	marketCapObjectId := page.PageElements[3].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 15, 9, true)...)
+	marketCapObjectId := page.PageElements[14].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
 	groupByExchange := true
 	if token == "STEEM" {
 		groupByExchange = false
 	}
-	curMarketPairStats := u.db.GetMergedMarketPairStatistics(date.AddDate(0, 0, -7), 7, token, true, groupByExchange)
-	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(date.AddDate(0, 0, -14), 7, token, true, groupByExchange)
+	thisMarketPairStats := u.db.GetMergedMarketPairStatistics(thisWeek, 7, token, true, groupByExchange)
+	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(lastWeek, 7, token, true, groupByExchange)
 
 	// Update the 24h volume
-	volume24H := "$" + common.FormatWithUnits(curMarketPairStats["Total"].Volume)
-	volume24HChange := common.FormatFloatChangePercent(lastMarketPairStats["Total"].Volume, curMarketPairStats["Total"].Volume)
-	volumeObjectId := page.PageElements[7].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 15, 9, true)...)
+	volume24H := "$" + common.FormatWithUnits(thisMarketPairStats["Total"].Volume)
+	volume24HChange := common.FormatFloatChangePercent(lastMarketPairStats["Total"].Volume, thisMarketPairStats["Total"].Volume)
+	volumeObjectId := page.PageElements[12].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 11, 7, true)...)
+
+	// Update the 24h volume excluding HTX&Poloniex
+	thisOtherVolume := thisMarketPairStats["Total"].Volume
+	for key, stat := range thisMarketPairStats {
+		if strings.HasPrefix(key, "HTX") || strings.HasPrefix(key, "Poloniex") {
+			thisOtherVolume -= stat.Volume
+		}
+	}
+	lastOtherVolume := lastMarketPairStats["Total"].Volume
+	for key, stat := range lastMarketPairStats {
+		if strings.HasPrefix(key, "HTX") || strings.HasPrefix(key, "Poloniex") {
+			lastOtherVolume -= stat.Volume
+		}
+	}
+	otherVolume24H := "$" + common.FormatWithUnits(thisOtherVolume)
+	otherVolume24HChange := common.FormatFloatChangePercent(lastOtherVolume, thisOtherVolume)
+	otherVolumeObjectId := page.PageElements[16].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(otherVolumeObjectId, -1, -1, otherVolume24H, otherVolume24HChange, 11, 7, true)...)
+
+	// Update the 24h volume / market cap
+	thisVolumeToMarketCapRatio := thisMarketPairStats["Total"].Volume / curWeekStat.MarketCap
+	lastVolumeToMarketCapRatio := lastMarketPairStats["Total"].Volume / lastWeekStat.MarketCap
+	VolumeToMarketCapRatio := fmt.Sprintf("%.2f%%%", thisVolumeToMarketCapRatio*100)
+	VolumeToMarketCapRatioChange := common.FormatPercentWithSign(thisVolumeToMarketCapRatio - lastVolumeToMarketCapRatio)
+	VolumeToMarketCapRatioObjectId := page.PageElements[18].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(VolumeToMarketCapRatioObjectId, -1, -1, VolumeToMarketCapRatio, VolumeToMarketCapRatioChange, 11, 7, true)...)
 
 	statsToInsert := make([]*models.MarketPairStatistic, 0)
-	for key, stat := range curMarketPairStats {
+	for key, stat := range thisMarketPairStats {
 		if exchanges[key] {
 			// Use datetime to store the key
 			stat.Datetime = key
@@ -381,39 +474,82 @@ func (u *Updater) updateCexData(page *slides.Page, date time.Time, token string,
 		return statsToInsert[i].Volume > statsToInsert[j].Volume
 	})
 
-	tableObjectId := page.PageElements[5].ObjectId
+	// Update Monitoring Table
+	monitorTableObjectId := page.PageElements[22].ObjectId
 	rowIndex := int64(1)
+	ruleStats := u.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, thisWeek, 7)
+	for _, pair := range concernedPairs {
+		ruleStat := ruleStats[pair]
+		var color string
+
+		// Update +2% depth cell
+		depthPositiveCell, color := getComplianceRateEmojiAndColor(ruleStat.DepthPositiveBrokenCount, ruleStat.HitsCount)
+		if ruleStat.DepthPositiveBrokenCount != 0 {
+			depthPositiveCell += fmt.Sprintf(" %s\n(Dp: %s / %s)",
+				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.DepthPositiveBrokenCount)),
+				humanize.SIWithDigits(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount), 0, ""),
+				humanize.SIWithDigits(ruleStat.DepthUsdPositiveTwo, 0, ""))
+		}
+		reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 2, depthPositiveCell, 8, color, false)...)
+
+		// Update +2% depth cell
+		depthNegativeCell, color := getComplianceRateEmojiAndColor(ruleStat.DepthNegativeBrokenCount, ruleStat.HitsCount)
+		if ruleStat.DepthNegativeBrokenCount != 0 {
+			depthNegativeCell += fmt.Sprintf(" %s\n(Dp: %s / %s)",
+				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.DepthNegativeBrokenCount)),
+				humanize.SIWithDigits(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount), 0, ""),
+				humanize.SIWithDigits(ruleStat.DepthUsdNegativeTwo, 0, ""))
+		}
+		reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 3, depthNegativeCell, 8, color, false)...)
+
+		// Update +2% depth cell
+		volumeCell, color := getComplianceRateEmojiAndColor(ruleStat.VolumeBrokenCount, ruleStat.HitsCount)
+		if ruleStat.VolumeBrokenCount != 0 {
+			volumeCell += fmt.Sprintf(" %s\n(Vol: %s / %s)",
+				common.FormatOfPercent(int64(ruleStat.HitsCount), int64(ruleStat.HitsCount-ruleStat.VolumeBrokenCount)),
+				humanize.SIWithDigits(ruleStat.VolumeSum/float64(ruleStat.HitsCount), 0, ""),
+				humanize.SIWithDigits(ruleStat.Volume, 0, ""))
+		}
+		reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 5, volumeCell, 8, color, false)...)
+
+		rowIndex++
+	}
+
+	// Update Volume Table
+	volumeTableObjectId := page.PageElements[19].ObjectId
+	rowIndex = int64(1)
 	for _, stat := range statsToInsert {
 		// Key is stored in the datetime field
 		key := stat.Datetime
 
 		// Update name cell
 		name := key
-		if strings.Contains(key, "_") {
+		if strings.Contains(key, "-") {
 			name = fmt.Sprintf("%s\n%s", stat.Pair, stat.ExchangeName)
 		}
-		reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 0, name, 10, false)...)
+		reqs = append(reqs, buildFullTextRequests(volumeTableObjectId, rowIndex, 0, name, 7, "white", false)...)
 
 		// Update volume cell
 		volume := "$" + common.FormatWithUnits(stat.Volume)
 		volumeChange := common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume)
-		reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 1, volume, volumeChange, 10, 8, false)...)
+		reqs = append(reqs, buildTextAndChangeRequests(volumeTableObjectId, rowIndex, 1, volume, volumeChange, 7, 5, false)...)
 
 		// Update depth cell
 		depth := fmt.Sprintf("%s / %s",
 			common.FormatWithUnits(stat.DepthUsdPositiveTwo),
 			common.FormatWithUnits(stat.DepthUsdNegativeTwo))
-		reqs = append(reqs, buildFullTextRequests(tableObjectId, rowIndex, 2, depth, 10, false)...)
+		reqs = append(reqs, buildFullTextRequests(volumeTableObjectId, rowIndex, 2, depth, 7, "white", false)...)
 
 		// Update percent cell
 		percent := fmt.Sprintf("%.2f%%", stat.Percent*100)
 		percentChange := fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))
-		reqs = append(reqs, buildTextAndChangeRequests(tableObjectId, rowIndex, 3, percent, percentChange, 10, 8, false)...)
+		reqs = append(reqs, buildTextAndChangeRequests(volumeTableObjectId, rowIndex, 3, percent, percentChange, 7, 5, false)...)
 
 		rowIndex++
 	}
 
-	volumeChartId := page.PageElements[8].ObjectId
+	// Update Volume Chart
+	volumeChartId := page.PageElements[25].ObjectId
 	reqs = append(reqs, []*slides.Request{
 		{
 			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
@@ -527,7 +663,8 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 			"Staked Revenue from USDT\t%s\t\t%s\t%s\t%s\n\n" +
 			"Total Revenue from Other\t\t%s\t\t%s\t\t%s\t\t%s\n" +
 			"Burnt Revenue from other\t\t%s\t\t%s\t%s\t\t%s\n" +
-			"Staked Revenue from other\t%s\t\t%s\t%s\t\t%s\n"
+			"Staked Revenue from other\t%s\t\t%s\t%s\t\t%s\n\n" +
+			"TRX Avg Price: %f"
 
 	revenueNote := fmt.Sprintf(noteTemplate,
 		totalNote[0][0], totalNote[0][1], pf(totalNote[0][2].(string)), totalNote[0][3],
@@ -538,7 +675,8 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 		usdtNote[2][0], usdtNote[2][1], pf(usdtNote[2][2].(string)), usdtNote[2][3],
 		otherNote[0][0], otherNote[0][1], pf(otherNote[0][2].(string)), otherNote[0][3],
 		otherNote[1][0], otherNote[1][1], pf(otherNote[1][2].(string)), otherNote[1][3],
-		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3])
+		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3],
+		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -7), 7))
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)
@@ -550,10 +688,6 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 	if updateErr != nil {
 		u.logger.Error("Failed to update presentation", zap.Error(updateErr))
 	}
-}
-
-func (u *Updater) updateMonitoringData(page *slides.Page, date time.Time) {
-
 }
 
 func (u *Updater) getVolumeData(startDate time.Time, token string, exchanges []string) [][]interface{} {
@@ -578,6 +712,25 @@ func (u *Updater) getVolumeData(startDate time.Time, token string, exchanges []s
 	return result
 }
 
+func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
+	data := u.db.GetUSDTSupplyByDate(date)
+	sort.Slice(data, func(i, j int) bool {
+		return data[i].TotalAuthorized > data[j].TotalAuthorized
+	})
+
+	result := make([][]interface{}, 0)
+	for _, item := range data {
+		row := make([]interface{}, 0)
+		row = append(row, item.Chain)
+		row = append(row, item.TotalAuthorized)
+		row = append(row, item.NotIssued)
+
+		result = append(result, row)
+	}
+
+	return result
+}
+
 func utf16Len(s string) int64 {
 	return int64(len(utf16.Encode([]rune(s))))
 }
@@ -596,10 +749,20 @@ func extractText(element *slides.PageElement) string {
 	return result
 }
 
-func buildFullTextRequests(objectId string, i, j int64, text string, fontSize float64, bold bool) []*slides.Request {
+func getComplianceRateEmojiAndColor(brokenCount, hitsCount int) (string, string) {
+	if brokenCount == 0 {
+		return "✅", "white"
+	}
+	if brokenCount < hitsCount/2 {
+		return "⚠️", "orange"
+	}
+	return "❌", "red"
+}
+
+func buildFullTextRequests(objectId string, i, j int64, text string, fontSize float64, color string, bold bool) []*slides.Request {
 	reqs := make([]*slides.Request, 0)
 	reqs = append(reqs, buildUpdateTextRequests(objectId, i, j, 0, 0, text)...)
-	reqs = append(reqs, buildUpdateStyleRequest(objectId, i, j, 0, utf16Len(text), fontSize, "white", bold))
+	reqs = append(reqs, buildUpdateStyleRequest(objectId, i, j, 0, utf16Len(text), fontSize, color, bold))
 	return reqs
 }
 
@@ -674,6 +837,11 @@ func buildUpdateStyleRequest(objectId string, i, j, start, end int64, fontSize f
 			Red:   1.0,
 			Green: 1.0,
 		}
+	case "orange":
+		rgbColor = &slides.RgbColor{
+			Red:   1.0,
+			Green: 0.5,
+		}
 	}
 
 	styleToUpdate := &slides.UpdateTextStyleRequest{
@@ -695,7 +863,7 @@ func buildUpdateStyleRequest(objectId string, i, j, start, end int64, fontSize f
 			},
 			Bold: bold,
 		},
-		Fields: "fontSize,foregroundColor, bold",
+		Fields: "fontSize, foregroundColor, bold",
 	}
 
 	if i >= 0 && j >= 0 {

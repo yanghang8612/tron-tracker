@@ -32,8 +32,18 @@ func Init(cfg *config.NetConfig) {
 	configs = cfg
 }
 
-func ReportToSlack(msg string) {
-	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.SlackWebhook)
+func ReportTronlinkStatsToSlack(msg string) {
+	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.TronlinkWebhook)
+	if err != nil {
+		zap.S().Error(err)
+		return
+	}
+
+	zap.S().Infof("Report to slack: %s", resp)
+}
+
+func ReportWarningToSlack(msg string) {
+	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.WarningWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dustin/go-humanize"
 	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/database"
@@ -235,6 +236,12 @@ func (t *Tracker) doTrackBlock() {
 					transactions = append(transactions, transferTxToDB)
 				}
 			}
+		}
+
+		// If there is concerned event, report to slack
+		if !t.isCatching && (txToDB.Type == 154 || txToDB.Type == 157) && len(txToDB.Amount.String()) >= 8+6 {
+			net.ReportWarningToSlack(fmt.Sprintf("[block - %d] - index %d: [%s] -> [%s], amount [%s] <@U01DFGWQ2JK>",
+				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)))
 		}
 	}
 	t.db.SaveTransactions(transactions)

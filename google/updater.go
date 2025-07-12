@@ -658,15 +658,15 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 
 	noteTemplate :=
 		"(TRX amount based revenue)\tCurrent Week\t\tPercent\tChange\tLast Week\n" +
-			"Total Protocol Revenue\t\t%s\t\t%s\t\t%s\t%s\n" +
-			"Total Energy Revenue\t\t%s\t\t%s\t%s\t%s\n" +
-			"Total Burning Revenue\t\t%s\t\t%s\t%s\t%s\n\n" +
-			"Total Revenue from USDT\t\t%s\t\t%s\t%s\t%s\n" +
-			"Burnt Revenue from USDT\t\t%s\t\t%s\t%s\t%s\n" +
-			"Staked Revenue from USDT\t%s\t\t%s\t%s\t%s\n\n" +
-			"Total Revenue from Other\t\t%s\t\t%s\t\t%s\t\t%s\n" +
-			"Burnt Revenue from other\t\t%s\t\t%s\t%s\t\t%s\n" +
-			"Staked Revenue from other\t%s\t\t%s\t%s\t\t%s\n\n" +
+			"Total Protocol Revenue\t\t%s\t\t%s \t%s\t%s\n" +
+			"Total Energy Revenue\t\t%s\t\t%s\t%s \t%s\n" +
+			"Total Burning Revenue\t\t%s\t\t%s\t%s \t%s\n\n" +
+			"Total Revenue from USDT\t\t%s\t\t%s\t%s \t%s\n" +
+			"Burnt Revenue from USDT\t\t%s\t\t%s\t%s \t%s\n" +
+			"Staked Revenue from USDT\t%s\t\t%s\t%s \t%s\n\n" +
+			"Total Revenue from Other\t\t%s\t\t%s\t\t%s \t%s\n" +
+			"Burnt Revenue from other\t\t%s\t\t%s\t%s \t%s\n" +
+			"Staked Revenue from other\t%s\t\t%s\t%s \t%s\n\n" +
 			"TRX Avg Price: %f"
 
 	revenueNote := fmt.Sprintf(noteTemplate,

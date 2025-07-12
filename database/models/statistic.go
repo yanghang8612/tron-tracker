@@ -379,26 +379,33 @@ type FungibleTokenStatistic struct {
 	UniqueToMap   map[string]bool `gorm:"-" json:"-"`
 }
 
-func NewFungibleTokenStatistic(date, address, token string, tx *Transaction) *FungibleTokenStatistic {
+func NewFungibleTokenStatistic(date, address, typeName string, tx *Transaction) *FungibleTokenStatistic {
 	var stat = &FungibleTokenStatistic{
 		Date:      date,
 		Address:   address,
-		Type:      token,
+		Type:      typeName,
 		Count:     1,
 		AmountSum: types.NewBigInt(big.NewInt(0)),
 	}
-	stat.AmountSum.Add(tx.Amount)
-	stat.UniqueFrom = 1
-	stat.UniqueFromMap = make(map[string]bool)
-	stat.UniqueFromMap[tx.FromAddr] = true
-	stat.UniqueTo = 1
-	stat.UniqueToMap = make(map[string]bool)
-	stat.UniqueToMap[tx.ToAddr] = true
+
+	if tx != nil {
+		stat.AmountSum.Add(tx.Amount)
+		stat.UniqueFrom = 1
+		stat.UniqueFromMap = make(map[string]bool)
+		stat.UniqueFromMap[tx.FromAddr] = true
+		stat.UniqueTo = 1
+		stat.UniqueToMap = make(map[string]bool)
+		stat.UniqueToMap[tx.ToAddr] = true
+	}
 
 	return stat
 }
 
 func (o *FungibleTokenStatistic) Add(tx *Transaction) {
+	if tx == nil {
+		return
+	}
+
 	o.Count++
 	o.AmountSum.Add(tx.Amount)
 	if _, ok := o.UniqueFromMap[tx.FromAddr]; !ok {
@@ -507,6 +514,7 @@ type USDTStorageStatistic struct {
 }
 
 func (o *USDTStorageStatistic) Add(tx *Transaction) {
+	// TODO: should depend on USDT Phishing Factor
 	if tx.EnergyTotal < 100_000 {
 		o.SetTxCount++
 		o.SetEnergyTotal += uint64(tx.EnergyTotal)

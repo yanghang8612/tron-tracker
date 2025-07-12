@@ -1470,7 +1470,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	slackMessage += fmt.Sprintf("> Withdraw Fee: `%s`, withdraw energy: `%s`\n", humanize.Comma(withdrawFee), humanize.Comma(withdrawEnergy))
 	slackMessage += fmt.Sprintf("> Collect Energy: `%s`, collect energy: `%s`\n", humanize.Comma(collectFee), humanize.Comma(collectEnergy))
 	slackMessage += fmt.Sprintf("> Charge Fee: `%s`, charge energy: `%s`\n", humanize.Comma(chargeFee), humanize.Comma(chargeEnergy))
-	net.ReportToSlack(slackMessage)
+	net.ReportTronlinkStatsToSlack(slackMessage)
 }
 
 func (db *RawDB) DoExchangeStatistics(date string) {
@@ -1698,9 +1698,12 @@ func (db *RawDB) countForDate(date string) {
 		ExchangeSpecialStats = make(map[string]*models.ExchangeStatistic)
 	)
 
+	TRXStats["1e0"] = models.NewFungibleTokenStatistic(date, "TRX", "1e0", nil)
+	USDTStats["1e0"] = models.NewFungibleTokenStatistic(date, "USDT", "1e0", nil)
+
 	result := db.db.Table("transactions_"+date).
-		Where("type = ? or name = ? and type <>", 1, USDT, models.TransferType).
-		FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
+		Where("type = ? or name = ?", 1, USDT).
+		FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				if len(result.ToAddr) == 0 || result.Result != 1 {
 					continue
@@ -1708,12 +1711,16 @@ func (db *RawDB) countForDate(date string) {
 
 				typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 				if result.Type == 1 {
+					TRXStats["1e0"].Add(result)
+
 					if _, ok := TRXStats[typeName]; !ok {
 						TRXStats[typeName] = models.NewFungibleTokenStatistic(date, "TRX", typeName, result)
 					} else {
 						TRXStats[typeName].Add(result)
 					}
 				} else {
+					USDTStats["1e0"].Add(result)
+
 					if _, ok := USDTStats[typeName]; !ok {
 						USDTStats[typeName] = models.NewFungibleTokenStatistic(date, "USDT", typeName, result)
 					} else {
@@ -1779,9 +1786,12 @@ func (db *RawDB) countForWeek(startDate string) string {
 		USDTStats    = make(map[string]*models.FungibleTokenStatistic)
 	)
 
+	TRXStats["1e0"] = models.NewFungibleTokenStatistic(week, "TRX", "1e0", nil)
+	USDTStats["1e0"] = models.NewFungibleTokenStatistic(week, "USDT", "1e0", nil)
+
 	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ? and type <> ?", 1, USDT, models.TransferType).
+			Where("type = ? or name = ?", 1, USDT).
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Result != 1 {
@@ -1790,12 +1800,16 @@ func (db *RawDB) countForWeek(startDate string) string {
 
 					typeName := fmt.Sprintf("1e%d", len(result.Amount.String()))
 					if result.Type == 1 {
+						TRXStats["1e0"].Add(result)
+
 						if _, ok := TRXStats[typeName]; !ok {
 							TRXStats[typeName] = models.NewFungibleTokenStatistic(week, "TRX", typeName, result)
 						} else {
 							TRXStats[typeName].Add(result)
 						}
 					} else {
+						USDTStats["1e0"].Add(result)
+
 						if _, ok := USDTStats[typeName]; !ok {
 							USDTStats[typeName] = models.NewFungibleTokenStatistic(week, "USDT", typeName, result)
 						} else {

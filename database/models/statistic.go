@@ -416,6 +416,15 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 		o.UniqueTo++
 		o.UniqueToMap[tx.ToAddr] = true
 	}
+
+	// Special handling for type "1e0" statistics
+	if o.Type == "1e0" {
+		if _, ok := o.UniqueFromMap[tx.ToAddr]; !ok {
+			o.UniqueFrom++
+			o.UniqueFromMap[tx.FromAddr] = true
+		}
+	}
+
 }
 
 type MarketPairStatistic struct {

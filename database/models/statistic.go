@@ -6,6 +6,11 @@ import (
 	"tron-tracker/database/models/types"
 )
 
+const (
+	seenFrom = 1 << iota // 0001
+	seenTo               // 0010
+)
+
 type UserStatistic struct {
 	ID                uint                `gorm:"primaryKey" json:"-"`
 	Address           string              `gorm:"size:34;uniqueIndex" json:"address,omitempty"`
@@ -367,36 +372,30 @@ func (o *ExchangeStatistic) ClearAmountFields() {
 }
 
 type FungibleTokenStatistic struct {
-	ID            uint            `gorm:"primaryKey" json:"-"`
-	Date          string          `gorm:"size:6;index" json:"date,omitempty"`
-	Address       string          `gorm:"index" json:"address"`
-	Type          string          `json:"type"`
-	Count         int64           `json:"count"`
-	AmountSum     types.BigInt    `json:"amount_sum"`
-	UniqueFrom    int64           `json:"unique_from"`
-	UniqueFromMap map[string]bool `gorm:"-" json:"-"`
-	UniqueTo      int64           `json:"unique_to"`
-	UniqueToMap   map[string]bool `gorm:"-" json:"-"`
+	ID         uint         `gorm:"primaryKey" json:"-"`
+	Date       string       `gorm:"size:6;index" json:"date,omitempty"`
+	Address    string       `gorm:"index" json:"address"`
+	Type       string       `json:"type"`
+	Count      int64        `json:"count"`
+	AmountSum  types.BigInt `json:"amount_sum"`
+	UniqueFrom int64        `json:"unique_from"`
+	UniqueTo   int64        `json:"unique_to"`
+	UniqueUser int64        `json:"unique_user"`
+
+	seenMap map[string]uint8 `gorm:"-"`
 }
 
 func NewFungibleTokenStatistic(date, address, typeName string, tx *Transaction) *FungibleTokenStatistic {
 	var stat = &FungibleTokenStatistic{
-		Date:          date,
-		Address:       address,
-		Type:          typeName,
-		Count:         1,
-		AmountSum:     types.NewBigInt(big.NewInt(0)),
-		UniqueFromMap: make(map[string]bool),
-		UniqueToMap:   make(map[string]bool),
+		Date:      date,
+		Address:   address,
+		Type:      typeName,
+		AmountSum: types.NewBigInt(big.NewInt(0)),
+
+		seenMap: make(map[string]uint8),
 	}
 
-	if tx != nil {
-		stat.AmountSum.Add(tx.Amount)
-		stat.UniqueFrom = 1
-		stat.UniqueFromMap[tx.FromAddr] = true
-		stat.UniqueTo = 1
-		stat.UniqueToMap[tx.ToAddr] = true
-	}
+	stat.Add(tx)
 
 	return stat
 }
@@ -405,26 +404,26 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 	if tx == nil {
 		return
 	}
-
 	o.Count++
 	o.AmountSum.Add(tx.Amount)
-	if _, ok := o.UniqueFromMap[tx.FromAddr]; !ok {
+
+	flags := o.seenMap[tx.FromAddr]
+	if flags == 0 {
+		o.UniqueUser++
+	}
+	if flags&seenFrom == 0 {
 		o.UniqueFrom++
-		o.UniqueFromMap[tx.FromAddr] = true
+		o.seenMap[tx.FromAddr] |= seenFrom
 	}
-	if _, ok := o.UniqueToMap[tx.ToAddr]; !ok {
+
+	flags = o.seenMap[tx.ToAddr]
+	if flags == 0 {
+		o.UniqueUser++
+	}
+	if flags&seenTo == 0 {
 		o.UniqueTo++
-		o.UniqueToMap[tx.ToAddr] = true
+		o.seenMap[tx.ToAddr] |= seenTo
 	}
-
-	// Special handling for type "1e0" statistics
-	if o.Type == "1e0" {
-		if _, ok := o.UniqueFromMap[tx.ToAddr]; !ok {
-			o.UniqueFrom++
-			o.UniqueFromMap[tx.ToAddr] = true
-		}
-	}
-
 }
 
 type MarketPairStatistic struct {

@@ -334,7 +334,23 @@ func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 	}
 
 	// Update USDT Statistics
-	// TODO, no statistics data now
+	thisWeekAvgStat := u.db.GetAvgFungibleTokenStatisticsByDateDaysTokenType(startDate, 7, "USDT", "1e0")
+	lastWeekAvgStat := u.db.GetAvgFungibleTokenStatisticsByDateDaysTokenType(startDate.AddDate(0, 0, -7), 7, "USDT", "1e0")
+	usdtText := fmt.Sprintf("USDT Statistics\n"+
+		" - Transfer Volume:  $%s/d (%s)\n"+
+		" - Total        Supply:  $%s\n"+
+		" - Transfer Account: %s/d (%s)\n"+
+		" - Transfer        Txs: %s/d (%s)",
+		common.FormatWithUnits(float64(thisWeekAvgStat.AmountSum.Int64())/1e6),
+		common.FormatChangePercent(lastWeekAvgStat.AmountSum.Int64(), thisWeekAvgStat.AmountSum.Int64()),
+		common.FormatWithUnits(u.db.GetUSDTSupplyByDateChain(time.Now(), "Tron").TotalAuthorized),
+		common.FormatWithUnits(float64(thisWeekAvgStat.Count)),
+		common.FormatChangePercent(lastWeekAvgStat.Count, thisWeekAvgStat.Count),
+		common.FormatWithUnits(float64(thisWeekAvgStat.UniqueUser)),
+		common.FormatChangePercent(lastWeekAvgStat.UniqueUser, thisWeekAvgStat.UniqueUser))
+	usdtObjectId := page.PageElements[6].ObjectId
+
+	reqs = append(reqs, buildUpdateTextRequests(usdtObjectId, -1, -1, 0, 0, usdtText)...)
 
 	// Update Supply Sheet Chart
 	supplyChartId := page.PageElements[8].ObjectId
@@ -347,11 +363,11 @@ func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 	}...)
 
 	// Update note
-	curStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
+	thisStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate, 7)
 	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
 	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, 7).Format("2006-01-02"))
 	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, 7), "TRX").Price)
-	storageNote := common.FormatStorageDiffReport(curStorageStats, lastStorageStats) + "\n"
+	storageNote := common.FormatStorageDiffReport(thisStorageStats, lastStorageStats) + "\n"
 	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.volumeId).Ranges("USDT!F2:H8").Do()
 	supplyNote := common.FormatUSDTSupplyReport(resp.ValueRanges[0].Values)
 
@@ -373,8 +389,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 	oneWeekAgo := today.AddDate(0, 0, -7)
 
-	curWeekStat := u.db.GetTokenListingStatistic(today, token)
-	lastWeekStat := u.db.GetTokenListingStatistic(oneWeekAgo, token)
+	todayTokenListing := u.db.GetTokenListingStatistic(today, token)
+	oneWeekAgoTokenListing := u.db.GetTokenListingStatistic(oneWeekAgo, token)
 
 	// Update date in the title
 	title := extractText(page.PageElements[0])
@@ -387,11 +403,11 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	}
 
 	// Update the token price
-	price := fmt.Sprintf("$%.4f", curWeekStat.Price)
+	price := fmt.Sprintf("$%.4f", todayTokenListing.Price)
 	if token == "WIN" {
-		price = fmt.Sprintf("$0.0₄%d ", int(curWeekStat.Price*1e7))
+		price = fmt.Sprintf("$0.0₄%d ", int(todayTokenListing.Price*1e7))
 	}
-	priceChange := common.FormatFloatChangePercent(lastWeekStat.Price, curWeekStat.Price)
+	priceChange := common.FormatFloatChangePercent(oneWeekAgoTokenListing.Price, todayTokenListing.Price)
 	priceObjectId := page.PageElements[4].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
 
@@ -420,8 +436,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
 	// Update the market cap
-	marketCap := "$" + common.FormatWithUnits(curWeekStat.MarketCap)
-	marketCapChange := common.FormatFloatChangePercent(lastWeekStat.MarketCap, curWeekStat.MarketCap)
+	marketCap := "$" + common.FormatWithUnits(todayTokenListing.MarketCap)
+	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoTokenListing.MarketCap, todayTokenListing.MarketCap)
 	marketCapObjectId := page.PageElements[14].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
@@ -457,8 +473,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	reqs = append(reqs, buildTextAndChangeRequests(otherVolumeObjectId, -1, -1, otherVolume24H, otherVolume24HChange, 11, 7, true)...)
 
 	// Update the 24h volume / market cap
-	thisVolumeToMarketCapRatio := thisMarketPairStats["Total"].Volume / curWeekStat.MarketCap
-	lastVolumeToMarketCapRatio := lastMarketPairStats["Total"].Volume / lastWeekStat.MarketCap
+	thisVolumeToMarketCapRatio := thisMarketPairStats["Total"].Volume / todayTokenListing.MarketCap
+	lastVolumeToMarketCapRatio := lastMarketPairStats["Total"].Volume / oneWeekAgoTokenListing.MarketCap
 	VolumeToMarketCapRatio := fmt.Sprintf("%.2f%%", thisVolumeToMarketCapRatio*100)
 	VolumeToMarketCapRatioChange := common.FormatPercentWithSign(thisVolumeToMarketCapRatio - lastVolumeToMarketCapRatio)
 	VolumeToMarketCapRatioObjectId := page.PageElements[18].ObjectId

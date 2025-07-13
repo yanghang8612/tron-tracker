@@ -766,6 +766,33 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) 
 	return resultMap
 }
 
+func (db *RawDB) GetFungibleTokenStatisticsByDateDaysTokenType(date time.Time, days int, token, typeName string) []*models.FungibleTokenStatistic {
+	var results []*models.FungibleTokenStatistic
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+
+		var dayStat *models.FungibleTokenStatistic
+		db.db.Where("date = ? and address = ? and type = ?", queryDate, token, typeName).Find(&dayStat)
+
+		results = append(results, dayStat)
+	}
+
+	return results
+}
+
+func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time, days int, token, typeName string) *models.FungibleTokenStatistic {
+	startDate := date.Format("060102")
+	endDate := date.AddDate(0, 0, days).Format("060102")
+
+	var avgStat *models.FungibleTokenStatistic
+	db.db.Select("avg(count) as count, avg(cast(amount_sum as unsigned)) as amount_sum, avg(unique_user) as unique_user").
+		Where("date >= ? and date < ? and address = ? and type = ?", startDate, endDate, token, typeName).
+		Find(&avgStat)
+
+	return avgStat
+}
+
 func (db *RawDB) GetTokenPriceByDate(token string, date time.Time) float64 {
 	queryDateDBName := "market_pair_statistics_" + date.Format("0601")
 
@@ -1167,6 +1194,12 @@ func (db *RawDB) GetUSDTSupplyByDate(date time.Time) []*models.USDTSupplyStatist
 	var stats []*models.USDTSupplyStatistic
 	db.db.Where("datetime = ?", date.Format("060102")+"00").Find(&stats)
 	return stats
+}
+
+func (db *RawDB) GetUSDTSupplyByDateChain(date time.Time, chain string) *models.USDTSupplyStatistic {
+	var stat *models.USDTSupplyStatistic
+	db.db.Where("datetime = ? and chain = ?", date.Format("060102")+"00", chain).Find(&stat)
+	return stat
 }
 
 func (db *RawDB) GetPhishingStatisticsByDate(date string) *models.PhishingStatistic {

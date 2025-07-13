@@ -371,6 +371,7 @@ func (o *ExchangeStatistic) ClearAmountFields() {
 	o.WithdrawAmount = types.NewBigInt(nil)
 }
 
+// FungibleTokenStatistic Data is not repaired, please pay attention to the date field
 type FungibleTokenStatistic struct {
 	ID         uint         `gorm:"primaryKey" json:"-"`
 	Date       string       `gorm:"size:6;index" json:"date,omitempty"`

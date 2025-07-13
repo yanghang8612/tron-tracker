@@ -786,7 +786,9 @@ func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time
 	endDate := date.AddDate(0, 0, days).Format("060102")
 
 	var avgStat *models.FungibleTokenStatistic
-	db.db.Select("avg(count) as count, round(avg(cast(amount_sum as unsigned))) as amount_sum, avg(unique_user) as unique_user").
+	db.db.Select("round(avg(count)) as count, "+
+		"round(avg(cast(amount_sum as unsigned))) as amount_sum, "+
+		"round(avg(unique_user)) as unique_user").
 		Where("date >= ? and date < ? and address = ? and type = ?", startDate, endDate, token, typeName).
 		Find(&avgStat)
 

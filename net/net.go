@@ -1,11 +1,10 @@
 package net
 
 import (
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -309,38 +308,26 @@ func GetStockData(date time.Time) [][]interface{} {
 		return nil
 	}
 
-	reader := csv.NewReader(resp.RawBody())
-
-	if _, err = reader.Read(); err != nil {
-		zap.S().Errorf("Failed to read CSV header: %v", err)
-		return nil
-	}
-
 	var stockData [][]interface{}
-	row := 0
-	for {
-		rec, readingErr := reader.Read()
-		if readingErr == io.EOF {
-			break
-		}
+	lines := strings.Split(string(resp.Body()), "\r\n")
+	for i, line := range lines {
+		data := strings.Split(line, ",")
 
-		if readingErr != nil {
-			zap.S().Errorf("Failed to read CSV record: %v", err)
+		if i == 0 || len(data) < 6 {
 			continue
 		}
-		open, _ := strconv.ParseFloat(rec[1], 64)
-		high, _ := strconv.ParseFloat(rec[2], 64)
-		low, _ := strconv.ParseFloat(rec[3], 64)
-		close, _ := strconv.ParseFloat(rec[4], 64)
-		volume, _ := strconv.ParseFloat(rec[5], 64)
 
-		if row%3 == 0 {
-			stockData = append(stockData, []interface{}{rec[0][5:], open, high, low, close, volume})
+		open, _ := strconv.ParseFloat(data[1], 64)
+		high, _ := strconv.ParseFloat(data[2], 64)
+		low, _ := strconv.ParseFloat(data[3], 64)
+		close, _ := strconv.ParseFloat(data[4], 64)
+		volume, _ := strconv.ParseFloat(data[5], 64)
+
+		if i%3 == 1 {
+			stockData = append(stockData, []interface{}{data[0][5:], open, high, low, close, volume})
 		} else {
 			stockData = append(stockData, []interface{}{"", open, high, low, close, volume})
 		}
-
-		row += 1
 	}
 
 	return stockData

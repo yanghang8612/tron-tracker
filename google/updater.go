@@ -807,6 +807,26 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 
 	// TODO: update held digital asset value
 
+	// Update K-line Sheet Chart
+	kLineChartId := page.PageElements[21].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: kLineChartId,
+			},
+		},
+	}...)
+
+	// Update Volume Chart
+	volumeChartId := page.PageElements[22].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: volumeChartId,
+			},
+		},
+	}...)
+
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
 		&slides.BatchUpdatePresentationRequest{
 			Requests: reqs,

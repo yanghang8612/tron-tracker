@@ -771,8 +771,8 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	priceObjectId := page.PageElements[5].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
 
-	thisLowPrice, thisHighPrice := 0.0, 0.0
-	lastLowPrice, lastHighPrice := 0.0, 0.0
+	thisLowPrice, thisHighPrice := 1e6, 0.0
+	lastLowPrice, lastHighPrice := 1e6, 0.0
 
 	for i := 1; i <= 7; i++ {
 		thisLowPrice = math.Min(thisLowPrice, stockData[len(stockData)-i][3].(float64))
@@ -793,17 +793,17 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	highPriceObjectId := page.PageElements[10].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
-	// Update the market cap
-	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*1724.4e6)
-	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
-	marketCapObjectId := page.PageElements[13].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
-
 	// Update the 24h volume
-	volume24H := "$" + common.FormatWithUnits(todayData[5].(float64))
+	volume24H := "$" + common.FormatWithUnits(todayData[4].(float64))
 	volume24HChange := common.FormatFloatChangePercent(oneWeekAgoData[5].(float64), todayData[5].(float64))
 	volumeObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 11, 7, true)...)
+
+	// Update the market cap
+	marketCap := "$" + common.FormatWithUnits(todayData[5].(float64)*1724.4e6)
+	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
+	marketCapObjectId := page.PageElements[13].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
 	// TODO: update held digital asset value
 

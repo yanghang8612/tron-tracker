@@ -794,15 +794,15 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
 	// Update the 24h volume
-	volume24H := "$" + common.FormatWithUnits(todayData[4].(float64))
+	volume24H := "$" + common.FormatWithUnits(todayData[5].(float64))
 	volume24HChange := common.FormatFloatChangePercent(oneWeekAgoData[5].(float64), todayData[5].(float64))
-	volumeObjectId := page.PageElements[15].ObjectId
+	volumeObjectId := page.PageElements[13].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 11, 7, true)...)
 
 	// Update the market cap
-	marketCap := "$" + common.FormatWithUnits(todayData[5].(float64)*1724.4e6)
+	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*1724.4e6)
 	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
-	marketCapObjectId := page.PageElements[13].ObjectId
+	marketCapObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
 	// TODO: update held digital asset value

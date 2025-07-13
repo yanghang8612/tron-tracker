@@ -421,7 +421,7 @@ func (o *FungibleTokenStatistic) Add(tx *Transaction) {
 	if o.Type == "1e0" {
 		if _, ok := o.UniqueFromMap[tx.ToAddr]; !ok {
 			o.UniqueFrom++
-			o.UniqueFromMap[tx.FromAddr] = true
+			o.UniqueFromMap[tx.ToAddr] = true
 		}
 	}
 

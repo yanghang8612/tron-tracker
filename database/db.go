@@ -786,7 +786,7 @@ func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time
 	endDate := date.AddDate(0, 0, days).Format("060102")
 
 	var avgStat *models.FungibleTokenStatistic
-	db.db.Select("avg(count) as count, avg(cast(amount_sum as unsigned)) as amount_sum, avg(unique_user) as unique_user").
+	db.db.Select("avg(count) as count, round(avg(cast(amount_sum as unsigned))) as amount_sum, avg(unique_user) as unique_user").
 		Where("date >= ? and date < ? and address = ? and type = ?", startDate, endDate, token, typeName).
 		Find(&avgStat)
 
@@ -1665,8 +1665,8 @@ func (db *RawDB) doMarketPairDepthStatistics(day time.Time) {
 		var depthStats []*models.MarketPairStatistic
 		db.db.Table(table).
 			Select("token", "exchange_name", "pair",
-				"AVG(depth_usd_positive_two) as depth_usd_positive_two",
-				"AVG(depth_usd_negative_two) as depth_usd_negative_two").
+				"avg(depth_usd_positive_two) as depth_usd_positive_two",
+				"avg(depth_usd_negative_two) as depth_usd_negative_two").
 			Where("datetime like ? and percent > 0", day.Format("02")+"%").
 			Group("token, exchange_name, pair").
 			Find(&depthStats)

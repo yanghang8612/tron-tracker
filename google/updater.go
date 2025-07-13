@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -302,8 +303,11 @@ func (u *Updater) Update(date time.Time) {
 	u.updateCexData(ppt.Slides[4], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-WIN/USDT", "Binance-WIN/TRX", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
 
-	// Update the last slide with Revenue data
+	// Update Revenue data
 	u.updateRevenueData(ppt.Slides[5], date)
+
+	// Update Stock data
+	u.updateStockData(ppt.Slides[6], date)
 }
 
 func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
@@ -393,14 +397,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	oneWeekAgoTokenListing := u.db.GetTokenListingStatistic(oneWeekAgo, token)
 
 	// Update date in the title
-	title := extractText(page.PageElements[0])
-	titleObjectId := page.PageElements[0].ObjectId
-	matches := regexp.MustCompile(`[0-9]{2}-[0-9]{2}`).FindAllStringIndex(title, -1)
-	if len(matches) > 0 {
-		start := utf16Len(title[:matches[0][0]])
-		end := utf16Len(title[:matches[0][1]])
-		reqs = append(reqs, buildUpdateTextRequests(titleObjectId, -1, -1, start, end, today.Format("01-02"))...)
-	}
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
 
 	// Update the token price
 	price := fmt.Sprintf("$%.4f", todayTokenListing.Price)
@@ -587,17 +584,11 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	}
 }
 
-func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
+func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	reqs := make([]*slides.Request, 0)
 
-	title := extractText(page.PageElements[1])
-	titleObjectId := page.PageElements[1].ObjectId
-	matches := regexp.MustCompile(`[0-9]{2}-[0-9]{2}`).FindAllStringIndex(title, -1)
-	if len(matches) > 0 {
-		start := utf16Len(title[:matches[0][0]])
-		end := utf16Len(title[:matches[0][1]])
-		reqs = append(reqs, buildUpdateTextRequests(titleObjectId, -1, -1, start, end, date.Format("01-02"))...)
-	}
+	// Update today in the title
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
 
 	var pf = func(percent string) string {
 		if strings.HasPrefix(percent, "-") {
@@ -606,6 +597,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 		return "+" + percent
 	}
 
+	// Update statistics on the left
 	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!O2:Q4", "USDT!M2:O4", "USDT!M6:O8").Do()
 	totalRevenue := resp.ValueRanges[0].Values
 	usdtRevenue := resp.ValueRanges[1].Values
@@ -667,6 +659,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 		},
 	}...)
 
+	// Update note
 	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!O14:R16", "USDT!M12:P14", "USDT!M16:P18").Do()
 	totalNote := resp.ValueRanges[0].Values
 	usdtNote := resp.ValueRanges[1].Values
@@ -695,7 +688,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, date time.Time) {
 		otherNote[0][0], otherNote[0][1], pf(otherNote[0][2].(string)), otherNote[0][3],
 		otherNote[1][0], otherNote[1][1], pf(otherNote[1][2].(string)), otherNote[1][3],
 		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3],
-		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -7), 7))
+		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", today.AddDate(0, 0, -7), 7))
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)
@@ -750,6 +743,79 @@ func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
 	return result
 }
 
+func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
+	// 0:date 1:open 2:high 3:low 4:close 5:volume
+	stockData := net.GetStockData(today)
+
+	// Update Stock sheet
+	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!A2:F41",
+		&sheets.ValueRange{
+			Values: stockData,
+		}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update Stock sheet: %v", err)
+	}
+
+	// Update Stock chart
+	reqs := make([]*slides.Request, 0)
+
+	// Update today in the title
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
+
+	todayData := stockData[len(stockData)-1]
+	oneWeekAgoData := stockData[len(stockData)-8]
+
+	// Update the stock price
+	price := fmt.Sprintf("$%.2f", todayData[4])
+	priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
+	priceObjectId := page.PageElements[5].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
+
+	thisLowPrice, thisHighPrice := 0.0, 0.0
+	lastLowPrice, lastHighPrice := 0.0, 0.0
+
+	for i := 1; i <= 7; i++ {
+		thisLowPrice = math.Min(thisLowPrice, stockData[len(stockData)-i][3].(float64))
+		thisHighPrice = math.Max(thisHighPrice, stockData[len(stockData)-i][2].(float64))
+		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-7-i][3].(float64))
+		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-7-i][2].(float64))
+	}
+
+	// Update the stock low price
+	lowPrice := fmt.Sprintf("$%.2f", thisLowPrice)
+	lowPriceChange := common.FormatFloatChangePercent(lastLowPrice, thisLowPrice)
+	lowPriceObjectId := page.PageElements[9].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(lowPriceObjectId, -1, -1, lowPrice, lowPriceChange, 7, 5, false)...)
+
+	// Update the stock high price
+	higPrice := fmt.Sprintf("$%.2f", thisHighPrice)
+	highPriceChange := common.FormatFloatChangePercent(lastHighPrice, thisHighPrice)
+	highPriceObjectId := page.PageElements[10].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
+
+	// Update the market cap
+	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*1724.4e6)
+	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
+	marketCapObjectId := page.PageElements[13].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
+
+	// Update the 24h volume
+	volume24H := "$" + common.FormatWithUnits(todayData[5].(float64))
+	volume24HChange := common.FormatFloatChangePercent(oneWeekAgoData[5].(float64), todayData[5].(float64))
+	volumeObjectId := page.PageElements[15].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 11, 7, true)...)
+
+	// TODO: update held digital asset value
+
+	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
+		&slides.BatchUpdatePresentationRequest{
+			Requests: reqs,
+		}).Do()
+	if updateErr != nil {
+		u.logger.Error("Failed to update presentation", zap.Error(updateErr))
+	}
+}
+
 func utf16Len(s string) int64 {
 	return int64(len(utf16.Encode([]rune(s))))
 }
@@ -776,6 +842,21 @@ func getComplianceRateEmojiAndColor(brokenCount, hitsCount int) (string, string,
 		return "⚠️", "orange", true
 	}
 	return "❌", "red", true
+}
+
+func buildUpdateTitleRequests(titleElement *slides.PageElement, date time.Time) []*slides.Request {
+	reqs := make([]*slides.Request, 0)
+
+	title := extractText(titleElement)
+	titleObjectId := titleElement.ObjectId
+	matches := regexp.MustCompile(`[0-9]{2}-[0-9]{2}`).FindAllStringIndex(title, -1)
+	if len(matches) > 0 {
+		start := utf16Len(title[:matches[0][0]])
+		end := utf16Len(title[:matches[0][1]])
+		reqs = append(reqs, buildUpdateTextRequests(titleObjectId, -1, -1, start, end, date.Format("01-02"))...)
+	}
+
+	return reqs
 }
 
 func buildFullTextRequests(objectId string, i, j int64, text string, fontSize float64, color string, bold bool) []*slides.Request {

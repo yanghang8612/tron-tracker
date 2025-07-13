@@ -1,8 +1,10 @@
 package net
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"time"
 
@@ -289,4 +291,57 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 	}
 
 	return USDTSupply, nil
+}
+
+func GetStockData(date time.Time) [][]interface{} {
+	symbol := "SRM.US"
+	start := date.AddDate(0, 0, -60).Format("20060102")
+	end := date.Format("20060102")
+
+	url := fmt.Sprintf(
+		"https://stooq.com/q/d/l/?s=%s&d1=%s&d2=%s&i=d",
+		symbol, start, end,
+	)
+
+	resp, err := client.R().Get(url)
+	if err != nil {
+		zap.S().Errorf("Failed to fetch stock data for %s: %v", symbol, err)
+		return nil
+	}
+
+	reader := csv.NewReader(resp.RawBody())
+
+	if _, err = reader.Read(); err != nil {
+		zap.S().Errorf("Failed to read CSV header: %v", err)
+		return nil
+	}
+
+	var stockData [][]interface{}
+	row := 0
+	for {
+		rec, readingErr := reader.Read()
+		if readingErr == io.EOF {
+			break
+		}
+
+		if readingErr != nil {
+			zap.S().Errorf("Failed to read CSV record: %v", err)
+			continue
+		}
+		open, _ := strconv.ParseFloat(rec[1], 64)
+		high, _ := strconv.ParseFloat(rec[2], 64)
+		low, _ := strconv.ParseFloat(rec[3], 64)
+		close, _ := strconv.ParseFloat(rec[4], 64)
+		volume, _ := strconv.ParseFloat(rec[5], 64)
+
+		if row%3 == 0 {
+			stockData = append(stockData, []interface{}{rec[0][5:], open, high, low, close, volume})
+		} else {
+			stockData = append(stockData, []interface{}{"", open, high, low, close, volume})
+		}
+
+		row += 1
+	}
+
+	return stockData
 }

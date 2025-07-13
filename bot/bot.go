@@ -50,8 +50,8 @@ func New(token string, db *database.RawDB) *TelegramBot {
 		db:     db,
 		logger: zap.S().Named("[bot]"),
 
-		tokens: []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT", "HTX", "USDD"},
-		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft", "htx", "usdd"},
+		tokens: []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT", "HTX", "USDD", "sTRX"},
+		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft", "htx", "usdd", "staked-trx"},
 	}
 
 	tgBot.logger.Infof("Telegram bot authorized on account %s", botApi.Self.UserName)

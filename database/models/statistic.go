@@ -381,20 +381,20 @@ type FungibleTokenStatistic struct {
 
 func NewFungibleTokenStatistic(date, address, typeName string, tx *Transaction) *FungibleTokenStatistic {
 	var stat = &FungibleTokenStatistic{
-		Date:      date,
-		Address:   address,
-		Type:      typeName,
-		Count:     1,
-		AmountSum: types.NewBigInt(big.NewInt(0)),
+		Date:          date,
+		Address:       address,
+		Type:          typeName,
+		Count:         1,
+		AmountSum:     types.NewBigInt(big.NewInt(0)),
+		UniqueFromMap: make(map[string]bool),
+		UniqueToMap:   make(map[string]bool),
 	}
 
 	if tx != nil {
 		stat.AmountSum.Add(tx.Amount)
 		stat.UniqueFrom = 1
-		stat.UniqueFromMap = make(map[string]bool)
 		stat.UniqueFromMap[tx.FromAddr] = true
 		stat.UniqueTo = 1
-		stat.UniqueToMap = make(map[string]bool)
 		stat.UniqueToMap[tx.ToAddr] = true
 	}
 

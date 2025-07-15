@@ -768,7 +768,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	for i, row := range stockData {
 		sheetRow := make([]interface{}, 0, 6)
 		if i%3 == 1 {
-			sheetRow = append(sheetRow, row[5:]) // date
+			sheetRow = append(sheetRow, row[0].(string)[5:]) // date
 		} else {
 			sheetRow = append(sheetRow, "") // empty date for other rows
 		}

@@ -773,7 +773,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 			sheetRow = append(sheetRow, "") // empty date for other rows
 		}
 
-		sheetRow = append(sheetRow, row[1:])
+		sheetRow = append(sheetRow, row[1:]...)
 
 		stockDataInSheet = append(stockDataInSheet, sheetRow)
 	}

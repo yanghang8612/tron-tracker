@@ -323,11 +323,7 @@ func GetStockData(date time.Time) [][]interface{} {
 		close, _ := strconv.ParseFloat(data[4], 64)
 		volume, _ := strconv.ParseFloat(data[5], 64)
 
-		if i%3 == 1 {
-			stockData = append(stockData, []interface{}{data[0][5:], open, high, low, close, volume})
-		} else {
-			stockData = append(stockData, []interface{}{"", open, high, low, close, volume})
-		}
+		stockData = append(stockData, []interface{}{"", open, high, low, close, volume})
 	}
 
 	return stockData

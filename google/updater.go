@@ -764,22 +764,35 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	stockData := net.GetStockData(today)
 
 	// Update Stock sheet
+	stockDataInSheet := make([][]interface{}, 0, len(stockData))
+	for i, row := range stockData {
+		sheetRow := make([]interface{}, 0, 6)
+		if i%3 == 1 {
+			sheetRow = append(sheetRow, row[5:]) // date
+		} else {
+			sheetRow = append(sheetRow, "") // empty date for other rows
+		}
+
+		sheetRow = append(sheetRow, row[1:])
+
+		stockDataInSheet = append(stockDataInSheet, sheetRow)
+	}
+
 	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!A2:F45",
 		&sheets.ValueRange{
-			Values: stockData,
+			Values: stockDataInSheet,
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update Stock sheet: %v", err)
 	}
 
-	// Update Stock chart
 	reqs := make([]*slides.Request, 0)
 
 	// Update today in the title
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
 
 	todayData := stockData[len(stockData)-1]
-	oneWeekAgoData := stockData[len(stockData)-8]
+	oneWeekAgoData := stockData[len(stockData)-6]
 
 	// Update the stock price
 	price := fmt.Sprintf("$%.2f", todayData[4])
@@ -790,11 +803,11 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	thisLowPrice, thisHighPrice := 1e6, 0.0
 	lastLowPrice, lastHighPrice := 1e6, 0.0
 
-	for i := 1; i <= 7; i++ {
+	for i := 1; i <= 5; i++ {
 		thisLowPrice = math.Min(thisLowPrice, stockData[len(stockData)-i][3].(float64))
 		thisHighPrice = math.Max(thisHighPrice, stockData[len(stockData)-i][2].(float64))
-		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-7-i][3].(float64))
-		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-7-i][2].(float64))
+		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-5-i][3].(float64))
+		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-5-i][2].(float64))
 	}
 
 	// Update the stock low price
@@ -810,10 +823,18 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
 	// Update the 24h volume
-	volume24H := "$" + common.FormatWithUnits(todayData[5].(float64))
-	volume24HChange := common.FormatFloatChangePercent(oneWeekAgoData[5].(float64), todayData[5].(float64))
+	thisDailyAvgVolume, lastDailyAvgVolume := 0.0, 0.0
+	for i := 1; i <= 5; i++ {
+		thisDailyAvgVolume += stockData[len(stockData)-i][5].(float64)
+		lastDailyAvgVolume += stockData[len(stockData)-5-i][5].(float64)
+	}
+	thisDailyAvgVolume /= 5.0
+	lastDailyAvgVolume /= 5.0
+
+	avgDailyVolume := "$" + common.FormatWithUnits(thisDailyAvgVolume)
+	avgDailyVolumeChange := common.FormatFloatChangePercent(lastDailyAvgVolume, thisDailyAvgVolume)
 	volumeObjectId := page.PageElements[13].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, volume24H, volume24HChange, 11, 7, true)...)
+	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, avgDailyVolume, avgDailyVolumeChange, 11, 7, true)...)
 
 	// Update the market cap
 	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*1724.4e6)

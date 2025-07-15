@@ -764,7 +764,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	stockData := net.GetStockData(today)
 
 	// Update Stock sheet
-	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!A2:F41",
+	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!A2:F45",
 		&sheets.ValueRange{
 			Values: stockData,
 		}).ValueInputOption("USER_ENTERED").Do()
@@ -855,7 +855,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
 	}
 
-	note := fmt.Sprintf("%s", stockDataStr)
+	note := fmt.Sprintf("%s", stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

@@ -397,7 +397,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	oneWeekAgoTokenListing := u.db.GetTokenListingStatistic(oneWeekAgo, token)
 
 	// Update date in the title
-	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
 
 	// Update the token price
 	price := fmt.Sprintf("$%.4f", todayTokenListing.Price)
@@ -413,6 +413,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 	thisLowPrice, thisHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, thisWeek, 7)
 	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, lastWeek, 7)
+
+	// TODO: move the cursor
 
 	// Update the token low price
 	lowPrice := fmt.Sprintf("$%.4f", thisLowPrice)

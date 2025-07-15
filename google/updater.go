@@ -846,7 +846,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// Update note
 	stockDataStr := strings.Builder{}
 	stockDataStr.WriteString("date\topen\thigh\tlow\tclose\tvolume\n")
-	for i := 1; i <= 10; i-- {
+	for i := 1; i <= 10; i++ {
 		if i >= len(stockData) {
 			break
 		}

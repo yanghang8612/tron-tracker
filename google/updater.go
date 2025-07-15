@@ -196,6 +196,20 @@ func (u *Updater) TraverseAllObjectsInPPT() string {
 			}
 			sb.WriteString(fmt.Sprint("------------------------------\n"))
 		}
+
+		for j, element := range slide.SlideProperties.NotesPage.PageElements {
+			objectId := element.ObjectId
+			sb.WriteString(fmt.Sprintf("Note Object ID: [%d] - %s\n", j, objectId))
+
+			// Check if the note element is a TEXT_BOX
+			if element.Shape != nil && element.Shape.ShapeType == "TEXT_BOX" {
+				textContent := extractText(element)
+				sb.WriteString(fmt.Sprintf("Note Text: %s\n", textContent))
+			} else {
+				sb.WriteString(fmt.Sprintf("Note Unknown: %s\n", objectId))
+			}
+			sb.WriteString(fmt.Sprint("------------------------------\n"))
+		}
 		sb.WriteString(fmt.Sprint("##############################\n\n"))
 	}
 
@@ -828,6 +842,22 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 			},
 		},
 	}...)
+
+	// Update note
+	stockDataStr := strings.Builder{}
+	stockDataStr.WriteString("date\topen\thigh\tlow\tclose\tvolume\n")
+	for i := 1; i <= 10; i-- {
+		if i >= len(stockData) {
+			break
+		}
+		row := stockData[len(stockData)-i]
+		stockDataStr.WriteString(fmt.Sprintf("%s\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n",
+			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
+	}
+
+	note := fmt.Sprintf("%s", stockDataStr)
+	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
+	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
 		&slides.BatchUpdatePresentationRequest{

@@ -1328,11 +1328,14 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 		jsonStat := &JsonStat{
 			ID:                  curStat.Percent,
 			ExchangeName:        curStat.ExchangeName,
-			Pair:                curStat.Pair,
 			Volume:              humanize.SIWithDigits(curStat.Volume, 2, ""),
 			Percent:             fmt.Sprintf("%.2f%%", curStat.Percent*100),
 			DepthUsdPositiveTwo: humanize.SIWithDigits(curStat.DepthUsdPositiveTwo, 2, ""),
 			DepthUsdNegativeTwo: humanize.SIWithDigits(curStat.DepthUsdNegativeTwo, 2, ""),
+		}
+
+		if groupByExchange {
+			jsonStat.Pair = curStat.Pair
 		}
 
 		if lastStat, ok := lastMarketPairStats[key]; ok {
@@ -1355,13 +1358,16 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 			jsonStat := &JsonStat{
 				ID:                  -lastStat.Percent,
 				ExchangeName:        lastStat.ExchangeName,
-				Pair:                lastStat.Pair,
 				Volume:              "0",
 				VolumeChange:        "-100%",
 				Percent:             "0%",
 				PercentChange:       common.FormatPercentWithSign(-lastStat.Percent * 100),
 				DepthUsdPositiveTwo: "-100%",
 				DepthUsdNegativeTwo: "-100%",
+			}
+
+			if groupByExchange {
+				jsonStat.Pair = lastStat.Pair
 			}
 
 			statResults = append(statResults, jsonStat)

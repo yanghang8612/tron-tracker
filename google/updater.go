@@ -866,6 +866,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-5-i][2].(float64))
 	}
 
+	// Move the cursor
+	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[6], page.PageElements[11], (todayData[4].(float64)-thisLowPrice)/(thisHighPrice-thisLowPrice)))
+
 	// Update the stock low price
 	lowPrice := fmt.Sprintf("$%.2f", thisLowPrice)
 	lowPriceChange := common.FormatFloatChangePercent(lastLowPrice, thisLowPrice)

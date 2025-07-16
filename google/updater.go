@@ -28,6 +28,8 @@ import (
 	"tron-tracker/net"
 )
 
+const EMUPerPt = 12700.0
+
 type Updater struct {
 	presentationId string
 	volumeId       string
@@ -162,6 +164,50 @@ func SaveToken(path string, token *oauth2.Token) {
 	json.NewEncoder(f).Encode(token)
 }
 
+// emuToPt 将 EMU 单位转换为 pt
+func emuToPt(emu float64) float64 {
+	return emu / EMUPerPt
+}
+
+// RenderedRect 计算出一个元素在幻灯片上渲染后的矩形：
+// 返回值依次为 x, y, width, height，均为 pt 单位。
+// - origWEmu/origHEmu: 元素原始宽高（Dimension.Magnitude），单位 EMU。
+// - xf: 对应元素的 AffineTransform。
+func RenderedRect(origWEmu, origHEmu float64, xf *slides.AffineTransform) (x, y, w, h float64) {
+	// 1. 先把 translate 转成 EMU
+	var txEmu, tyEmu float64
+	switch xf.Unit {
+	case "PT":
+		txEmu = xf.TranslateX * EMUPerPt
+		tyEmu = xf.TranslateY * EMUPerPt
+	default: // 包括 "EMU" 或者空
+		txEmu = xf.TranslateX
+		tyEmu = xf.TranslateY
+	}
+
+	// 2. 四个角点在 EMU 坐标系下的位置
+	//    top-left     : (0,0)
+	//    top-right    : (origW, 0)
+	//    bottom-left  : (0, origH)
+	//    bottom-right : (origW, origH)
+	x0, y0 := txEmu, tyEmu
+	x1 := xf.ScaleX*origWEmu + xf.ShearX*0 + txEmu
+	y1 := xf.ShearY*origWEmu + xf.ScaleY*0 + tyEmu
+	x2 := xf.ScaleX*0 + xf.ShearX*origHEmu + txEmu
+	y2 := xf.ShearY*0 + xf.ScaleY*origHEmu + tyEmu
+	x3 := xf.ScaleX*origWEmu + xf.ShearX*origHEmu + txEmu
+	y3 := xf.ShearY*origWEmu + xf.ScaleY*origHEmu + tyEmu
+
+	// 3. 找最小/最大坐标，得到包围盒
+	minX := math.Min(math.Min(x0, x1), math.Min(x2, x3))
+	maxX := math.Max(math.Max(x0, x1), math.Max(x2, x3))
+	minY := math.Min(math.Min(y0, y1), math.Min(y2, y3))
+	maxY := math.Max(math.Max(y0, y1), math.Max(y2, y3))
+
+	// 4. 转成 pt 并返回
+	return emuToPt(minX), emuToPt(minY), emuToPt(maxX - minX), emuToPt(maxY - minY)
+}
+
 func (u *Updater) TraverseAllObjectsInPPT() string {
 	// Get full presentation
 	presentation, err := u.slidesService.Presentations.Get(u.presentationId).Do()
@@ -176,10 +222,19 @@ func (u *Updater) TraverseAllObjectsInPPT() string {
 	// Traverse all slides
 	for i, slide := range presentation.Slides {
 		sb.WriteString(fmt.Sprintf("Processing Slide ID: [%d] - %s\n", i, slide.ObjectId))
+		sb.WriteString(fmt.Sprint("------------------------------\n"))
 
 		for j, element := range slide.PageElements {
 			objectId := element.ObjectId
 			sb.WriteString(fmt.Sprintf("Object ID: [%d] - %s\n", j, objectId))
+
+			box := element.Transform
+			size := element.Size
+
+			if box != nil && size != nil {
+				x, y, w, h := RenderedRect(size.Width.Magnitude, size.Height.Magnitude, box)
+				sb.WriteString(fmt.Sprintf("\nPosition: X=%.2fpt, Y=%.2fpt, Width=%.2fpt, Height=%.2fpt\n\n", x, y, w, h))
+			}
 
 			// Check if the element is a TEXT_BOX
 			if element.Shape != nil && element.Shape.ShapeType == "TEXT_BOX" {
@@ -428,7 +483,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	thisLowPrice, thisHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, thisWeek, 7)
 	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, lastWeek, 7)
 
-	// TODO: move the cursor
+	// Move the cursor
+	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[5], page.PageElements[10], (todayTokenListing.Price-thisLowPrice)/(thisHighPrice-thisLowPrice)))
 
 	// Update the token low price
 	lowPrice := fmt.Sprintf("$%.4f", thisLowPrice)
@@ -455,9 +511,9 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
 	groupByExchange := true
-	if token == "STEEM" {
-		groupByExchange = false
-	}
+	// if token == "STEEM" {
+	// 	groupByExchange = false
+	// }
 	thisMarketPairStats := u.db.GetMergedMarketPairStatistics(thisWeek, 7, token, true, groupByExchange)
 	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(lastWeek, 7, token, true, groupByExchange)
 
@@ -492,19 +548,6 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	VolumeToMarketCapRatioChange := common.FormatPercentWithSign(thisVolumeToMarketCapRatio - lastVolumeToMarketCapRatio)
 	VolumeToMarketCapRatioObjectId := page.PageElements[18].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(VolumeToMarketCapRatioObjectId, -1, -1, VolumeToMarketCapRatio, VolumeToMarketCapRatioChange, 11, 7, true)...)
-
-	statsToInsert := make([]*models.MarketPairStatistic, 0)
-	for key, stat := range thisMarketPairStats {
-		if exchanges[key] {
-			// Use datetime to store the key
-			stat.Datetime = key
-			statsToInsert = append(statsToInsert, stat)
-		}
-	}
-
-	sort.Slice(statsToInsert, func(i, j int) bool {
-		return statsToInsert[i].Volume > statsToInsert[j].Volume
-	})
 
 	// Update Monitoring Table
 	monitorTableObjectId := page.PageElements[22].ObjectId
@@ -548,6 +591,19 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	}
 
 	// Update Volume Table
+	statsToInsert := make([]*models.MarketPairStatistic, 0)
+	for key, stat := range thisMarketPairStats {
+		if exchanges[key] {
+			// Use datetime to store the key
+			stat.Datetime = key
+			statsToInsert = append(statsToInsert, stat)
+		}
+	}
+
+	sort.Slice(statsToInsert, func(i, j int) bool {
+		return statsToInsert[i].Volume > statsToInsert[j].Volume
+	})
+
 	volumeTableObjectId := page.PageElements[19].ObjectId
 	rowIndex = int64(1)
 	for _, stat := range statsToInsert {
@@ -873,7 +929,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		}
 		row := stockData[len(stockData)-i]
 		stockDataStr.WriteString(fmt.Sprintf("%s\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n",
-			row[0].(string)[5:], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
+			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
 	}
 
 	note := fmt.Sprintf("[SRM Price]为昨日的收盘价\n"+
@@ -1057,6 +1113,33 @@ func buildUpdateStyleRequest(objectId string, i, j, start, end int64, fontSize f
 
 	return &slides.Request{
 		UpdateTextStyle: styleToUpdate,
+	}
+}
+
+func buildMoveByPercentageRequest(obj1, obj2 *slides.PageElement, percent float64) *slides.Request {
+	const EMUPerPt = 12700.0
+
+	x1Emu := obj1.Transform.TranslateX
+	w1Emu := obj1.Size.Width.Magnitude * obj1.Transform.ScaleX
+	x1Pt := x1Emu / EMUPerPt
+	w1Pt := w1Emu / EMUPerPt
+
+	x2Pt := obj2.Transform.TranslateX / EMUPerPt
+
+	targetXPt := x1Pt + w1Pt*percent
+
+	deltaEmu := (targetXPt - x2Pt) * EMUPerPt
+
+	return &slides.Request{
+		UpdatePageElementTransform: &slides.UpdatePageElementTransformRequest{
+			ObjectId:  obj2.ObjectId,
+			ApplyMode: "RELATIVE",
+			Transform: &slides.AffineTransform{
+				TranslateX: deltaEmu,
+				TranslateY: 0,
+				Unit:       "EMU",
+			},
+		},
 	}
 }
 

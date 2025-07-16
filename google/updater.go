@@ -761,26 +761,26 @@ func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
 
 func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// 0:date 1:open 2:high 3:low 4:close 5:volume
-	stockData := net.GetStockData(today, 10)
+	stockData := net.GetStockData(today.AddDate(0, 0, -1), 10)
 
 	// Update Stock sheet
-	stockDataInSheet := make([][]interface{}, 0, len(stockData))
-	for i, row := range stockData {
-		sheetRow := make([]interface{}, 0, 6)
-		if i%3 == 1 {
-			sheetRow = append(sheetRow, row[0].(string)[5:]) // date
-		} else {
-			sheetRow = append(sheetRow, "") // empty date for other rows
-		}
-
-		sheetRow = append(sheetRow, row[1:]...)
-
-		stockDataInSheet = append(stockDataInSheet, sheetRow)
-	}
+	// stockDataInSheet := make([][]interface{}, 0, len(stockData))
+	// for i, row := range stockData {
+	// 	sheetRow := make([]interface{}, 0, 6)
+	// 	if i%3 == 1 {
+	// 		sheetRow = append(sheetRow, row[0].(string)[5:]) // date
+	// 	} else {
+	// 		sheetRow = append(sheetRow, "") // empty date for other rows
+	// 	}
+	//
+	// 	sheetRow = append(sheetRow, row[1:]...)
+	//
+	// 	stockDataInSheet = append(stockDataInSheet, sheetRow)
+	// }
 
 	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!A2:F45",
 		&sheets.ValueRange{
-			Values: stockDataInSheet,
+			Values: stockData,
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update Stock sheet: %v", err)

@@ -796,9 +796,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 
 	// Update the stock price
 	price := fmt.Sprintf("$%.2f", todayData[4])
-	priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
+	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	priceObjectId := page.PageElements[5].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
+	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 12, 9, true)...)
 
 	thisLowPrice, thisHighPrice := 1e6, 0.0
 	lastLowPrice, lastHighPrice := 1e6, 0.0
@@ -950,6 +950,10 @@ func buildTextAndChangeRequests(objectId string, i, j int64, text string, change
 	reqs := make([]*slides.Request, 0)
 	reqs = append(reqs, buildUpdateTextRequests(objectId, i, j, 0, 0, fullText)...)
 	reqs = append(reqs, buildUpdateStyleRequest(objectId, i, j, 0, utf16Len(text)+1, textFontSize, "white", isTextBold))
+
+	if changePercent == "" {
+		return reqs
+	}
 
 	color := "green"
 	if strings.HasPrefix(changePercent, "-") {

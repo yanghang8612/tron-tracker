@@ -1301,7 +1301,10 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "TRX")
 
-	_, groupByExchange := c.GetQuery("group_by")
+	groupByExchange, ok := getBoolParam(c, "group_by_exchange", false)
+	if !ok {
+		return
+	}
 
 	curMarketPairStats := s.db.GetMergedMarketPairStatistics(startDate, days, token, true, groupByExchange)
 	lastMarketPairStats := s.db.GetMergedMarketPairStatistics(startDate.AddDate(0, 0, -days), days, token, true, groupByExchange)

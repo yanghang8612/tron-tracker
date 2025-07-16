@@ -798,7 +798,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	price := fmt.Sprintf("$%.2f", todayData[4])
 	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	priceObjectId := page.PageElements[5].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 12, 9, true)...)
+	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 18, 9, true)...)
 
 	thisLowPrice, thisHighPrice := 1e6, 0.0
 	lastLowPrice, lastHighPrice := 1e6, 0.0

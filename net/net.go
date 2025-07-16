@@ -292,9 +292,9 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 	return USDTSupply, nil
 }
 
-func GetStockData(date time.Time) [][]interface{} {
+func GetStockData(date time.Time, days int) [][]interface{} {
 	symbol := "SRM.US"
-	start := date.AddDate(0, 0, -60).Format("20060102")
+	start := subtractBusinessDays(date, days).Format("20060102")
 	end := date.Format("20060102")
 
 	url := fmt.Sprintf(
@@ -327,4 +327,17 @@ func GetStockData(date time.Time) [][]interface{} {
 	}
 
 	return stockData
+}
+
+func subtractBusinessDays(date time.Time, days int) time.Time {
+	d := date
+	count := 0
+	for count < days {
+		d = d.AddDate(0, 0, -1)
+		wd := d.Weekday()
+		if wd != time.Saturday && wd != time.Sunday {
+			count++
+		}
+	}
+	return d
 }

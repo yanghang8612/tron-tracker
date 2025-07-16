@@ -761,7 +761,7 @@ func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
 
 func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// 0:date 1:open 2:high 3:low 4:close 5:volume
-	stockData := net.GetStockData(today)
+	stockData := net.GetStockData(today, 10)
 
 	// Update Stock sheet
 	stockDataInSheet := make([][]interface{}, 0, len(stockData))
@@ -822,7 +822,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	highPriceObjectId := page.PageElements[10].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
 
-	// Update the 24h volume
+	// Update the avg daily volume
 	thisDailyAvgVolume, lastDailyAvgVolume := 0.0, 0.0
 	for i := 1; i <= 5; i++ {
 		thisDailyAvgVolume += stockData[len(stockData)-i][5].(float64)
@@ -831,7 +831,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	thisDailyAvgVolume /= 5.0
 	lastDailyAvgVolume /= 5.0
 
-	avgDailyVolume := "$" + common.FormatWithUnits(thisDailyAvgVolume)
+	avgDailyVolume := common.FormatWithUnits(thisDailyAvgVolume)
 	avgDailyVolumeChange := common.FormatFloatChangePercent(lastDailyAvgVolume, thisDailyAvgVolume)
 	volumeObjectId := page.PageElements[13].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, avgDailyVolume, avgDailyVolumeChange, 11, 7, true)...)
@@ -873,10 +873,15 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		}
 		row := stockData[len(stockData)-i]
 		stockDataStr.WriteString(fmt.Sprintf("%s\t%.2f\t%.2f\t%.2f\t%.2f\t%s\n",
-			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
+			row[0].(string)[5:], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
 	}
 
-	note := fmt.Sprintf("%s", stockDataStr.String())
+	note := fmt.Sprintf("[SRM Price]为昨日的收盘价\n"+
+		"[Low/High]分别为上周内的最低价与最高价\n"+
+		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（股数）\n"+
+		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
+		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
+		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n%s", "297,543,245", stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

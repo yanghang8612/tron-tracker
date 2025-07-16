@@ -1117,27 +1117,25 @@ func buildUpdateStyleRequest(objectId string, i, j, start, end int64, fontSize f
 }
 
 func buildMoveByPercentageRequest(obj1, obj2 *slides.PageElement, percent float64) *slides.Request {
-	const EMUPerPt = 12700.0
+	x1 := obj1.Transform.TranslateX
+	w1 := obj1.Size.Width.Magnitude * obj1.Transform.ScaleX
 
-	x1Emu := obj1.Transform.TranslateX
-	w1Emu := obj1.Size.Width.Magnitude * obj1.Transform.ScaleX
-	x1Pt := x1Emu / EMUPerPt
-	w1Pt := w1Emu / EMUPerPt
+	targetX := x1 + w1*percent
 
-	x2Pt := obj2.Transform.TranslateX / EMUPerPt
-
-	targetXPt := x1Pt + w1Pt*percent
-
-	deltaEmu := (targetXPt - x2Pt) * EMUPerPt
+	xf := obj2.Transform
 
 	return &slides.Request{
 		UpdatePageElementTransform: &slides.UpdatePageElementTransformRequest{
 			ObjectId:  obj2.ObjectId,
-			ApplyMode: "RELATIVE",
+			ApplyMode: "ABSOLUTE",
 			Transform: &slides.AffineTransform{
-				TranslateX: deltaEmu,
-				TranslateY: 0,
-				Unit:       "EMU",
+				ScaleX:     xf.ScaleX,
+				ScaleY:     xf.ScaleY,
+				ShearX:     xf.ShearX,
+				ShearY:     xf.ShearY,
+				TranslateX: targetX,
+				TranslateY: xf.TranslateY,
+				Unit:       xf.Unit,
 			},
 		},
 	}

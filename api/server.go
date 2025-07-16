@@ -1334,7 +1334,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 			DepthUsdNegativeTwo: humanize.SIWithDigits(curStat.DepthUsdNegativeTwo, 2, ""),
 		}
 
-		if groupByExchange {
+		if !groupByExchange {
 			jsonStat.Pair = curStat.Pair
 		}
 
@@ -1366,7 +1366,7 @@ func (s *Server) marketPairStatistics(c *gin.Context) {
 				DepthUsdNegativeTwo: "-100%",
 			}
 
-			if groupByExchange {
+			if !groupByExchange {
 				jsonStat.Pair = lastStat.Pair
 			}
 

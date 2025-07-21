@@ -666,16 +666,20 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	// Update note
 	var volumeNote strings.Builder
 	for i := 0; i < 10 && i < len(thisSortedMarketPairStats); i++ {
-		stat := thisSortedMarketPairStats[i]
-		key := stat.Datetime
+		thisStat := thisSortedMarketPairStats[i]
+		lastStat := lastMarketPairStats[thisStat.ExchangeName]
+		if lastStat == nil {
+			lastStat = &models.MarketPairStatistic{}
+		}
+
 		volumeNote.WriteString(fmt.Sprintf("%s\t%s(%s)\t%s/%s\t%s(%s)\n",
-			key,
-			"$"+common.FormatWithUnits(stat.Volume),
-			common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume),
-			common.FormatWithUnits(stat.DepthUsdPositiveTwo),
-			common.FormatWithUnits(stat.DepthUsdNegativeTwo),
-			fmt.Sprintf("%.2f%%", stat.Percent*100),
-			fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))))
+			thisStat.ExchangeName,
+			"$"+common.FormatWithUnits(thisStat.Volume),
+			common.FormatFloatChangePercent(lastStat.Volume, thisStat.Volume),
+			common.FormatWithUnits(thisStat.DepthUsdPositiveTwo),
+			common.FormatWithUnits(thisStat.DepthUsdNegativeTwo),
+			fmt.Sprintf("%.2f%%", thisStat.Percent*100),
+			fmt.Sprintf("%s", common.FormatPercentWithSign((thisStat.Percent-lastStat.Percent)*100))))
 	}
 
 	volumeNoteObjectId := page.SlideProperties.NotesPage.PageElements[1].ObjectId

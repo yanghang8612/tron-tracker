@@ -613,7 +613,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			return statsToInsert[i].Volume > statsToInsert[j].Volume
 		})
 	} else {
-		for i := 0; i < 3 && i < len(thisSortedMarketPairStats); i++ {
+		for i := 1; i <= 3 && i < len(thisSortedMarketPairStats); i++ {
 			stat := thisSortedMarketPairStats[i]
 			// Use datetime to store the key
 			stat.Datetime = stat.ExchangeName
@@ -665,14 +665,14 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 	// Update note
 	var volumeNote strings.Builder
-	for i := 0; i < 10 && i < len(thisSortedMarketPairStats); i++ {
+	for i := 1; i <= 10 && i < len(thisSortedMarketPairStats); i++ {
 		thisStat := thisSortedMarketPairStats[i]
 		lastStat := lastMarketPairStats[thisStat.ExchangeName]
 		if lastStat == nil {
 			lastStat = &models.MarketPairStatistic{}
 		}
 
-		volumeNote.WriteString(fmt.Sprintf("%-15s\t\t%s(%s)\t%s / %s\t%s(%s)\n",
+		volumeNote.WriteString(fmt.Sprintf("%-15s%s(%s)\t%s / %s\t%s(%s)\n",
 			thisStat.ExchangeName,
 			"$"+common.FormatWithUnits(thisStat.Volume),
 			common.FormatFloatChangePercent(lastStat.Volume, thisStat.Volume),

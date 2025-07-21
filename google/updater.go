@@ -360,10 +360,10 @@ func (u *Updater) Update(date time.Time) {
 	u.updateChainData(ppt.Slides[0], date.AddDate(0, 0, -7))
 
 	// Update the next four slides with CEX data
-	u.updateCexData(ppt.Slides[1], date, "TRX", map[string]bool{"Binance": true, "Kraken": true},
+	u.updateCexData(ppt.Slides[1], date, "TRX", nil,
 		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
 
-	u.updateCexData(ppt.Slides[2], date, "STEEM", map[string]bool{"Binance-STEEM/USDT": true, "Binance-STEEM/USDC": true},
+	u.updateCexData(ppt.Slides[2], date, "STEEM", nil,
 		[]string{"Binance-STEEM/USDT", "Binance-STEEM/USDC", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
 
 	u.updateCexData(ppt.Slides[3], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
@@ -591,18 +591,35 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	}
 
 	// Update Volume Table
+	thisSortedMarketPairStats := make([]*models.MarketPairStatistic, 0)
+	for _, stat := range thisMarketPairStats {
+		thisSortedMarketPairStats = append(thisSortedMarketPairStats, stat)
+	}
+	sort.Slice(thisSortedMarketPairStats, func(i, j int) bool {
+		return thisSortedMarketPairStats[i].Volume > thisSortedMarketPairStats[j].Volume
+	})
+
 	statsToInsert := make([]*models.MarketPairStatistic, 0)
-	for key, stat := range thisMarketPairStats {
-		if exchanges[key] {
+	if exchanges != nil {
+		for key, stat := range thisMarketPairStats {
+			if exchanges[key] {
+				// Use datetime to store the key
+				stat.Datetime = key
+				statsToInsert = append(statsToInsert, stat)
+			}
+		}
+
+		sort.Slice(statsToInsert, func(i, j int) bool {
+			return statsToInsert[i].Volume > statsToInsert[j].Volume
+		})
+	} else {
+		for i := 0; i < 3 && i < len(thisSortedMarketPairStats); i++ {
+			stat := thisSortedMarketPairStats[i]
 			// Use datetime to store the key
-			stat.Datetime = key
+			stat.Datetime = stat.ExchangeName
 			statsToInsert = append(statsToInsert, stat)
 		}
 	}
-
-	sort.Slice(statsToInsert, func(i, j int) bool {
-		return statsToInsert[i].Volume > statsToInsert[j].Volume
-	})
 
 	volumeTableObjectId := page.PageElements[19].ObjectId
 	rowIndex = int64(1)
@@ -645,6 +662,24 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			},
 		},
 	}...)
+
+	// Update note
+	var volumeNote strings.Builder
+	for i := 0; i < 10 && i < len(thisSortedMarketPairStats); i++ {
+		stat := thisSortedMarketPairStats[i]
+		key := stat.Datetime
+		volumeNote.WriteString(fmt.Sprintf("%s\t%s(%s)\t%s/%s\t%s(%s)\n",
+			key,
+			"$"+common.FormatWithUnits(stat.Volume),
+			common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume),
+			common.FormatWithUnits(stat.DepthUsdPositiveTwo),
+			common.FormatWithUnits(stat.DepthUsdNegativeTwo),
+			fmt.Sprintf("%.2f%%", stat.Percent*100),
+			fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))))
+	}
+
+	volumeNoteObjectId := page.SlideProperties.NotesPage.PageElements[1].ObjectId
+	reqs = append(reqs, buildUpdateTextRequests(volumeNoteObjectId, -1, -1, 0, 0, volumeNote.String())...)
 
 	// Send the batch update request
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,

@@ -293,7 +293,7 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 }
 
 func GetStockData(date time.Time, days int) [][]interface{} {
-	symbol := "SRM.US"
+	symbol := "TRON.US"
 	start := subtractBusinessDays(date, days).Format("20060102")
 	end := date.Format("20060102")
 

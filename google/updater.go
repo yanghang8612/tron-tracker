@@ -672,7 +672,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			lastStat = &models.MarketPairStatistic{}
 		}
 
-		volumeNote.WriteString(fmt.Sprintf("%s\t%s(%s)\t%s/%s\t%s(%s)\n",
+		volumeNote.WriteString(fmt.Sprintf("%-15s\t\t%s(%s)\t%s / %s\t%s(%s)\n",
 			thisStat.ExchangeName,
 			"$"+common.FormatWithUnits(thisStat.Volume),
 			common.FormatFloatChangePercent(lastStat.Volume, thisStat.Volume),

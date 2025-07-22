@@ -510,12 +510,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	marketCapObjectId := page.PageElements[14].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
-	groupByExchange := true
-	// if token == "STEEM" {
-	// 	groupByExchange = false
-	// }
-	thisMarketPairStats := u.db.GetMergedMarketPairStatistics(thisWeek, 7, token, true, groupByExchange)
-	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(lastWeek, 7, token, true, groupByExchange)
+	thisMarketPairStats := u.db.GetMergedMarketPairStatistics(thisWeek, 7, token, true, true)
+	lastMarketPairStats := u.db.GetMergedMarketPairStatistics(lastWeek, 7, token, true, true)
 
 	// Update the 24h volume
 	volume24H := "$" + common.FormatWithUnits(thisMarketPairStats["Total"].Volume)
@@ -672,7 +668,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			lastStat = &models.MarketPairStatistic{}
 		}
 
-		volumeNote.WriteString(fmt.Sprintf("%-12s\t%-24s\t%-24s\t%s(%s)\n",
+		volumeNote.WriteString(fmt.Sprintf("%-12s\t%-24s\t%-26s\t%s(%s)\n",
 			thisStat.ExchangeName,
 			fmt.Sprintf("%s(%s)",
 				"$"+common.FormatWithUnits(thisStat.Volume),
@@ -780,15 +776,15 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 
 	noteTemplate :=
 		"(TRX amount based revenue)\tCurrent Week\tPercent \tChange  \tLast Week\n" +
-			"Total Protocol Revenue    \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Total Energy Revenue      \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Total Burning Revenue     \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
-			"Total Revenue from USDT   \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Burnt Revenue from USDT   \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Staked Revenue from USDT  \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
-			"Total Revenue from Other  \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Burnt Revenue from other  \t%-12s\t\t%-8s\t%-8s\t%s\n" +
-			"Staked Revenue from other \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Total Protocol Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Total Energy Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Total Burning Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Total Revenue from USDT\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Burnt Revenue from USDT\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Staked Revenue from USDT\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Total Revenue from Other\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Burnt Revenue from other\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Staked Revenue from other\t\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
 			"TRX Avg Price: %f"
 
 	revenueNote := fmt.Sprintf(noteTemplate,
@@ -950,6 +946,18 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	heldAssetChange := common.FormatFloatChangePercent(lastSTRXPrice, thisSTRXPrice)
 	heldAssetObjectId := page.PageElements[17].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
+
+	// Update the value of digital assets held in the Stock sheet
+	valueData := make([][]interface{}, 1)
+	valueData[0] = make([]interface{}, 1)
+	valueData[0][0] = thisSTRXPrice * sTRXAmount
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!J2",
+		&sheets.ValueRange{
+			Values: valueData,
+		}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update Stock sheet: %v", err)
+	}
 
 	// Update K-line Sheet Chart
 	kLineChartId := page.PageElements[21].ObjectId

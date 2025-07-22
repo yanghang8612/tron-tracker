@@ -668,7 +668,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			lastStat = &models.MarketPairStatistic{}
 		}
 
-		volumeNote.WriteString(fmt.Sprintf("%-12s\t%-24s\t%-26s\t%s(%s)\n",
+		volumeNote.WriteString(fmt.Sprintf("%-12s\t%-24s\t%-35s\t%s(%s)\n",
 			thisStat.ExchangeName,
 			fmt.Sprintf("%s(%s)",
 				"$"+common.FormatWithUnits(thisStat.Volume),
@@ -1006,9 +1006,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（股数）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
-		"链上地址目前只持有一种代币为sTRX，共持有%.0f枚sTRX\n\n"+
+		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n"+
 		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+
-		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", sTRXAmount, stockDataStr.String())
+		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", humanize.Commaf(sTRXAmount), stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

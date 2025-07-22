@@ -672,12 +672,14 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 			lastStat = &models.MarketPairStatistic{}
 		}
 
-		volumeNote.WriteString(fmt.Sprintf("%-12s\t%s(%s)\t%s / %s\t%s(%s)\n",
+		volumeNote.WriteString(fmt.Sprintf("%-12s\t%-24s\t%-24s\t%s(%s)\n",
 			thisStat.ExchangeName,
-			"$"+common.FormatWithUnits(thisStat.Volume),
-			common.FormatFloatChangePercent(lastStat.Volume, thisStat.Volume),
-			common.FormatWithUnits(thisStat.DepthUsdPositiveTwo),
-			common.FormatWithUnits(thisStat.DepthUsdNegativeTwo),
+			fmt.Sprintf("%s(%s)",
+				"$"+common.FormatWithUnits(thisStat.Volume),
+				common.FormatFloatChangePercent(lastStat.Volume, thisStat.Volume)),
+			fmt.Sprintf("%s / %s",
+				common.FormatWithUnits(thisStat.DepthUsdPositiveTwo),
+				common.FormatWithUnits(thisStat.DepthUsdNegativeTwo)),
 			fmt.Sprintf("%.2f%%", thisStat.Percent*100),
 			fmt.Sprintf("%s", common.FormatPercentWithSign((thisStat.Percent-lastStat.Percent)*100))))
 	}
@@ -777,16 +779,16 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	otherNote := resp.ValueRanges[2].Values
 
 	noteTemplate :=
-		"(TRX amount based revenue)\tCurrent Week\t\tPercent\tChange\tLast Week\n" +
-			"Total Protocol Revenue\t\t%s\t\t%s \t%s\t%s\n" +
-			"Total Energy Revenue\t\t%s\t\t%s\t%s \t%s\n" +
-			"Total Burning Revenue\t\t%s\t\t%s\t%s \t%s\n\n" +
-			"Total Revenue from USDT\t\t%s\t\t%s\t%s \t%s\n" +
-			"Burnt Revenue from USDT\t\t%s\t\t%s\t%s \t%s\n" +
-			"Staked Revenue from USDT\t%s\t\t%s\t%s \t%s\n\n" +
-			"Total Revenue from Other\t\t%s\t\t%s\t\t%s \t%s\n" +
-			"Burnt Revenue from other\t\t%s\t\t%s\t%s \t%s\n" +
-			"Staked Revenue from other\t%s\t\t%s\t%s \t%s\n\n" +
+		"(TRX amount based revenue)\tCurrent Week\tPercent \tChange  \tLast Week\n" +
+			"Total Protocol Revenue    \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Total Energy Revenue      \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Total Burning Revenue     \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Total Revenue from USDT   \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Burnt Revenue from USDT   \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Staked Revenue from USDT  \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Total Revenue from Other  \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Burnt Revenue from other  \t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Staked Revenue from other \t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
 			"TRX Avg Price: %f"
 
 	revenueNote := fmt.Sprintf(noteTemplate,
@@ -890,7 +892,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	oneWeekAgoData := stockData[len(stockData)-6]
 
 	// Update the stock price
-	price := fmt.Sprintf("$%.2f", todayData[4])
+	price := fmt.Sprintf("%.2f", todayData[4])
 	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	priceObjectId := page.PageElements[5].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 18, 9, true)...)
@@ -909,13 +911,13 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[6], page.PageElements[11], (todayData[4].(float64)-thisLowPrice)/(thisHighPrice-thisLowPrice)))
 
 	// Update the stock low price
-	lowPrice := fmt.Sprintf("$%.2f", thisLowPrice)
+	lowPrice := fmt.Sprintf("%.2f", thisLowPrice)
 	lowPriceChange := common.FormatFloatChangePercent(lastLowPrice, thisLowPrice)
 	lowPriceObjectId := page.PageElements[9].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(lowPriceObjectId, -1, -1, lowPrice, lowPriceChange, 7, 5, false)...)
 
 	// Update the stock high price
-	higPrice := fmt.Sprintf("$%.2f", thisHighPrice)
+	higPrice := fmt.Sprintf("%.2f", thisHighPrice)
 	highPriceChange := common.FormatFloatChangePercent(lastHighPrice, thisHighPrice)
 	highPriceObjectId := page.PageElements[10].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
@@ -940,7 +942,14 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	marketCapObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
-	// TODO: update held digital asset value
+	// Update the value of digital assets held
+	thisSTRXPrice := u.db.GetTokenPriceByDate("sTRX", today)
+	lastSTRXPrice := u.db.GetTokenPriceByDate("sTRX", today.AddDate(0, 0, -7))
+	sTRXAmount := 297_543_245.0 // TODO: This is a hardcoded value, should be fetched from the api
+	heldAsset := fmt.Sprintf("%s   sTRX   /   $%s", common.FormatWithUnits(sTRXAmount), common.FormatWithUnits(thisSTRXPrice*sTRXAmount))
+	heldAssetChange := common.FormatFloatChangePercent(lastSTRXPrice, thisSTRXPrice)
+	heldAssetObjectId := page.PageElements[17].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
 
 	// Update K-line Sheet Chart
 	kLineChartId := page.PageElements[21].ObjectId
@@ -979,7 +988,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（股数）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
-		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n%s", "297,543,245", stockDataStr.String())
+		"链上地址目前只持有一种代币为sTRX，共持有%.0f枚sTRX\n\n"+
+		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+
+		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", sTRXAmount, stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

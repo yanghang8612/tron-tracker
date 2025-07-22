@@ -798,12 +798,17 @@ func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time
 func (db *RawDB) GetTokenPriceByDate(token string, date time.Time) float64 {
 	queryDateDBName := "market_pair_statistics_" + date.Format("0601")
 
-	// Query the earliest Binance-[Token]/USDT price of the day
+	// Query the earliest Binance/HTX-[Token]/USDT price of the day
+	exchangeName := "Binance"
+	if token == "sTRX" {
+		exchangeName = "HTX"
+	}
+
 	var earliestPrice float64
 	db.db.Table(queryDateDBName).
 		Select("price").
 		Where("datetime like ? and exchange_name = ? and pair = ?",
-			date.Format("02")+"%", "Binance", token+"/USDT").
+			date.Format("02")+"%", exchangeName, token+"/USDT").
 		Order("datetime").Limit(1).
 		Find(&earliestPrice)
 
@@ -816,6 +821,11 @@ func (db *RawDB) GetAvgTokenPriceByStartDateAndDays(token string, startDate time
 		return 0.0
 	}
 
+	exchangeName := "Binance"
+	if token == "sTRX" {
+		exchangeName = "HTX"
+	}
+
 	var priceSum float64
 	for i := 0; i < days; i++ {
 		queryDate := startDate.AddDate(0, 0, i)
@@ -825,7 +835,7 @@ func (db *RawDB) GetAvgTokenPriceByStartDateAndDays(token string, startDate time
 		db.db.Table(queryDateDBName).
 			Select("avg(price)").
 			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
-				queryDate.Format("02")+"%", "Binance", token+"/USDT").
+				queryDate.Format("02")+"%", exchangeName, token+"/USDT").
 			Find(&avgPrice)
 
 		if avgPrice > 0 {
@@ -844,6 +854,11 @@ func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate ti
 		return 0.0, 0.0
 	}
 
+	exchangeName := "Binance"
+	if token == "sTRX" {
+		exchangeName = "HTX"
+	}
+
 	var (
 		lowPrice  float64
 		highPrice float64
@@ -857,7 +872,7 @@ func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate ti
 		row := db.db.Table(queryDateDBName).
 			Select("min(price) AS min_price, max(price) AS max_price").
 			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
-				queryDate.Format("02")+"%", "Binance", token+"/USDT").
+				queryDate.Format("02")+"%", exchangeName, token+"/USDT").
 			Row()
 
 		if err := row.Scan(&minPrice, &maxPrice); err != nil {

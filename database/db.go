@@ -1565,6 +1565,14 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 	}
 }
 
+func (db *RawDB) ManualCountForDate(date string) {
+	db.logger.Infof("Start manual count for date [%s]", date)
+
+	db.countForDate(date)
+
+	db.logger.Infof("Finish manual count for date [%s]", date)
+}
+
 func setExchangeStatsMap(stats map[string]map[string]*models.ExchangeStatistic, date, exchange, token string) {
 	if _, ok := stats[exchange]; !ok {
 		stats[exchange] = make(map[string]*models.ExchangeStatistic)
@@ -1787,7 +1795,7 @@ func (db *RawDB) countForDate(date string) {
 
 				if charger, ok := db.isCharger(to); ok && db.IsExchange(from) {
 					exchange := db.GetExchange(from)
-					if _, ok := ExchangeSpecialStats[exchange.Name]; !ok {
+					if _, ok = ExchangeSpecialStats[exchange.Name]; !ok {
 						ExchangeSpecialStats[exchange.Name] =
 							models.NewExchangeStatistic(date, charger.ExchangeName, "Special")
 
@@ -1805,6 +1813,13 @@ func (db *RawDB) countForDate(date string) {
 			return nil
 		})
 
+	deleteResult := db.db.Delete(&models.FungibleTokenStatistic{}, "date = ?", date)
+	if deleteResult.Error != nil {
+		db.logger.Errorf("Error deleting old FungibleTokenStatistic for date [%s]: %v", date, deleteResult.Error)
+	} else if deleteResult.RowsAffected > 0 {
+		db.logger.Infof("Deleted old FungibleTokenStatistic for date [%s], affected rows: %d", date, deleteResult.RowsAffected)
+	}
+
 	for _, stats := range TRXStats {
 		db.db.Create(stats)
 	}
@@ -1813,8 +1828,22 @@ func (db *RawDB) countForDate(date string) {
 		db.db.Create(stats)
 	}
 
+	deleteResult = db.db.Delete(&models.USDTStorageStatistic{}, "date = ?", date)
+	if deleteResult.Error != nil {
+		db.logger.Errorf("Error deleting old USDTStorageStatistic for date [%s]: %v", date, deleteResult.Error)
+	} else if deleteResult.RowsAffected > 0 {
+		db.logger.Infof("Deleted old USDTStorageStatistic for date [%s], affected rows: %d", date, deleteResult.RowsAffected)
+	}
+
 	USDTStorageStat.Date = date
 	db.db.Create(USDTStorageStat)
+
+	deleteResult = db.db.Delete(&models.ExchangeStatistic{}, "date = ? and token = ?", date, "Special")
+	if deleteResult.Error != nil {
+		db.logger.Errorf("Error deleting old ExchangeSpecialStatistic for date [%s]: %v", date, deleteResult.Error)
+	} else if deleteResult.RowsAffected > 0 {
+		db.logger.Infof("Deleted old ExchangeSpecialStatistic for date [%s], affected rows: %d", date, deleteResult.RowsAffected)
+	}
 
 	for _, stats := range ExchangeSpecialStats {
 		db.db.Create(stats)

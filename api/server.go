@@ -97,6 +97,7 @@ func (s *Server) Start() {
 
 	s.router.GET("/top_delegate", s.topDelegate)
 	s.router.GET("/tx_analyse", s.txAnalyze)
+	s.router.GET("/count_for_date", s.countForDate)
 
 	s.router.GET("/", s.lastTrackedBlockNumber)
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
@@ -488,7 +489,7 @@ func (s *Server) doTronlinkUsersWeeklyStatistics(c *gin.Context) {
 			s.db.DoTronLinkWeeklyStatistics(date, true)
 		}()
 
-		c.String(200, "ok")
+		c.String(200, "TronLink users weekly statistics is being updated, please check back later.")
 	}
 }
 
@@ -1576,7 +1577,7 @@ func (s *Server) updatePPTData(c *gin.Context) {
 		s.isUpdating = false
 	}()
 
-	c.String(200, "ok")
+	c.String(200, "Updating started for date: "+date.Format("2006-01-02"))
 }
 
 // Helper function to convert size string to bytes
@@ -1735,6 +1736,19 @@ func (s *Server) txAnalyze(c *gin.Context) {
 	}
 
 	c.JSON(200, transactions)
+}
+
+func (s *Server) countForDate(c *gin.Context) {
+	date, ok := getDateParam(c, "date", yesterday())
+	if !ok {
+		return
+	}
+
+	go func() {
+		s.db.ManualCountForDate(date.Format("060102"))
+	}()
+
+	c.String(200, "Counting started for date: "+date.Format("2006-01-02"))
 }
 
 func (s *Server) lastTrackedBlockNumber(c *gin.Context) {

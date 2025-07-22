@@ -959,6 +959,16 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		u.logger.Errorf("Unable to update Stock sheet: %v", err)
 	}
 
+	// Update held assets distribution chart
+	distributionChartId := page.PageElements[20].ObjectId
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: distributionChartId,
+			},
+		},
+	}...)
+
 	// Update K-line Sheet Chart
 	kLineChartId := page.PageElements[21].ObjectId
 	reqs = append(reqs, []*slides.Request{

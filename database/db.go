@@ -510,6 +510,17 @@ func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnD
 	return txs
 }
 
+func (db *RawDB) GetTopResourceRelatedTxsByDate(date time.Time) []*models.Transaction {
+	var txs []*models.Transaction
+
+	queryDate := date.Format("060102")
+	db.db.Table("transactions_"+queryDate).
+		Where("type IN ?", []uint8{54, 55, 57, 58, 154, 155, 157, 158}).
+		Find(&txs)
+
+	return txs
+}
+
 func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contract string, result int) []*models.Transaction {
 	var results []*models.Transaction
 

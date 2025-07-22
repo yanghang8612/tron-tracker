@@ -1657,20 +1657,24 @@ func getEthereumDailyStats(day string) ethStatistics {
 
 func (s *Server) topDelegate(c *gin.Context) {
 	date, ok := getDateParam(c, "date", yesterday())
-
 	if !ok {
 		return
 	}
 
 	n, ok := getIntParam(c, "n", 20)
-
 	if !ok {
 		return
 	}
 
 	isUnDelegate, ok := getBoolParam(c, "is_undelegate", false)
+	if !ok {
+		return
+	}
 
-	txs := s.db.GetTopDelegateRelatedTxsByDateAndN(date, n, isUnDelegate)
+	isExchange, ok := getBoolParam(c, "is_exchange", false)
+	if !ok {
+		return
+	}
 
 	type ResEntity struct {
 		Height   uint   `json:"height"`
@@ -1682,22 +1686,68 @@ func (s *Server) topDelegate(c *gin.Context) {
 	}
 
 	results := make([]*ResEntity, 0)
-	for _, tx := range txs {
-		resEntity := &ResEntity{
-			Height: tx.Height,
-			Index:  tx.Index,
-			From:   tx.OwnerAddr,
-			To:     tx.ToAddr,
-			Amount: tx.Amount.String(),
+
+	if isExchange {
+		exchangeTxs := make([]*models.Transaction, 0)
+
+		for _, tx := range s.db.GetTopResourceRelatedTxsByDate(date) {
+			if s.db.IsExchange(tx.OwnerAddr) || s.db.IsExchange(tx.ToAddr) {
+				exchangeTxs = append(exchangeTxs, tx)
+			}
 		}
 
-		if tx.Type == 57 || tx.Type == 58 {
-			resEntity.Resource = "Bandwidth"
-		} else {
-			resEntity.Resource = "Energy"
+		sort.Slice(exchangeTxs, func(i, j int) bool {
+			return exchangeTxs[i].Amount.Cmp(exchangeTxs[j].Amount) > 0
+		})
+
+		for i := 0; i < n && i < len(exchangeTxs); i++ {
+			tx := exchangeTxs[i]
+
+			resEntity := &ResEntity{
+				Height: tx.Height,
+				Index:  tx.Index,
+				From:   tx.OwnerAddr,
+				To:     tx.ToAddr,
+				Amount: tx.Amount.String(),
+			}
+
+			if s.db.IsExchange(tx.OwnerAddr) {
+				resEntity.From = s.db.GetExchange(tx.OwnerAddr).Name + ": " + tx.OwnerAddr
+			}
+
+			if s.db.IsExchange(tx.ToAddr) {
+				resEntity.To = s.db.GetExchange(tx.ToAddr).Name + ": " + tx.ToAddr
+			}
+
+			if tx.Type < 100 {
+				resEntity.Resource = "Bandwidth"
+			} else {
+				resEntity.Resource = "Energy"
+			}
+
+			results = append(results, resEntity)
 		}
 
-		results = append(results, resEntity)
+	} else {
+		txs := s.db.GetTopDelegateRelatedTxsByDateAndN(date, n, isUnDelegate)
+
+		for _, tx := range txs {
+			resEntity := &ResEntity{
+				Height: tx.Height,
+				Index:  tx.Index,
+				From:   tx.OwnerAddr,
+				To:     tx.ToAddr,
+				Amount: tx.Amount.String(),
+			}
+
+			if tx.Type < 100 {
+				resEntity.Resource = "Bandwidth"
+			} else {
+				resEntity.Resource = "Energy"
+			}
+
+			results = append(results, resEntity)
+		}
 	}
 
 	c.JSON(200, results)

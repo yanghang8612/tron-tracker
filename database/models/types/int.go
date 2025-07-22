@@ -44,6 +44,19 @@ func (b BigInt) String() string {
 	return b.val.String()
 }
 
+func (b BigInt) Cmp(other BigInt) int {
+	switch {
+	case b.val == nil && other.val == nil:
+		return 0
+	case b.val == nil:
+		return -1
+	case other.val == nil:
+		return 1
+	default:
+		return b.val.Cmp(other.val)
+	}
+}
+
 func (b BigInt) Length() int {
 	return len(b.val.String())
 }

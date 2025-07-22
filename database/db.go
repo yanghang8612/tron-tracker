@@ -515,7 +515,7 @@ func (db *RawDB) GetTopResourceRelatedTxsByDate(date time.Time) []*models.Transa
 
 	queryDate := date.Format("060102")
 	db.db.Table("transactions_"+queryDate).
-		Where("type IN ?", []uint8{54, 55, 57, 58, 154, 155, 157, 158}).
+		Where("type IN ?", []int{54, 55, 57, 58, 154, 155, 157, 158}).
 		Find(&txs)
 
 	return txs
@@ -1579,7 +1579,7 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 func (db *RawDB) ManualCountForDate(date string) {
 	db.logger.Infof("Start manual count for date [%s]", date)
 
-	db.countForDate(date)
+	db.countForDate(date, true)
 
 	db.logger.Infof("Finish manual count for date [%s]", date)
 }
@@ -1742,7 +1742,7 @@ func (db *RawDB) countLoop() {
 
 			if trackingDate.Sub(countedDate).Hours() > 24 {
 				dateToCount := countedDate.AddDate(0, 0, 1).Format("060102")
-				db.countForDate(dateToCount)
+				db.countForDate(dateToCount, false)
 				db.countedDate = dateToCount
 
 				if countedDate.Weekday() == time.Saturday {
@@ -1755,7 +1755,7 @@ func (db *RawDB) countLoop() {
 	}
 }
 
-func (db *RawDB) countForDate(date string) {
+func (db *RawDB) countForDate(date string, isManual bool) {
 	db.logger.Infof("Start counting Transactions for date [%s]", date)
 
 	var (
@@ -1860,7 +1860,10 @@ func (db *RawDB) countForDate(date string) {
 		db.db.Create(stats)
 	}
 
-	db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
+	if !isManual {
+		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.CountedDateKey}).Update("val", date)
+	}
+
 	db.logger.Infof("Finish counting Transactions for date [%s], counted txs [%d]", date, result.RowsAffected)
 }
 

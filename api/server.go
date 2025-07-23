@@ -22,6 +22,7 @@ import (
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/google"
+	"tron-tracker/net"
 )
 
 type Server struct {
@@ -1678,7 +1679,8 @@ func (s *Server) topDelegate(c *gin.Context) {
 
 	type ResEntity struct {
 		Height   uint   `json:"height"`
-		Index    uint16 `json:"index"`
+		Index    uint16 `json:"index,omitempty"`
+		ID       string `json:"id,omitempty"`
 		From     string `json:"from"`
 		To       string `json:"to"`
 		Amount   string `json:"amount"`
@@ -1705,10 +1707,16 @@ func (s *Server) topDelegate(c *gin.Context) {
 
 			resEntity := &ResEntity{
 				Height: tx.Height,
-				Index:  tx.Index,
 				From:   tx.OwnerAddr,
 				To:     tx.ToAddr,
 				Amount: tx.Amount.String(),
+			}
+
+			txID, err := net.GetTransactionIdByBlockNumAndIndex(tx.Height, tx.Index)
+			if err != nil {
+				resEntity.Index = tx.Index
+			} else {
+				resEntity.ID = txID
 			}
 
 			if s.db.IsExchange(tx.OwnerAddr) {
@@ -1717,6 +1725,11 @@ func (s *Server) topDelegate(c *gin.Context) {
 
 			if s.db.IsExchange(tx.ToAddr) {
 				resEntity.To = s.db.GetExchange(tx.ToAddr).Name + ": " + tx.ToAddr
+			}
+
+			txType := tx.Type % 100
+			if txType == 55 || txType == 58 {
+				resEntity.Amount = "-" + resEntity.Amount
 			}
 
 			if tx.Type < 100 {

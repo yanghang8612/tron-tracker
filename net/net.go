@@ -74,6 +74,19 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	return txInfoList, err
 }
 
+func GetTransactionIdByBlockNumAndIndex(height uint, index uint16) (string, error) {
+	txInfoList, err := GetTransactionInfoList(height)
+	if err != nil {
+		return "", err
+	}
+
+	if int(index) >= len(txInfoList) {
+		return "", fmt.Errorf("index %d out of range for block height %d", index, height)
+	}
+
+	return txInfoList[index].ID, nil
+}
+
 func GetExchanges() *models.Exchanges {
 	var exchanges = models.Exchanges{}
 	resp, err := client.R().Get("https://apilist.tronscanapi.com/api/hot/exchanges")

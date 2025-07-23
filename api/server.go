@@ -1707,16 +1707,10 @@ func (s *Server) topDelegate(c *gin.Context) {
 
 			resEntity := &ResEntity{
 				Height: tx.Height,
+				Index:  tx.Index,
 				From:   tx.OwnerAddr,
 				To:     tx.ToAddr,
 				Amount: tx.Amount.String(),
-			}
-
-			txID, err := net.GetTransactionIdByBlockNumAndIndex(tx.Height, tx.Index)
-			if err != nil {
-				resEntity.Index = tx.Index
-			} else {
-				resEntity.ID = txID
 			}
 
 			if s.db.IsExchange(tx.OwnerAddr) {
@@ -1760,6 +1754,14 @@ func (s *Server) topDelegate(c *gin.Context) {
 			}
 
 			results = append(results, resEntity)
+		}
+	}
+
+	for _, resEntity := range results {
+		txID, err := net.GetTransactionIdByBlockNumAndIndex(resEntity.Height, resEntity.Index)
+		if err == nil {
+			resEntity.Index = 0
+			resEntity.ID = txID
 		}
 	}
 

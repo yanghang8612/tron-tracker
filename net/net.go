@@ -342,15 +342,20 @@ func GetStockData(date time.Time, days int) [][]interface{} {
 	return stockData
 }
 
+// subtractBusinessDays days from the given date, skipping weekends. Start and end dates are inclusive.
 func subtractBusinessDays(date time.Time, days int) time.Time {
 	d := date
 	count := 0
-	for count < days {
-		d = d.AddDate(0, 0, -1)
+	for {
 		wd := d.Weekday()
 		if wd != time.Saturday && wd != time.Sunday {
 			count++
+
+			if count >= days {
+				break
+			}
 		}
+		d = d.AddDate(0, 0, -1)
 	}
 	return d
 }

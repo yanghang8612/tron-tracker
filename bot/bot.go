@@ -37,6 +37,7 @@ type TelegramBot struct {
 	tokens []string
 	slugs  []string
 
+	isUpdatingPPT bool // Flag to indicate if the bot is currently updating PPT
 	isAddingRules bool // Flag to indicate if the bot is currently adding rules
 }
 
@@ -103,10 +104,43 @@ func (tb *TelegramBot) Start() {
 					textMsg = "Hi! I am a bot for chen-dve. I can do something useful for you.\n" +
 						"Available commands: /update_ppt"
 				case "update_ppt":
-					tb.updater.Update(time.Now())
-					textMsg = "Start updating PPT"
+					data := strings.Fields(update.Message.Text)
+
+					updateDate := time.Now()
+					if len(data) == 2 {
+						var err error
+						updateDate, err = time.Parse("2006-01-02", data[1])
+						if err != nil {
+							textMsg = "Invalid date format. Please use YYYY-MM-DD format."
+							tb.logger.Warnf("User %s provided invalid date format: %s", update.Message.From.UserName, data[1])
+							break
+						}
+					} else if len(data) > 2 {
+						textMsg = "Too many arguments. Please use /update_ppt [YYYY-MM-DD] format."
+						break
+					}
+
+					if tb.isUpdatingPPT {
+						textMsg = "PPT updating is already in progress. Please wait until it finishes."
+						tb.logger.Warnf("User %s tried to start PPT update while it was already in progress", update.Message.From.UserName)
+						break
+					}
+
+					tb.logger.Infof("User %s started PPT update", update.Message.From.UserName)
+					tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
+
+					tb.isUpdatingPPT = true
+					go func() {
+						tb.updater.Update(updateDate)
+						tb.isUpdatingPPT = false
+
+						tb.logger.Infof("User %s finished PPT update", update.Message.From.UserName)
+						textMsg = fmt.Sprintf("PPT updated successfully for date %s", updateDate.Format("2006-01-02"))
+
+						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
+					}()
 				default:
-					textMsg = "Unknown command. Available commands: /start, /update_ppt"
+					textMsg = "Unknown command. Available commands: /update_ppt"
 				}
 			}
 

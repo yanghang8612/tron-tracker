@@ -33,7 +33,7 @@ func main() {
 	apiSrv := api.New(db, updater, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
-	tgBot := bot.New(cfg.BotToken, db)
+	tgBot := bot.New(&cfg.Bot, db)
 	tgBot.Start()
 
 	c := cron.New(cron.WithSeconds())

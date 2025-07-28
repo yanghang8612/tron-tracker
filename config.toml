@@ -1,4 +1,7 @@
-bot_token = "...(your bot token)..."
+[bot]
+  tracker_bot_token = "...(your trakcer bot token)..."
+  volume_bot_token = "...(your volume bot token)..."
+  valid_users = []
 [ppt]
   slide_id = "..."
   volume_id = "..."

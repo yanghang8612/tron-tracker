@@ -6,6 +6,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+type BotConfig struct {
+	TrackerBotToken string   `toml:"tracker_bot_token"`
+	VolumeBotToken  string   `toml:"volume_bot_token"`
+	ValidUsers      []string `toml:"valid_users"`
+}
+
 type PPTConfig struct {
 	SlideID   string `toml:"slide_id"`
 	VolumeID  string `toml:"volume_id"`
@@ -51,13 +57,13 @@ type DBConfig struct {
 }
 
 type Config struct {
-	BotToken string       `toml:"bot_token"`
-	PPT      PPTConfig    `toml:"ppt"`
-	Server   ServerConfig `toml:"server"`
-	Net      NetConfig    `toml:"net"`
-	Log      LogConfig    `toml:"log"`
-	DB       DBConfig     `toml:"database"`
-	DeFi     DeFiConfig   `toml:"defi"`
+	Bot    BotConfig    `toml:"bot"`
+	PPT    PPTConfig    `toml:"ppt"`
+	Server ServerConfig `toml:"server"`
+	Net    NetConfig    `toml:"net"`
+	Log    LogConfig    `toml:"log"`
+	DB     DBConfig     `toml:"database"`
+	DeFi   DeFiConfig   `toml:"defi"`
 }
 
 func LoadConfig() *Config {

@@ -3,7 +3,6 @@ package bot
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 	"sort"
 	"strconv"
@@ -17,17 +16,23 @@ import (
 	"github.com/olekukonko/tablewriter/tw"
 	"go.uber.org/zap"
 	"tron-tracker/common"
+	"tron-tracker/config"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
+	"tron-tracker/google"
 	"tron-tracker/net"
 )
 
 type TelegramBot struct {
-	api    *tgbotapi.BotAPI
-	chatID int64
+	validUsers map[string]bool
 
-	db     *database.RawDB
-	logger *zap.SugaredLogger
+	trackerBotApi *tgbotapi.BotAPI
+	volumeBotApi  *tgbotapi.BotAPI
+	volumeChatID  int64
+
+	db      *database.RawDB
+	updater *google.Updater
+	logger  *zap.SugaredLogger
 
 	tokens []string
 	slugs  []string
@@ -35,17 +40,27 @@ type TelegramBot struct {
 	isAddingRules bool // Flag to indicate if the bot is currently adding rules
 }
 
-func New(token string, db *database.RawDB) *TelegramBot {
-	botApi, err := tgbotapi.NewBotAPI(token)
+func New(cfg *config.BotConfig, db *database.RawDB) *TelegramBot {
+	trackerBotApi, err := tgbotapi.NewBotAPI(cfg.TrackerBotToken)
 	if err != nil {
 		panic(err)
 	}
 
-	botApi.Debug = true
+	trackerBotApi.Debug = true
+
+	volumeBotApi, err := tgbotapi.NewBotAPI(cfg.VolumeBotToken)
+	if err != nil {
+		panic(err)
+	}
+
+	volumeBotApi.Debug = true
 
 	tgBot := &TelegramBot{
-		api:    botApi,
-		chatID: db.GetTelegramBotChatID(),
+		validUsers: make(map[string]bool),
+
+		trackerBotApi: trackerBotApi,
+		volumeBotApi:  volumeBotApi,
+		volumeChatID:  db.GetTelegramBotChatID(),
 
 		db:     db,
 		logger: zap.S().Named("[bot]"),
@@ -54,19 +69,63 @@ func New(token string, db *database.RawDB) *TelegramBot {
 		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft", "htx", "usdd", "staked-trx"},
 	}
 
-	tgBot.logger.Infof("Telegram bot authorized on account %s", botApi.Self.UserName)
+	for _, user := range cfg.ValidUsers {
+		tgBot.validUsers[user] = true
+	}
+
+	tgBot.logger.Infof("Telegram tracker bot authorized on account [%s]", trackerBotApi.Self.UserName)
+	tgBot.logger.Infof("Telegram volume bot authorized on account [%s]", volumeBotApi.Self.UserName)
 
 	return tgBot
 }
 
 func (tb *TelegramBot) Start() {
-	tb.logger.Infof("Started telegram bot with chat ID [%d]", tb.chatID)
+	tb.logger.Infof("Started telegram volume bot with chat ID [%d]", tb.volumeChatID)
 
-	u := tgbotapi.NewUpdate(0)
-	u.Timeout = 60
-
+	// Start tracker bot loop
 	go func() {
-		updates := tb.api.GetUpdatesChan(u)
+		u := tgbotapi.NewUpdate(0)
+		u.Timeout = 60
+
+		updates := tb.trackerBotApi.GetUpdatesChan(u)
+		for update := range updates {
+			if update.Message == nil {
+				continue
+			}
+
+			// Check if the user is valid
+			if _, ok := tb.validUsers[update.Message.From.UserName]; !ok {
+				tb.logger.Warnf("Unauthorized user %s tried to access the bot", update.Message.From.UserName)
+				// tb.sendMessage(-1, update.Message.MessageID, "", "You are not authorized to use this bot.", nil)
+				continue
+			}
+
+			textMsg := ""
+			if update.Message.IsCommand() {
+				switch update.Message.Command() {
+				case "start":
+					textMsg = "Hi! I am a bot for chen-dve. I can do something useful for you.\n" +
+						"Available commands: /update_ppt"
+				case "update_ppt":
+					tb.updater.Update(time.Now())
+					textMsg = "Start updating PPT"
+				default:
+					textMsg = "Unknown command. Available commands: /start, /update_ppt"
+				}
+			}
+
+			if textMsg != "" {
+				tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
+			}
+		}
+	}()
+
+	// Start volume bot loop
+	go func() {
+		u := tgbotapi.NewUpdate(0)
+		u.Timeout = 60
+
+		updates := tb.volumeBotApi.GetUpdatesChan(u)
 		for update := range updates {
 			if update.Message == nil {
 				continue
@@ -76,7 +135,7 @@ func (tb *TelegramBot) Start() {
 			if update.Message.IsCommand() {
 				switch update.Message.Command() {
 				case "start":
-					tb.chatID = update.Message.Chat.ID
+					tb.volumeChatID = update.Message.Chat.ID
 					tb.db.SaveTelegramChatID(update.Message.Chat.ID)
 					tb.logger.Infof("Started at chat %s-[%d]", update.Message.Chat.Title, update.Message.Chat.ID)
 					textMsg = "Hi! I am a bot that can track and report volumes for tron tokens"
@@ -165,18 +224,26 @@ func (tb *TelegramBot) Start() {
 			}
 
 			if textMsg != "" {
-				tb.sendMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
+				tb.sendVolumeMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
 			}
 		}
 	}()
 }
 
-func (tb *TelegramBot) sendMessage(msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
-	if tb.chatID == 0 {
+func (tb *TelegramBot) sendTrackerMessage(chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+	return tb.sendMessage(tb.trackerBotApi, chatID, msgID, mode, textMsg, replyMarkup)
+}
+
+func (tb *TelegramBot) sendVolumeMessage(msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+	return tb.sendMessage(tb.volumeBotApi, tb.volumeChatID, msgID, mode, textMsg, replyMarkup)
+}
+
+func (tb *TelegramBot) sendMessage(botApi *tgbotapi.BotAPI, chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+	if chatID == 0 {
 		return -1
 	}
 
-	msg := tgbotapi.NewMessage(tb.chatID, textMsg)
+	msg := tgbotapi.NewMessage(chatID, textMsg)
 	msg.ParseMode = mode
 	msg.DisableWebPagePreview = true
 	if msgID != 0 {
@@ -186,11 +253,10 @@ func (tb *TelegramBot) sendMessage(msgID int, mode, textMsg string, replyMarkup 
 		msg.ReplyMarkup = replyMarkup
 	}
 
-	msgSent, err := tb.api.Send(msg)
+	msgSent, err := botApi.Send(msg)
 
 	if err != nil {
-		log.Println(err)
-		log.Println(textMsg)
+		tb.logger.Errorf("Error sending message: %v", err)
 		return 0
 	}
 
@@ -266,7 +332,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 	tb.logger.Infof("Start reporting market pair statistics")
 
 	textMsg := "<strong>[Statistics for the past 7 days]</strong>\n\n"
-	tb.sendMessage(0, tgbotapi.ModeHTML, textMsg, nil)
+	tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
 
 	lastWeek := time.Now().AddDate(0, 0, -7)
 	for _, token := range tb.tokens {
@@ -330,7 +396,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 		statsMsg += fmt.Sprintf("<b>%s</b>\n", token)
 		statsMsg += "<pre>\n" + tableString.String() + "</pre>\n\n"
 
-		tb.sendMessage(0, tgbotapi.ModeHTML, statsMsg, nil)
+		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, statsMsg, nil)
 
 		time.Sleep(time.Second * 1)
 	}
@@ -370,7 +436,7 @@ func (tb *TelegramBot) reportRules(allRules []*models.Rule, byExchange bool) {
 					humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, "")))
 			}
 
-			tb.sendMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
+			tb.sendVolumeMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
 		}
 	} else {
 		rulesMap := make(map[string][]*models.Rule)
@@ -397,7 +463,7 @@ func (tb *TelegramBot) reportRules(allRules []*models.Rule, byExchange bool) {
 					humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, "")))
 			}
 
-			tb.sendMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
+			tb.sendVolumeMessage(0, tgbotapi.ModeMarkdownV2, sb.String(), nil)
 		}
 	}
 }

@@ -46,14 +46,10 @@ func New(cfg *config.BotConfig, db *database.RawDB) *TelegramBot {
 		panic(err)
 	}
 
-	trackerBotApi.Debug = true
-
 	volumeBotApi, err := tgbotapi.NewBotAPI(cfg.VolumeBotToken)
 	if err != nil {
 		panic(err)
 	}
-
-	volumeBotApi.Debug = true
 
 	tgBot := &TelegramBot{
 		validUsers: make(map[string]bool),

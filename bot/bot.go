@@ -9,18 +9,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
-	"github.com/olekukonko/tablewriter"
-	"github.com/olekukonko/tablewriter/renderer"
-	"github.com/olekukonko/tablewriter/tw"
-	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/google"
 	"tron-tracker/net"
+
+	"github.com/dustin/go-humanize"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/renderer"
+	"github.com/olekukonko/tablewriter/tw"
+	"go.uber.org/zap"
 )
 
 type TelegramBot struct {
@@ -41,7 +42,7 @@ type TelegramBot struct {
 	isAddingRules bool // Flag to indicate if the bot is currently adding rules
 }
 
-func New(cfg *config.BotConfig, db *database.RawDB) *TelegramBot {
+func New(cfg *config.BotConfig, db *database.RawDB, updater *google.Updater) *TelegramBot {
 	trackerBotApi, err := tgbotapi.NewBotAPI(cfg.TrackerBotToken)
 	if err != nil {
 		panic(err)
@@ -59,8 +60,9 @@ func New(cfg *config.BotConfig, db *database.RawDB) *TelegramBot {
 		volumeBotApi:  volumeBotApi,
 		volumeChatID:  db.GetTelegramBotChatID(),
 
-		db:     db,
-		logger: zap.S().Named("[bot]"),
+		db:      db,
+		updater: updater,
+		logger:  zap.S().Named("[bot]"),
 
 		tokens: []string{"TRX", "STEEM", "SUN", "BTT", "JST", "WIN", "NFT", "HTX", "USDD", "sTRX"},
 		slugs:  []string{"tron", "steem", "sun-token", "bittorrent-new", "just", "wink", "apenft", "htx", "usdd", "staked-trx"},

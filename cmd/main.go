@@ -6,7 +6,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"tron-tracker/api"
 	"tron-tracker/bot"
 	"tron-tracker/config"
@@ -15,6 +14,8 @@ import (
 	"tron-tracker/log"
 	"tron-tracker/net"
 	"tron-tracker/tron"
+
+	"github.com/robfig/cron/v3"
 )
 
 func main() {
@@ -33,7 +34,7 @@ func main() {
 	apiSrv := api.New(db, updater, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
-	tgBot := bot.New(&cfg.Bot, db)
+	tgBot := bot.New(&cfg.Bot, db, updater)
 	tgBot.Start()
 
 	c := cron.New(cron.WithSeconds())

@@ -921,13 +921,15 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// Update the avg daily volume
 	thisDailyAvgVolume, lastDailyAvgVolume := 0.0, 0.0
 	for i := 1; i <= 5; i++ {
-		thisDailyAvgVolume += stockData[len(stockData)-i][5].(float64)
-		lastDailyAvgVolume += stockData[len(stockData)-5-i][5].(float64)
+		thisAvgPrice := (stockData[len(stockData)-i][3].(float64) + stockData[len(stockData)-i][2].(float64)) / 2
+		thisDailyAvgVolume += stockData[len(stockData)-i][5].(float64) * thisAvgPrice
+		lastAvgPrice := (stockData[len(stockData)-5-i][3].(float64) + stockData[len(stockData)-5-i][2].(float64)) / 2
+		lastDailyAvgVolume += stockData[len(stockData)-5-i][5].(float64) * lastAvgPrice
 	}
 	thisDailyAvgVolume /= 5.0
 	lastDailyAvgVolume /= 5.0
 
-	avgDailyVolume := common.FormatWithUnits(thisDailyAvgVolume)
+	avgDailyVolume := "$" + common.FormatWithUnits(thisDailyAvgVolume)
 	avgDailyVolumeChange := common.FormatFloatChangePercent(lastDailyAvgVolume, thisDailyAvgVolume)
 	volumeObjectId := page.PageElements[13].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, avgDailyVolume, avgDailyVolumeChange, 11, 7, true)...)
@@ -991,7 +993,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 
 	// Update note
 	stockDataStr := strings.Builder{}
-	stockDataStr.WriteString("date\topen\thigh\tlow\tclose\tvolume\n")
+	stockDataStr.WriteString("date\topen\thigh\tlow\tclose\tvolume(shares)\n")
 	for i := 1; i <= 10; i++ {
 		if i >= len(stockData) {
 			break
@@ -1001,9 +1003,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
 	}
 
-	note := fmt.Sprintf("[SRM Price]为昨日的收盘价\n"+
+	note := fmt.Sprintf("[Tron Inc. (TRON) Price]为昨日的收盘价\n"+
 		"[Low/High]分别为上周内的最低价与最高价\n"+
-		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（股数）\n"+
+		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（按美元计价）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
 		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n"+

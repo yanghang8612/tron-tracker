@@ -12,17 +12,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dustin/go-humanize"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	"github.com/go-resty/resty/v2"
-	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	"tron-tracker/google"
 	"tron-tracker/net"
+
+	"github.com/dustin/go-humanize"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 )
 
 type Server struct {

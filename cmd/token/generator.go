@@ -4,10 +4,11 @@ import (
 	"log"
 	"os"
 
+	mygoogle "tron-tracker/google"
+
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/sheets/v4"
 	"google.golang.org/api/slides/v1"
-	mygoogle "tron-tracker/google"
 )
 
 func main() {

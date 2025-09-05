@@ -11,16 +11,17 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dustin/go-humanize"
-	"go.uber.org/zap"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database/models"
 	"tron-tracker/net"
 	"tron-tracker/tron/types"
+
+	"github.com/dustin/go-humanize"
+	"go.uber.org/zap"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
@@ -111,6 +112,11 @@ func New(cfg *config.DBConfig) *RawDB {
 	}
 
 	dbErr = db.AutoMigrate(&models.USDTStorageStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	dbErr = db.AutoMigrate(&models.HoldingsStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
@@ -1218,6 +1224,12 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 	return &todayStat
 }
 
+func (db *RawDB) GetHoldingsStatistic(date time.Time, user, token string) *models.HoldingsStatistic {
+	var stat *models.HoldingsStatistic
+	db.db.Where("datetime = ? and user = ? and token = ?", date.Format("060102"), user, token).Find(&stat)
+	return stat
+}
+
 func (db *RawDB) GetUSDTSupplyByDate(date time.Time) []*models.USDTSupplyStatistic {
 	var stats []*models.USDTSupplyStatistic
 	db.db.Where("datetime = ?", date.Format("060102")+"00").Find(&stats)
@@ -1342,6 +1354,22 @@ func (db *RawDB) SaveTokenListingStatistics(originData string, tokenListings []*
 		db.logger.Warnf("Save token listings error: [%s]", res.Error)
 	} else {
 		db.logger.Infof("Save token listings success, affected rows: %d", res.RowsAffected)
+	}
+}
+
+func (db *RawDB) SaveHoldingsStatistics(user, token, balance string) {
+	stat := &models.HoldingsStatistic{
+		Date:    time.Now().Format("060102"),
+		User:    user,
+		Token:   token,
+		Balance: balance,
+	}
+
+	res := db.db.Save(stat)
+	if res.Error != nil {
+		db.logger.Warnf("Save holdings statistic error: [%s]", res.Error)
+	} else {
+		db.logger.Infof("Save holdings statistic success, affected rows: %d", res.RowsAffected)
 	}
 }
 

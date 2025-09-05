@@ -5,8 +5,9 @@ import (
 	"math"
 	"strings"
 
-	"github.com/dustin/go-humanize"
 	"tron-tracker/database/models"
+
+	"github.com/dustin/go-humanize"
 )
 
 func FormatWithUnits(n float64) string {

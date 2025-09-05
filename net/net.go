@@ -7,11 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-resty/resty/v2"
-	"go.uber.org/zap"
 	"tron-tracker/config"
 	"tron-tracker/database/models"
 	"tron-tracker/tron/types"
+
+	"github.com/go-resty/resty/v2"
+	"go.uber.org/zap"
 )
 
 type slackMessage struct {
@@ -22,6 +23,7 @@ const (
 	GetBlockPath               = "/wallet/getblockbynum?num="
 	GetNowBlockPath            = "/wallet/getnowblock"
 	GetTransactionInfoListPath = "/wallet/gettransactioninfobyblocknum?num="
+	TriggerPath                = "/wallet/triggerconstantcontract"
 )
 
 var (
@@ -85,6 +87,48 @@ func GetTransactionIdByBlockNumAndIndex(height uint, index uint16) (string, erro
 	}
 
 	return txInfoList[index].ID, nil
+}
+
+type triggerRequest struct {
+	OwnerAddress     string `json:"owner_address"`
+	ContractAddress  string `json:"contract_address"`
+	FunctionSelector string `json:"function_selector"`
+	Parameter        string `json:"parameter"`
+	Visible          bool   `json:"visible"`
+}
+
+type triggerResponse struct {
+	Result    []string `json:"constant_result"`
+	RpcResult struct {
+		TriggerResult bool `json:"result"`
+	} `json:"result"`
+}
+
+func Trigger(addr, selector, param string) (string, error) {
+	resData, err := client.R().SetBody(&triggerRequest{
+		OwnerAddress:     "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
+		ContractAddress:  addr,
+		FunctionSelector: selector,
+		Parameter:        param,
+		Visible:          true,
+	}).Post(configs.FullNode + TriggerPath)
+	if err != nil {
+		zap.S().Error(err)
+		return "", err
+	}
+
+	var queryRes triggerResponse
+	_ = json.Unmarshal(resData.Body(), &queryRes)
+
+	if !queryRes.RpcResult.TriggerResult {
+		return "", fmt.Errorf("query failed")
+	}
+
+	if len(queryRes.Result) > 0 {
+		return queryRes.Result[0], nil
+	}
+
+	return "", fmt.Errorf("no return value")
 }
 
 func GetExchanges() *models.Exchanges {

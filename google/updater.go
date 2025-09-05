@@ -13,6 +13,12 @@ import (
 	"time"
 	"unicode/utf16"
 
+	"tron-tracker/common"
+	"tron-tracker/config"
+	"tron-tracker/database"
+	"tron-tracker/database/models"
+	"tron-tracker/net"
+
 	"github.com/dustin/go-humanize"
 	"github.com/goccy/go-json"
 	"go.uber.org/zap"
@@ -21,11 +27,6 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 	"google.golang.org/api/slides/v1"
-	"tron-tracker/common"
-	"tron-tracker/config"
-	"tron-tracker/database"
-	"tron-tracker/database/models"
-	"tron-tracker/net"
 )
 
 const EMUPerPt = 12700.0
@@ -940,20 +941,28 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	marketCapObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
 
+	oneWeekAgo := today.AddDate(0, 0, -7)
+
 	// Update the value of digital assets held
 	thisSTRXPrice := u.db.GetTokenPriceByDate("sTRX", today)
-	lastSTRXPrice := u.db.GetTokenPriceByDate("sTRX", today.AddDate(0, 0, -7))
-	sTRXAmount := 297_543_245.0 // TODO: This is a hardcoded value, should be fetched from the api
-	heldAsset := fmt.Sprintf("%s   sTRX   /   $%s", common.FormatWithUnits(sTRXAmount), common.FormatWithUnits(thisSTRXPrice*sTRXAmount))
-	heldAssetChange := common.FormatFloatChangePercent(lastSTRXPrice, thisSTRXPrice)
+	lastSTRXPrice := u.db.GetTokenPriceByDate("sTRX", oneWeekAgo)
+	user := "TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT"
+	sTRX := "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5"
+	thisSTRXAmount := common.DropDecimal(common.ConvertDecToBigInt(u.db.GetHoldingsStatistic(today, user, sTRX).Balance), 18)
+	lastSTRXAmount := common.DropDecimal(common.ConvertDecToBigInt(u.db.GetHoldingsStatistic(oneWeekAgo, user, sTRX).Balance), 18)
+	thisHeldValue := thisSTRXPrice * float64(thisSTRXAmount.Int64())
+	lastHeldValue := lastSTRXPrice * float64(lastSTRXAmount.Int64())
+	heldAsset := fmt.Sprintf("%s   sTRX   /   $%s", common.FormatWithUnits(float64(thisSTRXAmount.Int64())), common.FormatWithUnits(thisHeldValue))
+	heldAssetChange := common.FormatFloatChangePercent(lastHeldValue, thisHeldValue)
 	heldAssetObjectId := page.PageElements[17].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
 
 	// Update the value of digital assets held in the Stock sheet
 	valueData := make([][]interface{}, 1)
-	valueData[0] = make([]interface{}, 1)
-	valueData[0][0] = thisSTRXPrice * sTRXAmount
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!J2",
+	valueData[0] = make([]interface{}, 2)
+	valueData[0][0] = fmt.Sprintf("sTRX (%s)", common.FormatWithUnits(float64(thisSTRXAmount.Int64())))
+	valueData[0][1] = thisHeldValue
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!I2:J2",
 		&sheets.ValueRange{
 			Values: valueData,
 		}).ValueInputOption("USER_ENTERED").Do()
@@ -1010,7 +1019,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
 		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n"+
 		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+
-		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", humanize.Commaf(sTRXAmount), stockDataStr.String())
+		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", humanize.Commaf(float64(thisSTRXAmount.Int64())), stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

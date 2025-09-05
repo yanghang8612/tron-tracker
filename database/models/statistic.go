@@ -563,3 +563,11 @@ func (o *USDTStorageStatistic) Merge(other *USDTStorageStatistic) {
 	o.ResetNetUsage += other.ResetNetUsage
 	o.ResetNetFee += other.ResetNetFee
 }
+
+type HoldingsStatistic struct {
+	ID      uint   `gorm:"primaryKey" json:"-"`
+	Date    string `gorm:"size:6;index" json:"date,omitempty"`
+	User    string `gorm:"size:34" json:"user,omitempty"`
+	Token   string `gorm:"size:34" json:"token,omitempty"`
+	Balance string `json:"balance,omitempty"`
+}

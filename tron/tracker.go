@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dustin/go-humanize"
-	"go.uber.org/zap"
 	"tron-tracker/common"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	modeltypes "tron-tracker/database/models/types"
 	"tron-tracker/net"
 	"tron-tracker/tron/types"
+
+	"github.com/dustin/go-humanize"
+	"go.uber.org/zap"
 )
 
 const TransferTopic = "ddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"

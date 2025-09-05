@@ -48,6 +48,7 @@ func main() {
 		tgBot.DoMarketPairStatistics()
 	})
 	_, _ = c.AddFunc("0 0 0 * * *", func() {
+		tgBot.DoHoldingsStatistics()
 		tgBot.ReportMarketPairStatistics()
 	})
 	_, _ = c.AddFunc("30 1/30 * * * *", func() {

@@ -360,6 +360,22 @@ func (tb *TelegramBot) DoTokenListingStatistics() {
 	tb.logger.Infof("Finish doing token listing statistics")
 }
 
+func (tb *TelegramBot) DoHoldingsStatistics() {
+	tb.logger.Infof("Start doing holdings statistics")
+
+	user := "TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT"
+	sTRX := "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5"
+	originData, err := net.Trigger(sTRX, "balanceOf(address)", "00000000000000000000000036e3acd0ad0533e30ee61e194818344c9d2a09b0")
+	if err != nil {
+		tb.logger.Errorf("Get holdings error: [%s]", err.Error())
+		return
+	}
+
+	tb.db.SaveHoldingsStatistics(user, sTRX, common.ConvertHexToBigInt(originData).Text(10))
+
+	tb.logger.Infof("Finish doing holdings statistics")
+}
+
 func (tb *TelegramBot) ReportMarketPairStatistics() {
 	tb.logger.Infof("Start reporting market pair statistics")
 

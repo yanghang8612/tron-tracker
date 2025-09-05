@@ -4,10 +4,11 @@ import (
 	"strings"
 	"time"
 
+	"tron-tracker/config"
+
 	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"tron-tracker/config"
 )
 
 func Init(cfg *config.LogConfig) {

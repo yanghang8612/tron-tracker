@@ -1225,9 +1225,9 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 }
 
 func (db *RawDB) GetHoldingsStatistic(date time.Time, user, token string) *models.HoldingsStatistic {
-	var stat *models.HoldingsStatistic
+	var stat models.HoldingsStatistic
 	db.db.Where("datetime = ? and user = ? and token = ?", date.Format("060102"), user, token).Find(&stat)
-	return stat
+	return &stat
 }
 
 func (db *RawDB) GetUSDTSupplyByDate(date time.Time) []*models.USDTSupplyStatistic {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -273,39 +274,37 @@ func (u *Updater) TraverseAllObjectsInPPT() string {
 }
 
 func (u *Updater) Update(date time.Time) {
-	lastMonth := date.AddDate(0, 0, -30)
-
 	// Update TRX volume sheet
-	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "TRX!A2:D31",
+	_, err := u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "TRX!A1:E31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(lastMonth, "TRX", []string{"Kraken", "Binance", "Total"}),
+			Values: u.getVolumeData(date, "TRX", u.getTop3Exchanges(date, "TRX", true, true)),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update TRX volume sheet: %v", err)
 	}
 
 	// Update STEEM volume sheet
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "STEEM!A2:C31",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "STEEM!A1:E31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(lastMonth, "STEEM", []string{"Binance", "Total"}),
+			Values: u.getVolumeData(date, "STEEM", u.getTop3Exchanges(date, "TRX", true, true)),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update STEEM volume sheet: %v", err)
 	}
 
 	// Update JST volume sheet
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "JST!A2:E31",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "JST!A1:E31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(lastMonth, "JST", []string{"Poloniex", "HTX", "Binance", "Total"}),
+			Values: u.getVolumeData(date, "JST", []string{"Poloniex", "HTX", "Binance", "Total"}),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update JST volume sheet: %v", err)
 	}
 
 	// Update WIN volume data
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "WIN!A2:E31",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "WIN!A1:E31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(lastMonth, "WIN", []string{"Poloniex", "HTX", "Binance", "Total"}),
+			Values: u.getVolumeData(date, "WIN", []string{"Poloniex", "HTX", "Binance", "Total"}),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update WIN volume sheet: %v", err)
@@ -321,6 +320,7 @@ func (u *Updater) Update(date time.Time) {
 	}
 
 	// Update revenue sheet
+	lastMonth := date.AddDate(0, 0, -30)
 	revenueData := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
 		queryDate := lastMonth.AddDate(0, 0, i)
@@ -597,26 +597,24 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	})
 
 	statsToInsert := make([]*models.MarketPairStatistic, 0)
-	if exchanges != nil {
-		for key, stat := range thisMarketPairStats {
-			if exchanges[key] {
-				// Use datetime to store the key
-				stat.Datetime = key
-				statsToInsert = append(statsToInsert, stat)
-			}
+	if exchanges == nil {
+		exchanges = make(map[string]bool)
+		for _, exchange := range u.getTop3Exchanges(today, token, false, false) {
+			exchanges[exchange] = true
 		}
+	}
 
-		sort.Slice(statsToInsert, func(i, j int) bool {
-			return statsToInsert[i].Volume > statsToInsert[j].Volume
-		})
-	} else {
-		for i := 1; i <= 3 && i < len(thisSortedMarketPairStats); i++ {
-			stat := thisSortedMarketPairStats[i]
+	for key, stat := range thisMarketPairStats {
+		if exchanges[key] {
 			// Use datetime to store the key
-			stat.Datetime = stat.ExchangeName
+			stat.Datetime = key
 			statsToInsert = append(statsToInsert, stat)
 		}
 	}
+
+	sort.Slice(statsToInsert, func(i, j int) bool {
+		return statsToInsert[i].Volume > statsToInsert[j].Volume
+	})
 
 	volumeTableObjectId := page.PageElements[19].ObjectId
 	rowIndex = int64(1)
@@ -812,8 +810,45 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	}
 }
 
-func (u *Updater) getVolumeData(startDate time.Time, token string, exchanges []string) [][]interface{} {
+func (u *Updater) getTop3Exchanges(today time.Time, token string, appendTotal, ascending bool) []string {
+	thisWeek := today.AddDate(0, 0, -7)
+	thisMarketPairStats := u.db.GetMergedMarketPairStatistics(thisWeek, 7, token, true, true)
+
+	thisSortedMarketPairStats := make([]*models.MarketPairStatistic, 0)
+	for _, stat := range thisMarketPairStats {
+		thisSortedMarketPairStats = append(thisSortedMarketPairStats, stat)
+	}
+	sort.Slice(thisSortedMarketPairStats, func(i, j int) bool {
+		return thisSortedMarketPairStats[i].Volume > thisSortedMarketPairStats[j].Volume
+	})
+
+	topExchanges := make([]string, 0)
+	for i := 1; i <= 3 && i < len(thisSortedMarketPairStats); i++ {
+		topExchanges = append(topExchanges, thisSortedMarketPairStats[i].ExchangeName)
+	}
+
+	if appendTotal {
+		topExchanges = append([]string{"Total"}, topExchanges...)
+	}
+
+	if ascending {
+		slices.Reverse(topExchanges)
+	}
+
+	return topExchanges
+}
+
+func (u *Updater) getVolumeData(today time.Time, token string, exchanges []string) [][]interface{} {
 	result := make([][]interface{}, 0)
+
+	header := make([]interface{}, 0)
+	header = append(header, "Date")
+	for _, exchange := range exchanges {
+		header = append(header, exchange)
+	}
+	result = append(result, header)
+
+	startDate := today.AddDate(0, 0, -30)
 	for i := 0; i < 30; i++ {
 		curDate := startDate.AddDate(0, 0, i)
 		marketPairStats := u.db.GetMergedMarketPairStatistics(curDate, 1, token, false, true)

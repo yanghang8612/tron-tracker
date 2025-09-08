@@ -128,7 +128,7 @@ func (tb *TelegramBot) Start() {
 						break
 					}
 
-					tb.logger.Infof("User %s started PPT update", update.Message.From.UserName)
+					tb.logger.Infof("User %s started PPT update for [%s]", update.Message.From.UserName, updateDate.Format("2006-01-02"))
 					tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
 
 					tb.isUpdatingPPT = true

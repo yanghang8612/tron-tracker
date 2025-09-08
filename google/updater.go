@@ -855,7 +855,7 @@ func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
 
 func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// 0:date 1:open 2:high 3:low 4:close 5:volume
-	stockData := net.GetStockData(today.AddDate(0, 0, -1), 10)
+	stockData := net.GetStockData(today.AddDate(0, 0, -1), 20)
 
 	// Update Stock sheet
 	// stockDataInSheet := make([][]interface{}, 0, len(stockData))

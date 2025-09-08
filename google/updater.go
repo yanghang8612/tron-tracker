@@ -286,7 +286,7 @@ func (u *Updater) Update(date time.Time) {
 	// Update STEEM volume sheet
 	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "STEEM!A1:E31",
 		&sheets.ValueRange{
-			Values: u.getVolumeData(date, "STEEM", u.getTop3Exchanges(date, "TRX", true, true)),
+			Values: u.getVolumeData(date, "STEEM", u.getTop3Exchanges(date, "STEEM", true, true)),
 		}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update STEEM volume sheet: %v", err)

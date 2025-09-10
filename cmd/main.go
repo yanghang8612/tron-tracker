@@ -51,6 +51,9 @@ func main() {
 		tgBot.DoHoldingsStatistics()
 		tgBot.ReportMarketPairStatistics()
 	})
+	_, _ = c.AddFunc("0 0 7 * * MON,FRI", func() {
+		tgBot.CheckMarketPairs()
+	})
 	_, _ = c.AddFunc("30 1/30 * * * *", func() {
 		tgBot.DoTokenListingStatistics()
 	})

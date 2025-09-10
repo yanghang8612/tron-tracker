@@ -477,6 +477,12 @@ func (db *RawDB) GetTelegramBotChatID() int64 {
 	return chatID
 }
 
+func (db *RawDB) GetVolumeReminders() []string {
+	var volumeRemindersMeta models.Meta
+	db.db.Where(models.Meta{Key: models.VolumeReminders}).Attrs(models.Meta{Val: ""}).FirstOrCreate(&volumeRemindersMeta)
+	return strings.Fields(volumeRemindersMeta.Val)
+}
+
 func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
 	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 

@@ -376,6 +376,46 @@ func (tb *TelegramBot) DoHoldingsStatistics() {
 	tb.logger.Infof("Finish doing holdings statistics")
 }
 
+func (tb *TelegramBot) CheckMarketPairs() {
+	tb.logger.Infof("Start checking market pairs")
+
+	textMsg := "<strong>[Scheduled checks from the past week]</strong>\n\n"
+	tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
+
+	brokenRulesStats := make([]*models.Rule, 0)
+	lastWeek := time.Now().AddDate(0, 0, -7)
+	for _, token := range tb.tokens {
+		rulesStats := tb.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, lastWeek, 7)
+		if len(rulesStats) == 0 {
+			continue
+		}
+
+		for _, ruleStat := range rulesStats {
+			if ruleStat.HitsCount > 0 && 100*ruleStat.VolumeBrokenCount/ruleStat.HitsCount >= 40 {
+				brokenRulesStats = append(brokenRulesStats, ruleStat)
+			}
+		}
+
+		time.Sleep(time.Second * 1)
+	}
+
+	if len(brokenRulesStats) == 0 {
+		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, "All rules are complied. No issues found.\n", nil)
+	} else {
+		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, formatTable("", brokenRulesStats, false), nil)
+		reminders := tb.db.GetVolumeReminders()
+		var mentions strings.Builder
+		if len(reminders) > 0 {
+			for _, reminder := range reminders {
+				mentions.WriteString("@" + reminder + " ")
+			}
+		}
+		tb.sendVolumeMessage(0, "", mentions.String()+" Broken rules found.\n", nil)
+	}
+
+	tb.logger.Infof("Finish checking market pairs")
+}
+
 func (tb *TelegramBot) ReportMarketPairStatistics() {
 	tb.logger.Infof("Start reporting market pair statistics")
 
@@ -395,61 +435,70 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 				sortedRulesStats = append(sortedRulesStats, ruleStat)
 			}
 		}
-		sort.Slice(sortedRulesStats, func(i, j int) bool {
-			return sortedRulesStats[i].ID < sortedRulesStats[j].ID
-		})
 
-		var data [][]string
-		for _, ruleStat := range sortedRulesStats {
-			data = append(data, []string{
-				strings.Split(ruleStat.ExchangeName, " ")[0] + "-" + ruleStat.Pair,
-				fmt.Sprintf("%s(%s/%s)",
-					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthPositiveBrokenCount),
-					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.DepthUsdPositiveTwo)),
-				fmt.Sprintf("%s(%s/%s)",
-					formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthNegativeBrokenCount),
-					formatFloatWithUnit(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.DepthUsdNegativeTwo)),
-				fmt.Sprintf("%s(%s/%s)",
-					formatComplianceRate(ruleStat.HitsCount, ruleStat.VolumeBrokenCount),
-					formatFloatWithUnit(ruleStat.VolumeSum/float64(ruleStat.HitsCount)),
-					formatFloatWithUnit(ruleStat.Volume)),
-			})
-		}
-
-		md := renderer.NewMarkdown(
-			tw.Rendition{
-				Borders: tw.Border{
-					Left:   tw.Off,
-					Right:  tw.Off,
-					Top:    tw.Off,
-					Bottom: tw.Off,
-				},
-			},
-		)
-
-		var tableString bytes.Buffer
-		table := tablewriter.NewTable(&tableString,
-			tablewriter.WithRenderer(md),
-			tablewriter.WithHeaderAutoFormat(tw.Off),
-			tablewriter.WithHeaderAlignment(tw.AlignNone),
-			tablewriter.WithRowAlignment(tw.AlignNone),
-		)
-		table.Header([]string{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"})
-		table.Bulk(data)
-		table.Render()
-
-		var statsMsg string
-		statsMsg += fmt.Sprintf("<b>%s</b>\n", token)
-		statsMsg += "<pre>\n" + tableString.String() + "</pre>\n\n"
-
-		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, statsMsg, nil)
+		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, formatTable(token, sortedRulesStats, true), nil)
 
 		time.Sleep(time.Second * 1)
 	}
 
 	tb.logger.Infof("Finish reporting market pair statistics")
+}
+
+func formatTable(token string, rulesStats []*models.Rule, sortRules bool) string {
+	if sortRules {
+		sort.Slice(rulesStats, func(i, j int) bool {
+			return rulesStats[i].ID < rulesStats[j].ID
+		})
+	}
+
+	var data [][]string
+	for _, ruleStat := range rulesStats {
+		data = append(data, []string{
+			strings.Split(ruleStat.ExchangeName, " ")[0] + "-" + ruleStat.Pair,
+			fmt.Sprintf("%s(%s/%s)",
+				formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthPositiveBrokenCount),
+				formatFloatWithUnit(ruleStat.DepthUsdPositiveTwoSum/float64(ruleStat.HitsCount)),
+				formatFloatWithUnit(ruleStat.DepthUsdPositiveTwo)),
+			fmt.Sprintf("%s(%s/%s)",
+				formatComplianceRate(ruleStat.HitsCount, ruleStat.DepthNegativeBrokenCount),
+				formatFloatWithUnit(ruleStat.DepthUsdNegativeTwoSum/float64(ruleStat.HitsCount)),
+				formatFloatWithUnit(ruleStat.DepthUsdNegativeTwo)),
+			fmt.Sprintf("%s(%s/%s)",
+				formatComplianceRate(ruleStat.HitsCount, ruleStat.VolumeBrokenCount),
+				formatFloatWithUnit(ruleStat.VolumeSum/float64(ruleStat.HitsCount)),
+				formatFloatWithUnit(ruleStat.Volume)),
+		})
+	}
+
+	md := renderer.NewMarkdown(
+		tw.Rendition{
+			Borders: tw.Border{
+				Left:   tw.Off,
+				Right:  tw.Off,
+				Top:    tw.Off,
+				Bottom: tw.Off,
+			},
+		},
+	)
+
+	var tableString bytes.Buffer
+	table := tablewriter.NewTable(&tableString,
+		tablewriter.WithRenderer(md),
+		tablewriter.WithHeaderAutoFormat(tw.Off),
+		tablewriter.WithHeaderAlignment(tw.AlignNone),
+		tablewriter.WithRowAlignment(tw.AlignNone),
+	)
+	table.Header([]string{"Exchange-Pair", "+2% Depth", "-2% Depth", "Volume"})
+	table.Bulk(data)
+	table.Render()
+
+	var statsMsg string
+	if len(token) > 0 {
+		statsMsg += fmt.Sprintf("<b>%s</b>\n", token)
+	}
+	statsMsg += "<pre>\n" + tableString.String() + "</pre>\n\n"
+
+	return statsMsg
 }
 
 func formatComplianceRate(hitsCount, brokenCount int) string {

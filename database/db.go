@@ -28,14 +28,16 @@ const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
 type dbCache struct {
 	date           string
+	feeStats       *models.FeeStatistic
 	fromStats      map[string]*models.UserStatistic
 	toStats        map[string]*models.UserStatistic
 	tokenStats     map[string]*models.TokenStatistic
 	userTokenStats map[string]*models.UserTokenStatistic
 }
 
-func newCache() *dbCache {
+func newCache(date string) *dbCache {
 	return &dbCache{
+		feeStats:       models.NewFeeStatistic(date),
 		fromStats:      make(map[string]*models.UserStatistic),
 		toStats:        make(map[string]*models.UserStatistic),
 		tokenStats:     make(map[string]*models.TokenStatistic),
@@ -82,6 +84,11 @@ func New(cfg *config.DBConfig) *RawDB {
 	}
 
 	dbErr = db.AutoMigrate(&models.ExchangeStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
+	dbErr = db.AutoMigrate(&models.FeeStatistic{})
 	if dbErr != nil {
 		panic(dbErr)
 	}
@@ -158,7 +165,7 @@ func New(cfg *config.DBConfig) *RawDB {
 		chargersToSave:      make(map[string]*models.Charger),
 
 		flushCh:     make(chan *dbCache),
-		cache:       newCache(),
+		cache:       newCache(countedDateMeta.Val),
 		countedDate: countedDateMeta.Val,
 		countedWeek: countedWeekMeta.Val,
 		statsCh:     make(chan string),
@@ -1393,7 +1400,7 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 		db.statsCh <- db.cache.date
 
 		db.trackingDate = trackingDate
-		db.cache = newCache()
+		db.cache = newCache(trackingDate)
 
 		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).Update("val", trackingDate)
 		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
@@ -1417,6 +1424,10 @@ func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
 		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
 			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
 		}
+	}
+
+	if tx.Fee > 0 {
+		db.cache.feeStats.Add(tx)
 	}
 }
 
@@ -1988,6 +1999,9 @@ func (db *RawDB) flushChargerToDB() {
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {
+	// First flush fee statistics
+	db.db.Save(cache.feeStats)
+
 	if len(cache.fromStats) == 0 && len(cache.toStats) == 0 {
 		return
 	}

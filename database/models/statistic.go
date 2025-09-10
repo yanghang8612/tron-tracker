@@ -254,6 +254,79 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 	o.TxTotal++
 }
 
+type FeeStatistic struct {
+	ID         uint   `gorm:"primaryKey" json:"-"`
+	Date       string `gorm:"size:6;index" json:"date,omitempty"`
+	Energy     int64  `json:"energy"`
+	Net        int64  `json:"net"`
+	NewAcc     int64  `json:"new_acc"`
+	UpdateAuth int64  `json:"update_auth"`
+	MultiSig   int64  `json:"multi_sig"`
+	Memo       int64  `json:"memo"`
+	SR         int64  `json:"sr"`
+	IssueTRC10 int64  `json:"issue_trc10"`
+	NewBancor  int64  `json:"new_bancor"`
+}
+
+func NewFeeStatistic(date string) *FeeStatistic {
+	return &FeeStatistic{
+		Date: date,
+	}
+}
+
+func (o *FeeStatistic) Merge(other *FeeStatistic) {
+	if other == nil {
+		return
+	}
+
+	o.Energy += other.Energy
+	o.Net += other.Net
+	o.NewAcc += other.NewAcc
+	o.UpdateAuth += other.UpdateAuth
+	o.MultiSig += other.MultiSig
+	o.Memo += other.Memo
+	o.SR += other.SR
+	o.IssueTRC10 += other.IssueTRC10
+	o.NewBancor += other.NewBancor
+}
+
+func (o *FeeStatistic) Add(tx *Transaction) {
+	if tx == nil {
+		return
+	}
+
+	o.Energy += tx.EnergyFee
+	o.Net += tx.NetFee
+
+	multiSigFee := int64(0)
+	if tx.SigCount > 1 {
+		// TODO: should depend on proposal
+		multiSigFee = 1e6
+		o.MultiSig += 1e6
+	}
+
+	memoFee := int64(0)
+	if tx.WithMemo {
+		// TODO: should depend on proposal
+		memoFee = 1e6
+		o.Memo += 1e6
+	}
+
+	specialFee := tx.Fee - tx.NetFee - multiSigFee - memoFee
+	switch tx.Type {
+	case 0, 1, 2:
+		o.NewAcc += specialFee
+	case 5:
+		o.SR += specialFee
+	case 6:
+		o.IssueTRC10 += specialFee
+	case 41:
+		o.NewBancor += specialFee
+	case 46:
+		o.UpdateAuth += specialFee
+	}
+}
+
 type ExchangeStatistic struct {
 	ID                  uint         `gorm:"primaryKey" json:"-"`
 	Date                string       `gorm:"size:6;index" json:"date,omitempty"`

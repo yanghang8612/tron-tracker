@@ -13,6 +13,7 @@ type Transaction struct {
 		RefBlockHash  string `json:"ref_block_hash"`
 		Expiration    uint   `json:"expiration"`
 		Timestamp     uint   `json:"timestamp"`
+		Data          string `json:"data"`
 	} `json:"raw_data"`
 	Signature  []string `json:"signature"`
 	TxID       string   `json:"txID"`

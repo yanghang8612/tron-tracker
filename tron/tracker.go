@@ -129,6 +129,10 @@ func (t *Tracker) doTrackBlock() {
 			Fee:       txInfoList[idx].Fee,
 		}
 
+		if len(tx.RawData.Data) > 0 {
+			txToDB.WithMemo = true
+		}
+
 		txToDB.NetUsage = txInfoList[idx].Receipt.NetUsage
 		txToDB.NetFee = txInfoList[idx].Receipt.NetFee
 		txToDB.Result = types.ConvertResult(txInfoList[idx].Receipt.Result)

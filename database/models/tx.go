@@ -28,6 +28,7 @@ type Transaction struct {
 	Result            uint8
 	SigCount          uint8
 	Method            string `gorm:"size:8;index"`
+	WithMemo          bool
 }
 
 func (tx *Transaction) SetAmount(amount int64) {

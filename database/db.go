@@ -137,6 +137,9 @@ func New(cfg *config.DBConfig) *RawDB {
 	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(cfg.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
 	trackingStartBlockNum, _ := strconv.Atoi(trackingStartBlockNumMeta.Val)
 
+	var volumeReminders models.Meta
+	db.Where(models.Meta{Key: models.VolumeReminders}).Attrs(models.Meta{Val: ""}).FirstOrCreate(&volumeReminders)
+
 	validTokens := make(map[string]string)
 	for _, token := range cfg.ValidTokens {
 		validTokens[token[0]] = token[1]

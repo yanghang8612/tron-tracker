@@ -139,7 +139,7 @@ func (tb *TelegramBot) Start() {
 						tb.logger.Infof("User %s finished PPT update", update.Message.From.UserName)
 						textMsg = fmt.Sprintf("PPT updated successfully for date %s", updateDate.Format("2006-01-02"))
 
-						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
+						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
 					}()
 				default:
 					textMsg = "Unknown command. Available commands: /update_ppt"

@@ -330,20 +330,23 @@ func (u *Updater) Update(date time.Time) {
 
 		row := make([]interface{}, 0)
 		row = append(row, queryDate.Format("2006-01-02"))
+		row = append(row, totalStats.EnergyFee/(totalStats.EnergyTotal-totalStats.EnergyUsage-totalStats.EnergyOriginUsage))
 		row = append(row, trxPrice)
 		row = append(row, totalStats.EnergyFee)
 		row = append(row, totalStats.NetFee)
+		row = append(row, totalStats.Fee-totalStats.EnergyFee-totalStats.NetFee)
 		row = append(row, totalStats.EnergyUsage+totalStats.EnergyOriginUsage)
 		row = append(row, totalStats.NetUsage)
 		row = append(row, usdtStats.EnergyFee)
 		row = append(row, usdtStats.NetFee)
+		row = append(row, usdtStats.Fee-usdtStats.EnergyFee-usdtStats.NetFee)
 		row = append(row, usdtStats.EnergyUsage+usdtStats.EnergyOriginUsage)
 		row = append(row, usdtStats.NetUsage)
 
 		revenueData = append(revenueData, row)
 	}
 
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Total!N37:W66",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Data!A2:W66",
 		&sheets.ValueRange{
 			Values: revenueData,
 		}).ValueInputOption("USER_ENTERED").Do()
@@ -706,7 +709,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	}
 
 	// Update statistics on the left
-	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!O2:Q4", "USDT!M2:O4", "USDT!M6:O8").Do()
+	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!K2:M4", "USDT!I2:K4", "USDT!I6:K8").Do()
 	totalRevenue := resp.ValueRanges[0].Values
 	usdtRevenue := resp.ValueRanges[1].Values
 	otherRevenue := resp.ValueRanges[2].Values
@@ -768,7 +771,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	}...)
 
 	// Update note
-	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!O14:R16", "USDT!M12:P14", "USDT!M16:P18").Do()
+	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!K14:N16", "USDT!I12:L14", "USDT!I16:L18").Do()
 	totalNote := resp.ValueRanges[0].Values
 	usdtNote := resp.ValueRanges[1].Values
 	otherNote := resp.ValueRanges[2].Values

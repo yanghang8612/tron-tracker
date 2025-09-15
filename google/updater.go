@@ -709,7 +709,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	}
 
 	// Update statistics on the left
-	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!K2:M4", "USDT!I2:K4", "USDT!I6:K8").Do()
+	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!L2:N4", "USDT!I2:K4", "USDT!I6:K8").Do()
 	totalRevenue := resp.ValueRanges[0].Values
 	usdtRevenue := resp.ValueRanges[1].Values
 	otherRevenue := resp.ValueRanges[2].Values
@@ -771,16 +771,20 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	}...)
 
 	// Update note
-	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!K14:N16", "USDT!I12:L14", "USDT!I16:L18").Do()
+	resp, _ = u.sheetsService.Spreadsheets.Values.BatchGet(u.revenueId).Ranges("Total!L15:O17", "Total!L19:O21", "USDT!I12:L14", "USDT!I16:L18").Do()
 	totalNote := resp.ValueRanges[0].Values
-	usdtNote := resp.ValueRanges[1].Values
-	otherNote := resp.ValueRanges[2].Values
+	burningNote := resp.ValueRanges[1].Values
+	usdtNote := resp.ValueRanges[2].Values
+	otherNote := resp.ValueRanges[3].Values
 
 	noteTemplate :=
 		"(TRX amount based revenue)\tCurrent Week\tPercent \tChange  \tLast Week\n" +
 			"Total Protocol Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
 			"Total Energy Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
 			"Total Burning Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
+			"Energy Burning Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Bandwidth Burning Revenue\t%-12s\t\t%-8s\t%-8s\t%s\n" +
+			"Other Burning Revenue\t\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
 			"Total Revenue from USDT\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
 			"Burnt Revenue from USDT\t\t%-12s\t\t%-8s\t%-8s\t%s\n" +
 			"Staked Revenue from USDT\t%-12s\t\t%-8s\t%-8s\t%s\n\n" +
@@ -793,6 +797,9 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 		totalNote[0][0], totalNote[0][1], pf(totalNote[0][2].(string)), totalNote[0][3],
 		totalNote[1][0], totalNote[1][1], pf(totalNote[1][2].(string)), totalNote[1][3],
 		totalNote[2][0], totalNote[2][1], pf(totalNote[2][2].(string)), totalNote[2][3],
+		burningNote[0][0], burningNote[0][1], pf(burningNote[0][2].(string)), burningNote[0][3],
+		burningNote[1][0], burningNote[1][1], pf(burningNote[1][2].(string)), burningNote[1][3],
+		burningNote[2][0], burningNote[2][1], pf(burningNote[2][2].(string)), burningNote[2][3],
 		usdtNote[0][0], usdtNote[0][1], pf(usdtNote[0][2].(string)), usdtNote[0][3],
 		usdtNote[1][0], usdtNote[1][1], pf(usdtNote[1][2].(string)), usdtNote[1][3],
 		usdtNote[2][0], usdtNote[2][1], pf(usdtNote[2][2].(string)), usdtNote[2][3],

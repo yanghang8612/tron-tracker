@@ -493,6 +493,64 @@ func (db *RawDB) GetVolumeReminders() []string {
 	return strings.Fields(volumeRemindersMeta.Val)
 }
 
+func (db *RawDB) RawSQLQuery(sql string) ([]string, error) {
+	rows, err := db.db.Raw(sql).Rows()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+	if len(cols) == 0 {
+		return nil, errors.New("no rows found")
+	}
+
+	var (
+		message  string
+		messages []string
+	)
+	rowNum := 0
+	for rows.Next() {
+		rowNum++
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return nil, err
+		}
+
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("*************************** %d. row ***************************\n", rowNum))
+		for i, col := range cols {
+			v := vals[i]
+			switch t := v.(type) {
+			case nil:
+				b.WriteString(fmt.Sprintf("%s: NULL\n", col))
+			case []byte:
+				b.WriteString(fmt.Sprintf("%s: %s\n", col, string(t)))
+			default:
+				b.WriteString(fmt.Sprintf("%s: %v\n", col, t))
+			}
+		}
+		if len(message)+b.Len() > 4000 {
+			messages = append(messages, message)
+			message = ""
+		}
+		message += b.String()
+	}
+
+	if len(message) != 0 {
+		messages = append(messages, message)
+	}
+
+	return messages, nil
+}
+
 func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
 	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 

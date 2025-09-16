@@ -330,7 +330,11 @@ func (u *Updater) Update(date time.Time) {
 
 		row := make([]interface{}, 0)
 		row = append(row, queryDate.Format("2006-01-02"))
-		row = append(row, totalStats.EnergyFee/(totalStats.EnergyTotal-totalStats.EnergyUsage-totalStats.EnergyOriginUsage))
+		if queryDate.Format("060102") == "250829" {
+			row = append(row, 156.6)
+		} else {
+			row = append(row, totalStats.EnergyFee/(totalStats.EnergyTotal-totalStats.EnergyUsage-totalStats.EnergyOriginUsage))
+		}
 		row = append(row, trxPrice)
 		row = append(row, totalStats.EnergyFee)
 		row = append(row, totalStats.NetFee)

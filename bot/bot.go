@@ -141,6 +141,31 @@ func (tb *TelegramBot) Start() {
 
 						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
 					}()
+				case "q":
+					sql := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/q"))
+					if len(sql) == 0 {
+						textMsg = "Please provide a SQL query to execute."
+						break
+					}
+
+					messages, err := tb.db.RawSQLQuery(sql)
+					if err != nil {
+						textMsg = fmt.Sprintf("SQL query error: %s", err.Error())
+						tb.logger.Warnf("User %s provided invalid SQL query: %s, error: %s", update.Message.From.UserName, sql, err.Error())
+						break
+					}
+
+					if len(messages) == 0 {
+						textMsg = "Query executed successfully. No results to show."
+						break
+					} else if len(messages) > 10 {
+						textMsg = fmt.Sprintf("Query executed successfully. Result set too large (%d rows). Please refine your query.", len(messages))
+						break
+					}
+
+					for _, msg := range messages {
+						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", msg, nil)
+					}
 				default:
 					textMsg = "Unknown command. Available commands: /update_ppt"
 				}

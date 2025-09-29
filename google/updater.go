@@ -372,7 +372,7 @@ func (u *Updater) Update(date time.Time) {
 		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
 
 	u.updateCexData(ppt.Slides[2], date, "STEEM", nil,
-		[]string{"Binance-STEEM/USDT", "Binance-STEEM/USDC", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
+		[]string{"Binance-STEEM/USDT", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
 
 	u.updateCexData(ppt.Slides[3], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
@@ -1065,7 +1065,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Low/High]分别为上周内的最低价与最高价\n"+
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（按美元计价）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
-		"  - 本PPT中Cap以253.47M的总股本计算，其中包含普通流通股33.47M股+ PIPE Warrants（220M 股）\n"+
+		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (33.47M股) + PIPE Warrants (220M股)\n"+
 		"  - 注意不同网站在计算Cap时在计不计入PIPE Warrants上有差异，导致其显示市值不同\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
 		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n"+

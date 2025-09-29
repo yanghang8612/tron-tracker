@@ -114,3 +114,5 @@ fabric.properties
 # Go workspace file
 go.work
 
+/.idea/copilot.data.migration.agent.xml
+/.idea/copilot.data.migration.edit.xml

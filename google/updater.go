@@ -470,18 +470,18 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 	oneWeekAgo := today.AddDate(0, 0, -7)
 
-	todayTokenListing := u.db.GetTokenListingStatistic(today, token)
-	oneWeekAgoTokenListing := u.db.GetTokenListingStatistic(oneWeekAgo, token)
+	thisAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays(token, today.AddDate(0, 0, -6), 7)
+	lastAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays(token, today.AddDate(0, 0, -13), 7)
 
 	// Update date in the title
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
 
 	// Update the token price
-	price := fmt.Sprintf("$%.4f", todayTokenListing.Price)
+	price := fmt.Sprintf("$%.4f", thisAvgPrice)
 	if token == "WIN" {
-		price = fmt.Sprintf("$0.0₄%d ", int(todayTokenListing.Price*1e7))
+		price = fmt.Sprintf("$0.0₄%d ", int(thisAvgPrice*1e7))
 	}
-	priceChange := common.FormatFloatChangePercent(oneWeekAgoTokenListing.Price, todayTokenListing.Price)
+	priceChange := common.FormatFloatChangePercent(lastAvgPrice, thisAvgPrice)
 	priceObjectId := page.PageElements[4].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, priceChange, 12, 9, true)...)
 
@@ -492,7 +492,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, lastWeek, 7)
 
 	// Move the cursor
-	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[5], page.PageElements[10], (todayTokenListing.Price-thisLowPrice)/(thisHighPrice-thisLowPrice)))
+	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[5], page.PageElements[10], (thisAvgPrice-thisLowPrice)/(thisHighPrice-thisLowPrice)))
 
 	// Update the token low price
 	lowPrice := fmt.Sprintf("$%.4f", thisLowPrice)
@@ -511,6 +511,9 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	highPriceChange := common.FormatFloatChangePercent(lastHighPrice, thisHighPrice)
 	highPriceObjectId := page.PageElements[9].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(highPriceObjectId, -1, -1, higPrice, highPriceChange, 7, 5, false)...)
+
+	todayTokenListing := u.db.GetTokenListingStatistic(today, token)
+	oneWeekAgoTokenListing := u.db.GetTokenListingStatistic(oneWeekAgo, token)
 
 	// Update the market cap
 	marketCap := "$" + common.FormatWithUnits(todayTokenListing.MarketCap)
@@ -810,7 +813,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 		otherNote[0][0], otherNote[0][1], pf(otherNote[0][2].(string)), otherNote[0][3],
 		otherNote[1][0], otherNote[1][1], pf(otherNote[1][2].(string)), otherNote[1][3],
 		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3],
-		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", today.AddDate(0, 0, -7), 7))
+		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", today.AddDate(0, 0, -6), 7))
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)

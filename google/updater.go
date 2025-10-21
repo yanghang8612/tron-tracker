@@ -364,27 +364,27 @@ func (u *Updater) Update(date time.Time) {
 		return
 	}
 
+	// Update Revenue data
+	u.updateRevenueData(ppt.Slides[1], date)
+
 	// Update the first slide with Chain data
-	u.updateChainData(ppt.Slides[0], date.AddDate(0, 0, -7))
+	u.updateChainData(ppt.Slides[2], date.AddDate(0, 0, -7))
 
 	// Update the next four slides with CEX data
-	u.updateCexData(ppt.Slides[1], date, "TRX", nil,
+	u.updateCexData(ppt.Slides[3], date, "TRX", nil,
 		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
 
-	u.updateCexData(ppt.Slides[2], date, "STEEM", nil,
+	u.updateCexData(ppt.Slides[4], date, "STEEM", nil,
 		[]string{"Binance-STEEM/USDT", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
 
-	u.updateCexData(ppt.Slides[3], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+	u.updateCexData(ppt.Slides[5], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
 
-	u.updateCexData(ppt.Slides[4], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+	u.updateCexData(ppt.Slides[6], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-WIN/USDT", "Binance-WIN/TRX", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
 
-	// Update Revenue data
-	u.updateRevenueData(ppt.Slides[5], date)
-
 	// Update Stock data
-	u.updateStockData(ppt.Slides[6], date)
+	u.updateStockData(ppt.Slides[7], date)
 }
 
 func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {

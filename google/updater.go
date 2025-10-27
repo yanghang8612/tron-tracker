@@ -731,9 +731,9 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 			"   #- Burning: \t$%s  (%s#, %s)\n" +
 			"    - Staking: \t$%s  (%s, %s)\n\n\n" +
 			"Other Revenue (7D Avg.):\n" +
-			"    #Total: \t$%s (%s#, %s)\n" +
-			"    - Burning: \t$%s   (%s, %s)\n" +
-			"    - Staking: \t$%s (%s, %s)\n"
+			"    #Total: \t$%s  (%s#, %s)\n" +
+			"    - Burning: \t$%s  (%s, %s)\n" +
+			"    - Staking: \t$%s  (%s, %s)\n"
 
 	textWithAnchor := fmt.Sprintf(template, totalRevenue[0][0], pf(totalRevenue[0][2].(string)),
 		totalRevenue[1][0], pf(totalRevenue[1][2].(string)), totalRevenue[1][1],
@@ -953,7 +953,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	}
 	avgPrice /= 5
 
-	// Update the stock price
+	// Update the stock avg price
 	price := fmt.Sprintf("%.2f", avgPrice)
 	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	priceObjectId := page.PageElements[5].ObjectId

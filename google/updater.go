@@ -940,24 +940,27 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	todayData := stockData[len(stockData)-1]
 	oneWeekAgoData := stockData[len(stockData)-6]
 
-	// Update the stock price
-	price := fmt.Sprintf("%.2f", todayData[4])
-	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
-	priceObjectId := page.PageElements[5].ObjectId
-	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 18, 9, true)...)
-
+	avgPrice := 0.0
 	thisLowPrice, thisHighPrice := 1e6, 0.0
 	lastLowPrice, lastHighPrice := 1e6, 0.0
 
 	for i := 1; i <= 5; i++ {
+		avgPrice += stockData[len(stockData)-i][4].(float64)
 		thisLowPrice = math.Min(thisLowPrice, stockData[len(stockData)-i][3].(float64))
 		thisHighPrice = math.Max(thisHighPrice, stockData[len(stockData)-i][2].(float64))
 		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-5-i][3].(float64))
 		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-5-i][2].(float64))
 	}
+	avgPrice /= 5
+
+	// Update the stock price
+	price := fmt.Sprintf("%.2f", avgPrice)
+	// priceChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
+	priceObjectId := page.PageElements[5].ObjectId
+	reqs = append(reqs, buildTextAndChangeRequests(priceObjectId, -1, -1, price, "", 18, 9, true)...)
 
 	// Move the cursor
-	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[6], page.PageElements[11], (todayData[4].(float64)-thisLowPrice)/(thisHighPrice-thisLowPrice)))
+	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[6], page.PageElements[11], (avgPrice-thisLowPrice)/(thisHighPrice-thisLowPrice)))
 
 	// Update the stock low price
 	lowPrice := fmt.Sprintf("%.2f", thisLowPrice)

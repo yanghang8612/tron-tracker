@@ -223,7 +223,7 @@ func (t *Tracker) doTrackBlock() {
 					var transferTxToDB = &models.Transaction{
 						Height: block.BlockHeader.RawData.Number,
 						Index:  uint16(idx),
-						Type:   255,
+						Type:   models.TransferType,
 						Result: 1,
 						Name:   database.USDT,
 					}

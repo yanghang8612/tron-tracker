@@ -1067,7 +1067,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 			row[0], row[1], row[2], row[3], row[4], common.FormatWithUnits(row[5].(float64))))
 	}
 
-	note := fmt.Sprintf("[Tron Inc. (TRON) Price]为昨日的收盘价\n"+
+	note := fmt.Sprintf("[Tron Inc. (TRON) Avg. Price]为过去五个交易日的收盘均价\n"+
 		"[Low/High]分别为上周内的最低价与最高价\n"+
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（按美元计价）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+

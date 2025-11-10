@@ -957,7 +957,7 @@ func (db *RawDB) getAvgOpenOrClosePriceByTokenDateDays(token string, date time.T
 			Select("price").
 			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
 				date.Format("02")+"%", exchangeName, token+"/USDT").
-			Order("datetime " + order).First(&price)
+			Order("datetime " + order).Limit(1).Find(&price)
 
 		if price > 0 {
 			priceSum += price

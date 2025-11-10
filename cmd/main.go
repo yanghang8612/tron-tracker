@@ -60,6 +60,10 @@ func main() {
 	_, _ = c.AddFunc("0 */10 * * * *", func() {
 		tracker.Report()
 		db.Report()
+
+		if !tracker.IsTracking() {
+			net.ReportWarningToSlack("Not tracking, Please check app or fullnode!")
+		}
 	})
 	c.Start()
 

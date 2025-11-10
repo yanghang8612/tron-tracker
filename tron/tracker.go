@@ -28,6 +28,8 @@ type Tracker struct {
 	loopWG     sync.WaitGroup
 	quitCh     chan struct{}
 
+	blockNumAtLastCheck uint
+
 	logger *zap.SugaredLogger
 }
 
@@ -47,6 +49,8 @@ func NewTracker(db *database.RawDB) *Tracker {
 		}),
 		quitCh: make(chan struct{}),
 
+		blockNumAtLastCheck: db.GetLastTrackedBlockNum(),
+
 		logger: zap.S().Named("[tracker]"),
 	}
 }
@@ -63,6 +67,13 @@ func (t *Tracker) Start() {
 func (t *Tracker) Stop() {
 	close(t.quitCh)
 	t.loopWG.Wait()
+}
+
+func (t *Tracker) IsTracking() bool {
+	defer func() {
+		t.blockNumAtLastCheck = t.db.GetLastTrackedBlockNum()
+	}()
+	return t.blockNumAtLastCheck != t.db.GetLastTrackedBlockNum()
 }
 
 func (t *Tracker) Report() {
@@ -245,7 +256,7 @@ func (t *Tracker) doTrackBlock() {
 
 		// If there is concerned event, report to slack
 		if !t.isCatching && (txToDB.Type == 154 || txToDB.Type == 157) && len(txToDB.Amount.String()) >= 8+7 {
-			net.ReportWarningToSlack(fmt.Sprintf("[block - %d] - index %d: [%s] -> [%s], amount [%s] <@U01DFGWQ2JK>",
+			net.ReportWarningToSlack(fmt.Sprintf("[block - %d] - index %d: [%s] -> [%s], amount [%s]",
 				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)))
 		}
 	}

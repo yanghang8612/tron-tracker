@@ -46,7 +46,7 @@ func ReportTronlinkStatsToSlack(msg string) {
 }
 
 func ReportWarningToSlack(msg string) {
-	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.WarningWebhook)
+	resp, err := client.R().SetBody(&slackMessage{Text: msg + " <@U01DFGWQ2JK>"}).Post(configs.WarningWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return

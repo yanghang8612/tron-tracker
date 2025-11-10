@@ -598,9 +598,9 @@ func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) uint {
 	return blockCnt
 }
 
-func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) uint {
-	generated := db.GetBlockCntByDateDays(date, days) * 136
-	burned := uint(db.GetTotalStatisticsByDateDays(date, days).Fee / 1e6)
+func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) int {
+	generated := int(db.GetBlockCntByDateDays(date, days) * 136)
+	burned := int(db.GetTotalStatisticsByDateDays(date, days).Fee / 1e6)
 
 	return generated - burned
 }

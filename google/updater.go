@@ -350,7 +350,14 @@ func (u *Updater) Update(date time.Time) {
 		revenueData = append(revenueData, row)
 	}
 
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Data!A2:W66",
+	thisAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -6), 7)
+	lastAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -13), 7)
+	trxPrices := make([]interface{}, 0)
+	trxPrices = append(trxPrices, thisAvgPrice)
+	trxPrices = append(trxPrices, lastAvgPrice)
+	revenueData = append(revenueData, trxPrices)
+
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Data!A2:W67",
 		&sheets.ValueRange{
 			Values: revenueData,
 		}).ValueInputOption("USER_ENTERED").Do()
@@ -367,11 +374,13 @@ func (u *Updater) Update(date time.Time) {
 		row := make([]interface{}, 0)
 		row = append(row, firstDayOfWeek.Format("2006-01-02"))
 
+		generated := uint(0)
 		for j := 0; j < 7; j++ {
 			queryDate := firstDayOfWeek.AddDate(0, 0, j)
-			row = append(row, u.db.GetBlockCntByDate(queryDate.Format("060102"))*136)
-			row = append(row, u.db.GetTotalStatisticsByDateDays(queryDate, 1).Fee/1e6)
+			generated += u.db.GetBlockCntByDate(queryDate.Format("060102")) * 136
 		}
+		row = append(row, generated)
+		row = append(row, u.db.GetTotalStatisticsByDateDays(firstDayOfWeek, 7).Fee/1e6)
 
 		netIncData = append(netIncData, row)
 	}

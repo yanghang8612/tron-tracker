@@ -10,6 +10,14 @@ import (
 	"github.com/dustin/go-humanize"
 )
 
+func FormatWithSignAndUnits(n float64) string {
+	if n > 0 {
+		return "+" + FormatWithUnits(n)
+	}
+
+	return FormatWithUnits(n)
+}
+
 func FormatWithUnits(n float64) string {
 	abs := math.Abs(n)
 	switch {

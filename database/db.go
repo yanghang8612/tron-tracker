@@ -577,6 +577,23 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
+func (db *RawDB) GetBlockCntByDate(date string) uint {
+	type Record struct {
+		ID     uint
+		Height uint
+	}
+
+	var first, last Record
+
+	db.db.Table("transactions_" + date).Order("id ASC").First(&first)
+
+	db.db.Table("transactions_" + date).Order("id DESC").First(&last)
+
+	blockCnt := last.Height - first.Height
+
+	return blockCnt
+}
+
 func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnDelegate bool) []*models.Transaction {
 	var txs []*models.Transaction
 

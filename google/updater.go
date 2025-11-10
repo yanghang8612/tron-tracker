@@ -319,7 +319,7 @@ func (u *Updater) Update(date time.Time) {
 		u.logger.Errorf("Unable to update USDT supply sheet: %v", err)
 	}
 
-	// Update revenue sheet
+	// Update Revenue sheet
 	lastMonth := date.AddDate(0, 0, -30)
 	revenueData := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
@@ -358,6 +358,32 @@ func (u *Updater) Update(date time.Time) {
 		u.logger.Errorf("Unable to update revenue sheet: %v", err)
 	}
 
+	// Update NetInc sheet
+	startDate := date.AddDate(0, 0, -7*15)
+	netIncData := make([][]interface{}, 0)
+	for i := 0; i < 15; i++ {
+		firstDayOfWeek := startDate.AddDate(0, 0, i*7)
+
+		row := make([]interface{}, 0)
+		row = append(row, firstDayOfWeek.Format("2006-01-02"))
+
+		for j := 0; j < 7; j++ {
+			queryDate := firstDayOfWeek.AddDate(0, 0, j)
+			row = append(row, u.db.GetBlockCntByDate(queryDate.Format("060102"))*136)
+			row = append(row, u.db.GetTotalStatisticsByDateDays(queryDate, 1).Fee/1e6)
+		}
+
+		netIncData = append(netIncData, row)
+	}
+
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "NetInc!A2:C15",
+		&sheets.ValueRange{
+			Values: netIncData,
+		}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update revenue sheet: %v", err)
+	}
+
 	ppt, err := u.slidesService.Presentations.Get(u.presentationId).Do()
 	if err != nil {
 		u.logger.Errorf("Unable to retrieve presentation: %v", err)
@@ -367,24 +393,27 @@ func (u *Updater) Update(date time.Time) {
 	// Update Revenue data
 	u.updateRevenueData(ppt.Slides[0], date)
 
+	// Update NetInc data
+	// u.updateRevenueData(ppt.Slides[0], date)
+
 	// Update the first slide with Chain data
-	u.updateChainData(ppt.Slides[1], date.AddDate(0, 0, -7))
+	u.updateChainData(ppt.Slides[2], date.AddDate(0, 0, -7))
 
 	// Update the next four slides with CEX data
-	u.updateCexData(ppt.Slides[2], date, "TRX", nil,
+	u.updateCexData(ppt.Slides[3], date, "TRX", nil,
 		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
 
-	u.updateCexData(ppt.Slides[3], date, "STEEM", nil,
+	u.updateCexData(ppt.Slides[4], date, "STEEM", nil,
 		[]string{"Binance-STEEM/USDT", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
 
-	u.updateCexData(ppt.Slides[4], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+	u.updateCexData(ppt.Slides[5], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
 
-	u.updateCexData(ppt.Slides[5], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
+	u.updateCexData(ppt.Slides[6], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-WIN/USDT", "Binance-WIN/TRX", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
 
 	// Update Stock data
-	u.updateStockData(ppt.Slides[6], date)
+	u.updateStockData(ppt.Slides[7], date)
 }
 
 func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {

@@ -373,7 +373,7 @@ func (u *Updater) Update(date time.Time) {
 	}
 
 	// Update NetInc sheet
-	startDate := date.AddDate(0, 0, -7*15)
+	startDate := date.AddDate(0, 0, -7*13)
 	netIncData := make([][]interface{}, 0)
 	for i := 0; i < 13; i++ {
 		firstDayOfWeek := startDate.AddDate(0, 0, i*7)
@@ -386,7 +386,7 @@ func (u *Updater) Update(date time.Time) {
 		netIncData = append(netIncData, row)
 	}
 
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "NetInc!A2:C16",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "NetInc!A2:C14",
 		&sheets.ValueRange{
 			Values: netIncData,
 		}).ValueInputOption("USER_ENTERED").Do()

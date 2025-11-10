@@ -84,6 +84,7 @@ func (s *Server) Start() {
 	s.router.GET("/user_token_statistics", s.userTokenStatistics)
 	s.router.GET("/top_users", s.topUsers)
 	s.router.GET("/top_tokens", s.topTokens)
+	s.router.GET("/top_user_token_change", s.topUserTokenChange)
 	s.router.GET("/token_statistics", s.tokenStatistics)
 	s.router.GET("/eth_statistics", s.ethStatistics)
 	s.router.GET("/tron_statistics", s.forward)
@@ -1190,6 +1191,65 @@ func (s *Server) topTokens(c *gin.Context) {
 		})
 		return
 	}
+
+	c.JSON(200, results)
+}
+
+func (s *Server) topUserTokenChange(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
+	if !ok {
+		return
+	}
+
+	n, ok := getIntParam(c, "n", 50)
+	if !ok {
+		return
+	}
+
+	token := c.DefaultQuery("token", "USDT")
+
+	curUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, token)
+	preUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate.AddDate(0, 0, -days), days, token)
+
+	var resultArray []*models.UserTokenStatistic
+	for _, uts := range curUserTokenStatsMap {
+		resultArray = append(resultArray, uts)
+	}
+
+	type ResEntity struct {
+		Address string `json:"address"`
+		Change  int64  `json:"change"`
+	}
+
+	for user, uts := range curUserTokenStatsMap {
+		if preUts, ok := preUserTokenStatsMap[user]; ok {
+			uts.FromFee -= preUts.FromFee
+			uts.ToFee -= preUts.ToFee
+			uts.FromTXCount -= preUts.FromTXCount
+			uts.ToTXCount -= preUts.ToTXCount
+		}
+	}
+
+	for user, uts := range preUserTokenStatsMap {
+		if _, ok := curUserTokenStatsMap[user]; !ok {
+			uts.FromFee = -uts.FromFee
+			uts.ToFee = -uts.ToFee
+			uts.FromTXCount = -uts.FromTXCount
+			uts.ToTXCount = -uts.ToTXCount
+			resultArray = append(resultArray, uts)
+		}
+	}
+
+	sort.Slice(resultArray, func(i, j int) bool {
+		return resultArray[i].FromFee > resultArray[j].FromFee
+	})
+
+	results := pickTopNAndLastN(resultArray, n, func(t *models.UserTokenStatistic) *ResEntity {
+		return &ResEntity{
+			Address: t.User,
+			Change:  t.FromFee,
+		}
+	})
 
 	c.JSON(200, results)
 }

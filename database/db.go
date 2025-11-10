@@ -14,6 +14,7 @@ import (
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database/models"
+	"tron-tracker/google"
 	"tron-tracker/net"
 	"tron-tracker/tron/types"
 
@@ -577,21 +578,40 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
-func (db *RawDB) GetBlockCntByDate(date string) uint {
+func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) uint {
 	type Record struct {
 		ID     uint
 		Height uint
 	}
 
-	var first, last Record
+	var blockCnt uint
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
 
-	db.db.Table("transactions_" + date).Order("id ASC").First(&first)
+		var first, last Record
 
-	db.db.Table("transactions_" + date).Order("id DESC").First(&last)
+		db.db.Table("transactions_" + queryDate.Format("060102")).Order("id ASC").First(&first)
+		db.db.Table("transactions_" + queryDate.Format("060102")).Order("id DESC").First(&last)
 
-	blockCnt := last.Height - first.Height
+		blockCnt += last.Height - first.Height + 1
+	}
 
 	return blockCnt
+}
+
+func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) uint {
+	netInc := uint(0)
+
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
+
+		generated := db.GetBlockCntByDateDays(queryDate, 1) * google.RewardPerBlock
+		burned := uint(db.GetTotalStatisticsByDateDays(queryDate, 1).Fee / 1e6)
+
+		netInc += generated - burned
+	}
+
+	return netInc
 }
 
 func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnDelegate bool) []*models.Transaction {

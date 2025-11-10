@@ -30,6 +30,8 @@ import (
 	"google.golang.org/api/slides/v1"
 )
 
+// RewardPerBlock TODO: should query the net params
+const RewardPerBlock = 136
 const EMUPerPt = 12700.0
 
 type Updater struct {
@@ -373,18 +375,12 @@ func (u *Updater) Update(date time.Time) {
 	// Update NetInc sheet
 	startDate := date.AddDate(0, 0, -7*15)
 	netIncData := make([][]interface{}, 0)
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 13; i++ {
 		firstDayOfWeek := startDate.AddDate(0, 0, i*7)
 
 		row := make([]interface{}, 0)
 		row = append(row, firstDayOfWeek.Format("2006-01-02"))
-
-		generated := uint(0)
-		for j := 0; j < 7; j++ {
-			queryDate := firstDayOfWeek.AddDate(0, 0, j)
-			generated += u.db.GetBlockCntByDate(queryDate.Format("060102")) * 136
-		}
-		row = append(row, generated)
+		row = append(row, u.db.GetBlockCntByDateDays(firstDayOfWeek, 7)*RewardPerBlock)
 		row = append(row, u.db.GetTotalStatisticsByDateDays(firstDayOfWeek, 7).Fee/1e6)
 
 		netIncData = append(netIncData, row)
@@ -408,7 +404,7 @@ func (u *Updater) Update(date time.Time) {
 	u.updateRevenueData(ppt.Slides[0], date)
 
 	// Update NetInc data
-	// u.updateRevenueData(ppt.Slides[0], date)
+	u.updateNetIncData(ppt.Slides[1], date)
 
 	// Update the first slide with Chain data
 	u.updateChainData(ppt.Slides[2], date.AddDate(0, 0, -7))
@@ -811,6 +807,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildUpdateStyleRequest(revenueObjectId, -1, -1, indexes[1][0], indexes[1][1], 11, getColor(usdtRevenue[1][2].(string)), true))
 	reqs = append(reqs, buildUpdateStyleRequest(revenueObjectId, -1, -1, indexes[2][0], indexes[2][1], 11, getColor(otherRevenue[0][2].(string)), true))
 
+	// Update chart on the right
 	revenueChartId := page.PageElements[3].ObjectId
 	reqs = append(reqs, []*slides.Request{
 		{
@@ -860,6 +857,76 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)
+
+	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
+		&slides.BatchUpdatePresentationRequest{
+			Requests: reqs,
+		}).Do()
+	if updateErr != nil {
+		u.logger.Error("Failed to update presentation", zap.Error(updateErr))
+	}
+}
+
+func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
+	reqs := make([]*slides.Request, 0)
+
+	// Update today in the title
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
+
+	template :=
+		"Summary:\n" +
+			"   Generated:\t%s  (%s)\n" +
+			"   Burned:\t%s  (%s)\n" +
+			"   Net Inc.:\t%s  (%s)\n\n" +
+			"Detail Net Inc. for Last 4 Weeks:\n" +
+			"   %s:\t%s  (%s)\n" +
+			"   %s:\t%s  (%s)\n" +
+			"   %s:\t%s  (%s)\n" +
+			"   %s:\t%s  (%s)\n"
+
+	thisWeek := today.AddDate(0, 0, -7)
+	lastWeek := today.AddDate(0, 0, -14)
+
+	thisWeekGenerated := u.db.GetBlockCntByDateDays(thisWeek, 7) * RewardPerBlock
+	lastWeekGenerated := u.db.GetBlockCntByDateDays(lastWeek, 7) * RewardPerBlock
+	thisWeekBurned := uint(u.db.GetTotalStatisticsByDateDays(thisWeek, 7).Fee / 1e6)
+	lastWeekBurned := uint(u.db.GetTotalStatisticsByDateDays(lastWeek, 7).Fee / 1e6)
+	thisWeekNetInc := thisWeekGenerated - thisWeekBurned
+	lastWeekNetInc := lastWeekGenerated - lastWeekBurned
+
+	rows := make([][]string, 0)
+	for i := 0; i < 4; i++ {
+		startDayOfWeek := thisWeek.AddDate(0, 0, -i*7)
+
+		row := make([]string, 0)
+		row = append(row, startDayOfWeek.Format("01-02"))
+		thisNetInc := u.db.GetNetIncByDateDays(startDayOfWeek, 7)
+		row = append(row, common.FormatWithUnits(float64(thisNetInc)))
+		lastNetInc := u.db.GetNetIncByDateDays(startDayOfWeek.AddDate(0, 0, -7), 7)
+		row = append(row, common.FormatAbChangePercent(float64(lastNetInc), float64(thisNetInc)))
+
+		rows = append(rows, row)
+	}
+
+	netIncText := fmt.Sprintf(template,
+		common.FormatWithUnits(float64(thisWeekGenerated)), common.FormatChangePercent(int64(lastWeekGenerated), int64(thisWeekGenerated)),
+		common.FormatWithUnits(float64(thisWeekBurned)), common.FormatChangePercent(int64(lastWeekBurned), int64(thisWeekBurned)),
+		common.FormatWithUnits(float64(thisWeekNetInc)), common.FormatChangePercent(int64(lastWeekNetInc), int64(thisWeekNetInc)),
+		rows[0][0], rows[0][1], rows[0][2],
+		rows[1][0], rows[1][1], rows[1][2],
+		rows[2][0], rows[2][1], rows[2][2],
+		rows[3][0], rows[3][1], rows[3][2])
+
+	reqs = append(reqs, buildUpdateTextRequests(page.PageElements[2].ObjectId, -1, -1, 0, 0, netIncText)...)
+
+	// Update chart on the right
+	reqs = append(reqs, []*slides.Request{
+		{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: page.PageElements[3].ObjectId,
+			},
+		},
+	}...)
 
 	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
 		&slides.BatchUpdatePresentationRequest{

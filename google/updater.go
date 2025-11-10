@@ -385,7 +385,7 @@ func (u *Updater) Update(date time.Time) {
 		netIncData = append(netIncData, row)
 	}
 
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "NetInc!A2:C15",
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "NetInc!A2:C16",
 		&sheets.ValueRange{
 			Values: netIncData,
 		}).ValueInputOption("USER_ENTERED").Do()

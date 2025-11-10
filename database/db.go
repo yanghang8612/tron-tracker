@@ -791,7 +791,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int,
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		db.db.Table("user_token_stats_"+queryDate).Where("token = ?", token).Find(&dayStats)
+		db.db.Table("user_token_stats_"+queryDate).Where("token = ?", tokenAddress).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {

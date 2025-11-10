@@ -962,12 +962,17 @@ func (db *RawDB) getAvgOpenOrClosePriceByTokenDateDays(token string, date time.T
 		if price > 0 {
 			priceSum += price
 		} else {
+			days -= 1
 			priceType := "open"
 			if isClose {
 				priceType = "close"
 			}
 			db.logger.Warnf("No valid %s price found for token [%s] on date [%s]", priceType, token, queryDate.Format("060102"))
 		}
+	}
+
+	if days == 0 {
+		return 0.0
 	}
 
 	return priceSum / float64(days)

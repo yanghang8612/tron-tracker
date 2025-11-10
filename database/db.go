@@ -599,18 +599,10 @@ func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) uint {
 }
 
 func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) uint {
-	netInc := uint(0)
+	generated := db.GetBlockCntByDateDays(date, days) * 136
+	burned := uint(db.GetTotalStatisticsByDateDays(date, days).Fee / 1e6)
 
-	for i := 0; i < days; i++ {
-		queryDate := date.AddDate(0, 0, i)
-
-		generated := db.GetBlockCntByDateDays(queryDate, 1) * 136
-		burned := uint(db.GetTotalStatisticsByDateDays(queryDate, 1).Fee / 1e6)
-
-		netInc += generated - burned
-	}
-
-	return netInc
+	return generated - burned
 }
 
 func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnDelegate bool) []*models.Transaction {

@@ -895,7 +895,7 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	lastWeekNetInc := lastWeekGenerated - lastWeekBurned
 
 	rows := make([][]string, 0)
-	for i := 0; i < 4; i++ {
+	for i := 1; i <= 4; i++ {
 		startDayOfWeek := thisWeek.AddDate(0, 0, -i*7)
 
 		row := make([]string, 0)

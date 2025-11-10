@@ -14,7 +14,6 @@ import (
 	"tron-tracker/common"
 	"tron-tracker/config"
 	"tron-tracker/database/models"
-	"tron-tracker/google"
 	"tron-tracker/net"
 	"tron-tracker/tron/types"
 
@@ -605,7 +604,7 @@ func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) uint {
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i)
 
-		generated := db.GetBlockCntByDateDays(queryDate, 1) * google.RewardPerBlock
+		generated := db.GetBlockCntByDateDays(queryDate, 1) * 136
 		burned := uint(db.GetTotalStatisticsByDateDays(queryDate, 1).Fee / 1e6)
 
 		netInc += generated - burned

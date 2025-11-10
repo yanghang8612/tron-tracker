@@ -903,27 +903,62 @@ func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time
 	return avgStat
 }
 
-func (db *RawDB) GetTokenPriceByDate(token string, date time.Time) float64 {
-	queryDateDBName := "market_pair_statistics_" + date.Format("0601")
+func (db *RawDB) GetOpenPriceByTokenDate(token string, date time.Time) float64 {
+	return db.getAvgOpenOrClosePriceByTokenDateDays(token, date, 1, false)
+}
 
-	// Query the earliest Binance/HTX-[Token]/USDT price of the day
+func (db *RawDB) GetClosePriceByTokenDate(token string, date time.Time) float64 {
+	return db.getAvgOpenOrClosePriceByTokenDateDays(token, date, 1, true)
+}
+
+func (db *RawDB) GetAvgOpenPriceByTokenDateDays(token string, date time.Time, days int) float64 {
+	return db.getAvgOpenOrClosePriceByTokenDateDays(token, date, days, false)
+}
+
+func (db *RawDB) GetAvgClosePriceByTokenDateDays(token string, date time.Time, days int) float64 {
+	return db.getAvgOpenOrClosePriceByTokenDateDays(token, date, days, true)
+}
+
+// getAvgOpenOrClosePriceByTokenDateDays Query the earliest or latest Binance/HTX-[Token]/USDT price of the day
+func (db *RawDB) getAvgOpenOrClosePriceByTokenDateDays(token string, date time.Time, days int, isClose bool) float64 {
+	if days <= 0 {
+		db.logger.Warnf("Invalid days [%d] for calculating average open or close price of token [%s]", days, token)
+		return 0.0
+	}
+
 	exchangeName := "Binance"
 	if token == "sTRX" {
 		exchangeName = "HTX"
 	}
 
-	var earliestPrice float64
-	db.db.Table(queryDateDBName).
-		Select("price").
-		Where("datetime like ? and exchange_name = ? and pair = ?",
-			date.Format("02")+"%", exchangeName, token+"/USDT").
-		Order("datetime").Limit(1).
-		Find(&earliestPrice)
+	order := "asc"
+	if isClose {
+		order = "desc"
+	}
 
-	return earliestPrice
+	var priceSum float64
+	for i := 0; i < days; i++ {
+		queryDate := date.AddDate(0, 0, i)
+		queryDateDBName := "market_pair_statistics_" + queryDate.Format("0601")
+
+		var price float64
+		db.db.Table(queryDateDBName).
+			Select("price").
+			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
+				date.Format("02")+"%", exchangeName, token+"/USDT").
+			Order("datetime by " + order).First(&price)
+
+		if price > 0 {
+			priceSum += price
+		} else {
+			db.logger.Warnf("")
+		}
+	}
+
+	return priceSum / float64(days)
 }
 
-func (db *RawDB) GetAvgTokenPriceByStartDateAndDays(token string, startDate time.Time, days int) float64 {
+func (db *RawDB) GetAvgTokenPriceByDateDays(token string, date time.Time, days int) float64 {
 	if days <= 0 {
 		db.logger.Warnf("Invalid days [%d] for calculating average price of token [%s]", days, token)
 		return 0.0
@@ -936,7 +971,7 @@ func (db *RawDB) GetAvgTokenPriceByStartDateAndDays(token string, startDate time
 
 	var priceSum float64
 	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
+		queryDate := date.AddDate(0, 0, i)
 		queryDateDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
 		var avgPrice float64
@@ -956,7 +991,7 @@ func (db *RawDB) GetAvgTokenPriceByStartDateAndDays(token string, startDate time
 	return priceSum / float64(days)
 }
 
-func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate time.Time, days int) (float64, float64) {
+func (db *RawDB) GetTokenPriceRangeByDateDays(token string, date time.Time, days int) (float64, float64) {
 	if days <= 0 {
 		db.logger.Warnf("Invalid days [%d] for calculating price range of token [%s]", days, token)
 		return 0.0, 0.0
@@ -973,7 +1008,7 @@ func (db *RawDB) GetTokenPriceRangeByStartDateAndDays(token string, startDate ti
 	)
 
 	for i := 0; i < days; i++ {
-		queryDate := startDate.AddDate(0, 0, i)
+		queryDate := date.AddDate(0, 0, i)
 		queryDateDBName := "market_pair_statistics_" + queryDate.Format("0601")
 
 		var minPrice, maxPrice float64
@@ -1008,7 +1043,7 @@ func (db *RawDB) GetMarketPairRulesByToken(token string) []*models.Rule {
 	return rules
 }
 
-func (db *RawDB) GetMarketPairRulesStatsByTokenAndStartDateAndDays(token string, startDate time.Time, days int) map[string]*models.Rule {
+func (db *RawDB) GetMarketPairRulesStatsByTokenDateDays(token string, date time.Time, days int) map[string]*models.Rule {
 	var rules []*models.Rule
 	db.db.Where("pair like ?", "%"+token+"/%").Find(&rules)
 
@@ -1023,7 +1058,7 @@ func (db *RawDB) GetMarketPairRulesStatsByTokenAndStartDateAndDays(token string,
 		return nil
 	}
 
-	for _, marketPair := range db.GetMarketPairStatistics(startDate, days, token) {
+	for _, marketPair := range db.GetMarketPairStatistics(date, days, token) {
 		// Special handling for APENFT pair
 		pair, _ := strings.CutPrefix(marketPair.Pair, "APE")
 		key := marketPair.ExchangeName + "-" + pair

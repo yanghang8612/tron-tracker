@@ -410,7 +410,7 @@ func (tb *TelegramBot) CheckMarketPairs() {
 	brokenRulesStats := make([]*models.Rule, 0)
 	lastWeek := time.Now().AddDate(0, 0, -7)
 	for _, token := range []string{"TRX", "STEEM", "JST", "WIN"} {
-		rulesStats := tb.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, lastWeek, 7)
+		rulesStats := tb.db.GetMarketPairRulesStatsByTokenDateDays(token, lastWeek, 7)
 		if len(rulesStats) == 0 {
 			continue
 		}
@@ -451,7 +451,7 @@ func (tb *TelegramBot) ReportMarketPairStatistics() {
 
 	lastWeek := time.Now().AddDate(0, 0, -7)
 	for _, token := range tb.tokens {
-		rulesStats := tb.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, lastWeek, 7)
+		rulesStats := tb.db.GetMarketPairRulesStatsByTokenDateDays(token, lastWeek, 7)
 		if len(rulesStats) == 0 {
 			continue
 		}

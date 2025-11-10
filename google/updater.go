@@ -324,7 +324,7 @@ func (u *Updater) Update(date time.Time) {
 	revenueData := make([][]interface{}, 0)
 	for i := 0; i < 30; i++ {
 		queryDate := lastMonth.AddDate(0, 0, i)
-		trxPrice := u.db.GetTokenPriceByDate("TRX", queryDate.AddDate(0, 0, 1))
+		trxPrice := u.db.GetClosePriceByTokenDate("TRX", queryDate)
 		totalStats := u.db.GetTotalStatisticsByDateDays(queryDate, 1)
 		usdtStats := u.db.GetTokenStatisticsByDateDaysToken(queryDate, 1, "USDT")
 
@@ -353,13 +353,13 @@ func (u *Updater) Update(date time.Time) {
 	thisTRXPriceRow := make([]interface{}, 0)
 	thisTRXPriceRow = append(thisTRXPriceRow, "")
 	thisTRXPriceRow = append(thisTRXPriceRow, "")
-	thisTRXPriceRow = append(thisTRXPriceRow, u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -6), 7))
+	thisTRXPriceRow = append(thisTRXPriceRow, u.db.GetAvgClosePriceByTokenDateDays("TRX", date.AddDate(0, 0, -7), 7))
 	revenueData = append(revenueData, thisTRXPriceRow)
 
 	lastTRXPriceRow := make([]interface{}, 0)
 	lastTRXPriceRow = append(lastTRXPriceRow, "")
 	lastTRXPriceRow = append(lastTRXPriceRow, "")
-	lastTRXPriceRow = append(lastTRXPriceRow, u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -13), 7))
+	lastTRXPriceRow = append(lastTRXPriceRow, u.db.GetAvgClosePriceByTokenDateDays("TRX", date.AddDate(0, 0, -14), 7))
 	revenueData = append(revenueData, lastTRXPriceRow)
 
 	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Data!A2:W67",
@@ -513,8 +513,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 	oneWeekAgo := today.AddDate(0, 0, -7)
 
-	thisAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays(token, today.AddDate(0, 0, -6), 7)
-	lastAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays(token, today.AddDate(0, 0, -13), 7)
+	thisAvgPrice := u.db.GetAvgClosePriceByTokenDateDays(token, today.AddDate(0, 0, -7), 7)
+	lastAvgPrice := u.db.GetAvgClosePriceByTokenDateDays(token, today.AddDate(0, 0, -14), 7)
 
 	// Update date in the title
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
@@ -531,8 +531,8 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	thisWeek := today.AddDate(0, 0, -7)
 	lastWeek := oneWeekAgo.AddDate(0, 0, -7)
 
-	thisLowPrice, thisHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, thisWeek, 7)
-	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByStartDateAndDays(token, lastWeek, 7)
+	thisLowPrice, thisHighPrice := u.db.GetTokenPriceRangeByDateDays(token, thisWeek, 7)
+	lastLowPrice, lastHighPrice := u.db.GetTokenPriceRangeByDateDays(token, lastWeek, 7)
 
 	// Move the cursor
 	reqs = append(reqs, buildMoveByPercentageRequest(page.PageElements[5], page.PageElements[10], (thisAvgPrice-thisLowPrice)/(thisHighPrice-thisLowPrice)))
@@ -602,7 +602,7 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	// Update Monitoring Table
 	monitorTableObjectId := page.PageElements[22].ObjectId
 	rowIndex := int64(1)
-	ruleStats := u.db.GetMarketPairRulesStatsByTokenAndStartDateAndDays(token, thisWeek, 7)
+	ruleStats := u.db.GetMarketPairRulesStatsByTokenDateDays(token, thisWeek, 7)
 	for _, pair := range concernedPairs {
 		ruleStat := ruleStats[pair]
 		var color string
@@ -856,7 +856,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 		otherNote[0][0], otherNote[0][1], pf(otherNote[0][2].(string)), otherNote[0][3],
 		otherNote[1][0], otherNote[1][1], pf(otherNote[1][2].(string)), otherNote[1][3],
 		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3],
-		u.db.GetAvgTokenPriceByStartDateAndDays("TRX", today.AddDate(0, 0, -6), 7))
+		u.db.GetAvgClosePriceByTokenDateDays("TRX", today.AddDate(0, 0, -6), 7))
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)
@@ -1042,8 +1042,8 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	oneWeekAgo := today.AddDate(0, 0, -7)
 
 	// Update the value of digital assets held
-	thisSTRXPrice := u.db.GetTokenPriceByDate("sTRX", today)
-	lastSTRXPrice := u.db.GetTokenPriceByDate("sTRX", oneWeekAgo)
+	thisSTRXPrice := u.db.GetClosePriceByTokenDate("sTRX", today)
+	lastSTRXPrice := u.db.GetClosePriceByTokenDate("sTRX", oneWeekAgo)
 	user := "TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT"
 	sTRX := "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5"
 	thisSTRXAmount := common.DropDecimal(common.ConvertDecToBigInt(u.db.GetHoldingsStatistic(today, user, sTRX).Balance), 18)

@@ -350,12 +350,17 @@ func (u *Updater) Update(date time.Time) {
 		revenueData = append(revenueData, row)
 	}
 
-	thisAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -6), 7)
-	lastAvgPrice := u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -13), 7)
-	trxPrices := make([]interface{}, 0)
-	trxPrices = append(trxPrices, thisAvgPrice)
-	trxPrices = append(trxPrices, lastAvgPrice)
-	revenueData = append(revenueData, trxPrices)
+	thisTRXPriceRow := make([]interface{}, 0)
+	thisTRXPriceRow = append(thisTRXPriceRow, "")
+	thisTRXPriceRow = append(thisTRXPriceRow, "")
+	thisTRXPriceRow = append(thisTRXPriceRow, u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -6), 7))
+	revenueData = append(revenueData, thisTRXPriceRow)
+
+	lastTRXPriceRow := make([]interface{}, 0)
+	lastTRXPriceRow = append(lastTRXPriceRow, "")
+	lastTRXPriceRow = append(lastTRXPriceRow, "")
+	lastTRXPriceRow = append(lastTRXPriceRow, u.db.GetAvgTokenPriceByStartDateAndDays("TRX", date.AddDate(0, 0, -13), 7))
+	revenueData = append(revenueData, lastTRXPriceRow)
 
 	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Data!A2:W67",
 		&sheets.ValueRange{

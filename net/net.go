@@ -1,8 +1,10 @@
 package net
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -359,7 +361,10 @@ func GetStockData(date time.Time, days int) [][]interface{} {
 		symbol, start, end,
 	)
 
-	resp, err := client.R().Get(url)
+	tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	resp, err := resty.NewWithClient(&http.Client{Transport: tr}).R().Get(url)
 	if err != nil {
 		zap.S().Errorf("Failed to fetch stock data for %s: %v", symbol, err)
 		return nil

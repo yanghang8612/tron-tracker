@@ -1249,11 +1249,11 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 
 	increaseSum, decreaseSum := int64(0), int64(0)
 	for _, uts := range resultArray {
-		if uts.FromFee > 0 {
+		if uts.ToFee > 0 {
 			increaseSum += uts.ToFee
 		}
 
-		if uts.FromFee < 0 {
+		if uts.ToFee < 0 {
 			decreaseSum += uts.ToFee
 		}
 	}

@@ -1217,48 +1217,52 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 	}
 
 	type ResEntity struct {
-		Address string `json:"address"`
-		Change  int64  `json:"change"`
+		Address   string `json:"address"`
+		Fee       int64  `json:"fee"`
+		FeeChange int64  `json:"change"`
+		TxCount   int64  `json:"tx_count"`
+		TxChange  int64  `json:"tx_change"`
 	}
 
 	for user, uts := range curUserTokenStatsMap {
 		if preUts, ok := preUserTokenStatsMap[user]; ok {
-			uts.FromFee -= preUts.FromFee
-			uts.ToFee -= preUts.ToFee
-			uts.FromTXCount -= preUts.FromTXCount
-			uts.ToTXCount -= preUts.ToTXCount
+			uts.ToFee = uts.FromFee - preUts.FromFee
+			uts.ToTXCount = uts.FromTXCount - preUts.FromTXCount
 		}
 	}
 
 	for user, uts := range preUserTokenStatsMap {
 		if _, ok := curUserTokenStatsMap[user]; !ok {
-			uts.FromFee = -uts.FromFee
-			uts.ToFee = -uts.ToFee
-			uts.FromTXCount = -uts.FromTXCount
-			uts.ToTXCount = -uts.ToTXCount
+			uts.FromFee = 0
+			uts.ToFee = -uts.FromFee
+			uts.FromTXCount = 0
+			uts.ToTXCount = -uts.FromTXCount
 			resultArray = append(resultArray, uts)
 		}
 	}
 
 	sort.Slice(resultArray, func(i, j int) bool {
-		return resultArray[i].FromFee > resultArray[j].FromFee
+		return resultArray[i].ToFee > resultArray[j].ToFee
 	})
 
 	increaseSum, decreaseSum := int64(0), int64(0)
 	for _, uts := range resultArray {
 		if uts.FromFee > 0 {
-			increaseSum += uts.FromFee
+			increaseSum += uts.ToFee
 		}
 
 		if uts.FromFee < 0 {
-			decreaseSum += uts.FromFee
+			decreaseSum += uts.ToFee
 		}
 	}
 
 	results := pickTopNAndLastN(resultArray, n, func(t *models.UserTokenStatistic) *ResEntity {
 		return &ResEntity{
-			Address: t.User,
-			Change:  t.FromFee,
+			Address:   t.User,
+			Fee:       t.FromFee,
+			FeeChange: t.ToFee,
+			TxCount:   t.FromTXCount,
+			TxChange:  t.ToTXCount,
 		}
 	})
 

@@ -21,13 +21,13 @@ func FormatWithSignAndUnits(n float64) string {
 func FormatWithUnits(n float64) string {
 	abs := math.Abs(n)
 	switch {
-	case abs >= 1e12:
+	case abs >= 1e11:
 		return fmt.Sprintf("%.2f T", n/1e12)
-	case abs >= 1e9:
+	case abs >= 1e8:
 		return fmt.Sprintf("%.2f B", n/1e9)
-	case abs >= 1e6:
+	case abs >= 1e5:
 		return fmt.Sprintf("%.2f M", n/1e6)
-	case abs >= 1e3:
+	case abs >= 1e2:
 		return fmt.Sprintf("%.2f K", n/1e3)
 	default:
 		return fmt.Sprintf("%.2f", n)

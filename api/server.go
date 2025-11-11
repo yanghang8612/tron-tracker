@@ -1225,7 +1225,7 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 	}
 
 	for user, uts := range curUserTokenStatsMap {
-		uts.ToFee = 0
+		uts.ToFee = uts.FromFee
 
 		if preUts, ok := preUserTokenStatsMap[user]; ok {
 			uts.ToFee = uts.FromFee - preUts.FromFee

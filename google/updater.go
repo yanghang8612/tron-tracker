@@ -878,14 +878,14 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 			"   Generated:\t%s  (%s)\n" +
 			"   Burned:\t%s  (%s)\n" +
 			"   Net Inc.:\t%s  (%s)\n\n" +
-			"Daily Burned and Net Inc. for last week:\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n" +
-			"   %s:\t%s  (Net Inc.: %s)\n"
+			"Daily Burned and Net Inc.:\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n" +
+			"   %s:\t%s  (Net: %s)\n"
 
 	thisWeek := today.AddDate(0, 0, -7)
 	lastWeek := today.AddDate(0, 0, -14)

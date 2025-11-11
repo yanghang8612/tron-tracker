@@ -1244,6 +1244,17 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 		return resultArray[i].FromFee > resultArray[j].FromFee
 	})
 
+	increaseSum, decreaseSum := int64(0), int64(0)
+	for _, uts := range resultArray {
+		if uts.FromFee > 0 {
+			increaseSum += uts.FromFee
+		}
+
+		if uts.FromFee < 0 {
+			decreaseSum += uts.FromFee
+		}
+	}
+
 	results := pickTopNAndLastN(resultArray, n, func(t *models.UserTokenStatistic) *ResEntity {
 		return &ResEntity{
 			Address: t.User,
@@ -1251,7 +1262,11 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 		}
 	})
 
-	c.JSON(200, results)
+	c.JSON(200, gin.H{
+		"top_changes":  results,
+		"increase_sum": increaseSum,
+		"decrease_sum": decreaseSum,
+	})
 }
 
 func (s *Server) tokenStatistics(c *gin.Context) {

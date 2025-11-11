@@ -878,7 +878,7 @@ func (s *Server) usdtStatistics(c *gin.Context) {
 		return
 	}
 
-	usdtStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, "USDT")
+	usdtStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, "USDT", "")
 
 	filterExchange, ok := getBoolParam(c, "filter_exchange", false)
 	if !ok {
@@ -1208,8 +1208,8 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 
 	token := c.DefaultQuery("token", "USDT")
 
-	curUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, token)
-	preUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate.AddDate(0, 0, -days), days, token)
+	curUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate, days, token, "from_fee > 0")
+	preUserTokenStatsMap := s.db.GetUserTokenStatisticsByDateDaysToken(startDate.AddDate(0, 0, -days), days, token, "from_fee > 0")
 
 	var resultArray []*models.UserTokenStatistic
 	for _, uts := range curUserTokenStatsMap {

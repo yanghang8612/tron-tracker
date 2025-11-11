@@ -778,7 +778,7 @@ func (db *RawDB) GetTokenStatisticsByDateDays(date time.Time, days int) map[stri
 	return resultMap
 }
 
-func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int, token string) map[string]*models.UserTokenStatistic {
+func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int, token string, cond string) map[string]*models.UserTokenStatistic {
 	tokenAddress := db.GetTokenAddress(token)
 	if len(tokenAddress) == 0 {
 		db.logger.Errorf("Token address not found for token [%s]", token)
@@ -791,7 +791,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int,
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		db.db.Table("user_token_stats_"+queryDate).Where("token = ?", tokenAddress).Find(&dayStats)
+		db.db.Table("user_token_stats_"+queryDate).Where("token = ? and (?)", tokenAddress, cond).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {

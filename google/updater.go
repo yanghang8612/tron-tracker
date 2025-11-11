@@ -878,11 +878,14 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 			"   Generated:\t%s  (%s)\n" +
 			"   Burned:\t%s  (%s)\n" +
 			"   Net Inc.:\t%s  (%s)\n\n" +
-			"Detail Net Inc. for Last 4 Weeks:\n" +
-			"   %s:\t%s  (%s)\n" +
-			"   %s:\t%s  (%s)\n" +
-			"   %s:\t%s  (%s)\n" +
-			"   %s:\t%s  (%s)\n"
+			"Daily Burned and Net Inc. for last week:\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n" +
+			"   %s:\t%s  (Net Inc.: %s)\n"
 
 	thisWeek := today.AddDate(0, 0, -7)
 	lastWeek := today.AddDate(0, 0, -14)
@@ -895,15 +898,15 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	lastWeekNetInc := lastWeekGenerated - lastWeekBurned
 
 	rows := make([][]string, 0)
-	for i := 1; i <= 4; i++ {
-		startDayOfWeek := thisWeek.AddDate(0, 0, -i*7)
+	for i := 0; i < 7; i++ {
+		dayOfWeek := thisWeek.AddDate(0, 0, i)
 
 		row := make([]string, 0)
-		row = append(row, startDayOfWeek.Format("01-02"))
-		thisNetInc := u.db.GetNetIncByDateDays(startDayOfWeek, 7)
+		row = append(row, dayOfWeek.Format("01-02"))
+		thisBurned := uint(u.db.GetTotalStatisticsByDateDays(dayOfWeek, 1).Fee / 1e6)
+		row = append(row, common.FormatWithUnits(float64(thisBurned)))
+		thisNetInc := u.db.GetNetIncByDateDays(dayOfWeek, 1)
 		row = append(row, common.FormatWithSignAndUnits(float64(thisNetInc)))
-		lastNetInc := u.db.GetNetIncByDateDays(startDayOfWeek.AddDate(0, 0, -7), 7)
-		row = append(row, common.FormatAbChangePercent(float64(lastNetInc), float64(thisNetInc)))
 
 		rows = append(rows, row)
 	}
@@ -915,7 +918,10 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 		rows[0][0], rows[0][1], rows[0][2],
 		rows[1][0], rows[1][1], rows[1][2],
 		rows[2][0], rows[2][1], rows[2][2],
-		rows[3][0], rows[3][1], rows[3][2])
+		rows[3][0], rows[3][1], rows[3][2],
+		rows[4][0], rows[4][1], rows[4][2],
+		rows[5][0], rows[5][1], rows[5][2],
+		rows[6][0], rows[6][1], rows[6][2])
 
 	reqs = append(reqs, buildUpdateTextRequests(page.PageElements[2].ObjectId, -1, -1, 0, 0, netIncText)...)
 

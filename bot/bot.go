@@ -255,8 +255,20 @@ func (tb *TelegramBot) Start() {
 							humanize.SIWithDigits(rule.DepthUsdPositiveTwo, 0, ""))
 					}
 				case "report":
-					// data := strings.Fields(update.Message.Text)
-					tb.ReportMarketPairStatistics()
+					data := strings.Fields(update.Message.Text)
+					if len(data) == 1 {
+						tb.ReportMarketPairStatistics(time.Now())
+					} else if len(data) == 2 {
+						reportDate, err := time.Parse("2006-01-02", data[1])
+						if err != nil {
+							textMsg = "Invalid date format. Please use YYYY-MM-DD format."
+							break
+						}
+
+						tb.ReportMarketPairStatistics(reportDate)
+					} else {
+						textMsg = "Too many arguments. Please use /report [YYYY-MM-DD] format."
+					}
 				default:
 					textMsg = "Unknown command. Available commands: /start, /listrules, /addrule, /editrule, /report"
 				}
@@ -401,10 +413,10 @@ func (tb *TelegramBot) DoHoldingsStatistics() {
 	tb.logger.Infof("Finish doing holdings statistics")
 }
 
-func (tb *TelegramBot) CheckMarketPairs() {
+func (tb *TelegramBot) CheckMarketPairs(remind bool) {
 	tb.logger.Infof("Start checking market pairs")
 
-	textMsg := "<strong>[Scheduled checks from the past week]</strong>\n\n"
+	textMsg := "<strong>[Daily checks for the past 7 days]</strong>\n\n"
 	tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
 
 	brokenRulesStats := make([]*models.Rule, 0)
@@ -430,26 +442,29 @@ func (tb *TelegramBot) CheckMarketPairs() {
 		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, "All rules are complied. No issues found.\n", nil)
 	} else {
 		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, formatTable("", brokenRulesStats, false), nil)
-		reminders := tb.db.GetVolumeReminders()
-		var mentions strings.Builder
-		if len(reminders) > 0 {
-			for _, reminder := range reminders {
-				mentions.WriteString("@" + reminder + " ")
+
+		if remind {
+			reminders := tb.db.GetVolumeReminders()
+			var mentions strings.Builder
+			if len(reminders) > 0 {
+				for _, reminder := range reminders {
+					mentions.WriteString("@" + reminder + " ")
+				}
 			}
+			tb.sendVolumeMessage(0, "", mentions.String()+" Broken rules found.\n", nil)
 		}
-		tb.sendVolumeMessage(0, "", mentions.String()+" Broken rules found.\n", nil)
 	}
 
 	tb.logger.Infof("Finish checking market pairs")
 }
 
-func (tb *TelegramBot) ReportMarketPairStatistics() {
+func (tb *TelegramBot) ReportMarketPairStatistics(date time.Time) {
 	tb.logger.Infof("Start reporting market pair statistics")
 
 	textMsg := "<strong>[Statistics for the past 7 days]</strong>\n\n"
 	tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
 
-	lastWeek := time.Now().AddDate(0, 0, -7)
+	lastWeek := date.AddDate(0, 0, -7)
 	for _, token := range tb.tokens {
 		rulesStats := tb.db.GetMarketPairRulesStatsByTokenDateDays(token, lastWeek, 7)
 		if len(rulesStats) == 0 {

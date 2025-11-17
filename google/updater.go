@@ -874,11 +874,11 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
 
 	template :=
-		"Summary:\n" +
+		"#Summary:#\n" +
 			"   Generated:\t%s  (%s)\n" +
 			"   Burned:\t%s  (%s)\n" +
-			"   Net Inc.:\t%s  (%s)\n\n" +
-			"Daily Burned and Net Inc.:\n" +
+			"   #Net Inc.:\t%s  (%s)#\n\n" +
+			"#Daily Burned and Net Inc.:#\n" +
 			"   %s:\t%s  (Net: %s)\n" +
 			"   %s:\t%s  (Net: %s)\n" +
 			"   %s:\t%s  (Net: %s)\n" +
@@ -892,8 +892,8 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 
 	thisWeekGenerated := u.db.GetBlockCntByDateDays(thisWeek, 7) * RewardPerBlock
 	lastWeekGenerated := u.db.GetBlockCntByDateDays(lastWeek, 7) * RewardPerBlock
-	thisWeekBurned := uint(u.db.GetTotalStatisticsByDateDays(thisWeek, 7).Fee / 1e6)
-	lastWeekBurned := uint(u.db.GetTotalStatisticsByDateDays(lastWeek, 7).Fee / 1e6)
+	thisWeekBurned := int(u.db.GetTotalStatisticsByDateDays(thisWeek, 7).Fee / 1e6)
+	lastWeekBurned := int(u.db.GetTotalStatisticsByDateDays(lastWeek, 7).Fee / 1e6)
 	thisWeekNetInc := thisWeekGenerated - thisWeekBurned
 	lastWeekNetInc := lastWeekGenerated - lastWeekBurned
 
@@ -911,7 +911,7 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 		rows = append(rows, row)
 	}
 
-	netIncText := fmt.Sprintf(template,
+	textWithAnchor := fmt.Sprintf(template,
 		common.FormatWithUnits(float64(thisWeekGenerated)), common.FormatChangePercent(int64(lastWeekGenerated), int64(thisWeekGenerated)),
 		common.FormatWithUnits(float64(thisWeekBurned)), common.FormatChangePercent(int64(lastWeekBurned), int64(thisWeekBurned)),
 		common.FormatWithSignAndUnits(float64(thisWeekNetInc)), common.FormatChangePercent(int64(lastWeekNetInc), int64(thisWeekNetInc)),
@@ -923,7 +923,28 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 		rows[5][0], rows[5][1], rows[5][2],
 		rows[6][0], rows[6][1], rows[6][2])
 
-	reqs = append(reqs, buildUpdateTextRequests(page.PageElements[2].ObjectId, -1, -1, 0, 0, netIncText)...)
+	parts := strings.Split(textWithAnchor, "#")
+	indexes := make([][]int64, 0)
+
+	netIncText := strings.Builder{}
+	indexes = append(indexes, []int64{utf16Len(parts[0]), utf16Len(parts[0] + parts[1])})
+	netIncText.WriteString(parts[0] + parts[1])
+	indexes = append(indexes, []int64{utf16Len(netIncText.String() + parts[2]), utf16Len(netIncText.String() + parts[2] + parts[3])})
+	netIncText.WriteString(parts[2] + parts[3])
+	indexes = append(indexes, []int64{utf16Len(netIncText.String() + parts[4]), utf16Len(netIncText.String() + parts[4] + parts[5])})
+	netIncText.WriteString(parts[4] + parts[5] + parts[6])
+
+	netIncObjectId := page.PageElements[2].ObjectId
+	reqs = append(reqs, buildUpdateTextRequests(netIncObjectId, -1, -1, 0, 0, netIncText.String())...)
+	var getColor = func(netInc int) string {
+		if netInc > 0 {
+			return "yellow"
+		}
+		return "green"
+	}
+	reqs = append(reqs, buildUpdateStyleRequest(netIncObjectId, -1, -1, indexes[0][0], indexes[0][1], 12.5, "white", true))
+	reqs = append(reqs, buildUpdateStyleRequest(netIncObjectId, -1, -1, indexes[1][0], indexes[1][1], 12.5, getColor(thisWeekNetInc), true))
+	reqs = append(reqs, buildUpdateStyleRequest(netIncObjectId, -1, -1, indexes[2][0], indexes[2][1], 12.5, "white", true))
 
 	// Update chart on the right
 	reqs = append(reqs, []*slides.Request{

@@ -577,7 +577,7 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
 }
 
-func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) uint {
+func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) int {
 	type Record struct {
 		ID     uint
 		Height uint
@@ -595,11 +595,11 @@ func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) uint {
 		blockCnt += last.Height - first.Height + 1
 	}
 
-	return blockCnt
+	return int(blockCnt)
 }
 
 func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) int {
-	generated := int(db.GetBlockCntByDateDays(date, days) * 136)
+	generated := db.GetBlockCntByDateDays(date, days) * 136
 	burned := int(db.GetTotalStatisticsByDateDays(date, days).Fee / 1e6)
 
 	return generated - burned

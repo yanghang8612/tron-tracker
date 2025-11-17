@@ -853,7 +853,7 @@ func (u *Updater) updateRevenueData(page *slides.Page, today time.Time) {
 		otherNote[0][0], otherNote[0][1], pf(otherNote[0][2].(string)), otherNote[0][3],
 		otherNote[1][0], otherNote[1][1], pf(otherNote[1][2].(string)), otherNote[1][3],
 		otherNote[2][0], otherNote[2][1], pf(otherNote[2][2].(string)), otherNote[2][3],
-		u.db.GetAvgClosePriceByTokenDateDays("TRX", today.AddDate(0, 0, -6), 7))
+		u.db.GetAvgClosePriceByTokenDateDays("TRX", today.AddDate(0, 0, -7), 7))
 
 	revenueNoteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(revenueNoteObjectId, -1, -1, 0, 0, revenueNote)...)

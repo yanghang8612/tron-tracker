@@ -938,9 +938,9 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildUpdateTextRequests(netIncObjectId, -1, -1, 0, 0, netIncText.String())...)
 	var getColor = func(netInc int) string {
 		if netInc > 0 {
-			return "yellow"
+			return "green"
 		}
-		return "green"
+		return "yellow"
 	}
 	reqs = append(reqs, buildUpdateStyleRequest(netIncObjectId, -1, -1, indexes[0][0], indexes[0][1], 12.5, "white", true))
 	reqs = append(reqs, buildUpdateStyleRequest(netIncObjectId, -1, -1, indexes[1][0], indexes[1][1], 12.5, getColor(thisWeekNetInc), true))

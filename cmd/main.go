@@ -50,7 +50,7 @@ func main() {
 	_, _ = c.AddFunc("0 0 0 * * *", func() {
 		tgBot.DoHoldingsStatistics()
 	})
-	_, _ = c.AddFunc("0 0 7 * * 2-4,6,7", func() {
+	_, _ = c.AddFunc("0 0 7 * * 0,2-4,6", func() {
 		tgBot.CheckMarketPairs(false)
 	})
 	_, _ = c.AddFunc("0 0 7 * * 1,5", func() {

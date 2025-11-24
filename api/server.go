@@ -1217,11 +1217,12 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 	}
 
 	type ResEntity struct {
-		Address   string `json:"address"`
-		Fee       int64  `json:"fee"`
-		FeeChange int64  `json:"change"`
-		TxCount   int64  `json:"tx_count"`
-		TxChange  int64  `json:"tx_change"`
+		Address   string  `json:"address"`
+		Tag       string  `json:"tag"`
+		Fee       float64 `json:"fee"`
+		FeeChange float64 `json:"change"`
+		TxCount   int64   `json:"tx_count"`
+		TxChange  int64   `json:"tx_change"`
 	}
 
 	for user, uts := range curUserTokenStatsMap {
@@ -1259,13 +1260,17 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 	}
 
 	results := pickTopNAndLastN(resultArray, n, func(t *models.UserTokenStatistic) *ResEntity {
-		return &ResEntity{
+		res := &ResEntity{
 			Address:   t.User,
-			Fee:       t.FromFee,
-			FeeChange: t.ToFee,
+			Fee:       float64(t.FromFee) / 1e6,
+			FeeChange: float64(t.ToFee) / 1e6,
 			TxCount:   t.FromTXCount,
 			TxChange:  t.ToTXCount,
 		}
+		if s.db.IsExchange(t.User) {
+			res.Tag = s.db.GetExchange(t.User).OriginName
+		}
+		return res
 	})
 
 	c.JSON(200, gin.H{

@@ -1,9 +1,13 @@
 package models
 
 import (
+	"fmt"
 	"math/big"
 
+	"tron-tracker/common"
 	"tron-tracker/database/models/types"
+
+	"github.com/dustin/go-humanize"
 )
 
 const (
@@ -222,6 +226,7 @@ type TokenStatistic struct {
 	NetUsage          int64  `json:"net_usage"`
 	NetFee            int64  `json:"net_fee"`
 	TxTotal           int64  `json:"tx_total"`
+	BurnPercent       string `gorm:"-" json:"burn_percent,omitempty"`
 }
 
 func (o *TokenStatistic) Merge(other *TokenStatistic) {
@@ -252,6 +257,13 @@ func (o *TokenStatistic) Add(tx *Transaction) {
 	o.NetUsage += tx.NetUsage
 	o.NetFee += tx.NetFee
 	o.TxTotal++
+}
+
+func (o *TokenStatistic) Fill() *TokenStatistic {
+	if o.EnergyTotal > 0 {
+		o.BurnPercent = common.FormatOfPercent(o.EnergyTotal, o.EnergyTotal-o.EnergyUsage-o.EnergyOriginUsage)
+	}
+	return o
 }
 
 type FeeStatistic struct {
@@ -635,6 +647,50 @@ func (o *USDTStorageStatistic) Merge(other *USDTStorageStatistic) {
 	o.ResetEnergyOriginUsage += other.ResetEnergyOriginUsage
 	o.ResetNetUsage += other.ResetNetUsage
 	o.ResetNetFee += other.ResetNetFee
+}
+
+func (o *USDTStorageStatistic) Diff(other *USDTStorageStatistic) string {
+	var (
+		curStats  = o
+		lastStats = other
+	)
+
+	return fmt.Sprintf("SetStorage:\n"+
+		"\tAverage Fee Per Tx: %.2f TRX (%s)\n"+
+		"\tDaily transactions: %s (%s)\n"+
+		"\tDaily total energy: %s (%s)\n"+
+		"\tDaily energy with staking: %s (%s)\n"+
+		"\tDaily energy fee: %s TRX (%s)\n"+
+		"\tBurn energy: %.2f%%\n"+
+		"ResetStorage:\n"+
+		"\tAverage Fee Per Tx: %.2f TRX (%s)\n"+
+		"\tDaily transactions: %s (%s)\n"+
+		"\tDaily total energy: %s (%s)\n"+
+		"\tDaily energy with staking: %s (%s)\n"+
+		"\tDaily energy fee: %s TRX (%s)\n"+
+		"\tBurn energy: %.2f%%\n",
+		float64(curStats.SetEnergyFee)/float64(curStats.SetTxCount)/1e6,
+		common.FormatChangePercent(int64(lastStats.SetEnergyFee/uint64(lastStats.SetTxCount)), int64(curStats.SetEnergyFee/uint64(curStats.SetTxCount))),
+		humanize.Comma(int64(curStats.SetTxCount/7)),
+		common.FormatChangePercent(int64(lastStats.SetTxCount), int64(curStats.SetTxCount)),
+		humanize.Comma(int64(curStats.SetEnergyTotal/7)),
+		common.FormatChangePercent(int64(lastStats.SetEnergyTotal), int64(curStats.SetEnergyTotal)),
+		humanize.Comma(int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/7),
+		common.FormatChangePercent(int64(lastStats.SetEnergyUsage+lastStats.SetEnergyOriginUsage), int64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)),
+		humanize.Comma(int64(curStats.SetEnergyFee/7_000_000)),
+		common.FormatChangePercent(int64(lastStats.SetEnergyFee), int64(curStats.SetEnergyFee)),
+		100.0-float64(curStats.SetEnergyUsage+curStats.SetEnergyOriginUsage)/float64(curStats.SetEnergyTotal)*100,
+		float64(curStats.ResetEnergyFee)/float64(curStats.ResetTxCount)/1e6,
+		common.FormatChangePercent(int64(lastStats.ResetEnergyFee/uint64(lastStats.ResetTxCount)), int64(curStats.ResetEnergyFee/uint64(curStats.ResetTxCount))),
+		humanize.Comma(int64(curStats.ResetTxCount/7)),
+		common.FormatChangePercent(int64(lastStats.ResetTxCount), int64(curStats.ResetTxCount)),
+		humanize.Comma(int64(curStats.ResetEnergyTotal/7)),
+		common.FormatChangePercent(int64(lastStats.ResetEnergyTotal), int64(curStats.ResetEnergyTotal)),
+		humanize.Comma(int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/7),
+		common.FormatChangePercent(int64(lastStats.ResetEnergyUsage+lastStats.ResetEnergyOriginUsage), int64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)),
+		humanize.Comma(int64(curStats.ResetEnergyFee/7_000_000)),
+		common.FormatChangePercent(int64(lastStats.ResetEnergyFee), int64(curStats.ResetEnergyFee)),
+		100.0-float64(curStats.ResetEnergyUsage+curStats.ResetEnergyOriginUsage)/float64(curStats.ResetEnergyTotal)*100)
 }
 
 type HoldingsStatistic struct {

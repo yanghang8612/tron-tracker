@@ -754,7 +754,7 @@ func (db *RawDB) GetTokenStatisticsByDateDaysToken(date time.Time, days int, tok
 
 		result.Merge(&dayStat)
 	}
-	return result
+	return result.Fill()
 }
 
 func (db *RawDB) GetTokenStatisticsByDateDays(date time.Time, days int) map[string]*models.TokenStatistic {

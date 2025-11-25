@@ -959,7 +959,7 @@ func (s *Server) usdtStorageStatistics(c *gin.Context) {
 
 	lastStats := s.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), days)
 
-	c.String(200, common.FormatStorageDiffReport(curStats, lastStats))
+	c.String(200, curStats.Diff(lastStats))
 }
 
 func pickTopNAndLastN[T any, S any](src []T, n int, convert func(T) S) []S {
@@ -1341,6 +1341,10 @@ func (s *Server) tokenStatistics(c *gin.Context) {
 		resultArray = resultArray[:n]
 	}
 	resultArray = append(resultArray, TRC10Stat, NonUSDTStat)
+
+	for _, statistic := range resultArray {
+		statistic.Fill()
+	}
 
 	c.JSON(200, resultArray)
 }

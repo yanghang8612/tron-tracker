@@ -487,7 +487,7 @@ func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 	lastStorageStats := u.db.GetUSDTStorageStatisticsByDateDays(startDate.AddDate(0, 0, -7), 7)
 	dateNote := fmt.Sprintf("Updated on %s\n\n", startDate.AddDate(0, 0, 7).Format("2006-01-02"))
 	priceNote := fmt.Sprintf("TRX price: $%f\n\n", u.db.GetTokenListingStatistic(startDate.AddDate(0, 0, 7), "TRX").Price)
-	storageNote := common.FormatStorageDiffReport(thisStorageStats, lastStorageStats) + "\n"
+	storageNote := thisStorageStats.Diff(lastStorageStats) + "\n"
 	resp, _ := u.sheetsService.Spreadsheets.Values.BatchGet(u.volumeId).Ranges("USDT!F2:H8").Do()
 	supplyNote := common.FormatUSDTSupplyReport(resp.ValueRanges[0].Values)
 

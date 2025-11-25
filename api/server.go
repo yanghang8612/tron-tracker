@@ -1218,7 +1218,7 @@ func (s *Server) topUserTokenChange(c *gin.Context) {
 
 	type ResEntity struct {
 		Address   string  `json:"address"`
-		Tag       string  `json:"tag"`
+		Tag       string  `json:"tag,omitempty"`
 		Fee       float64 `json:"fee"`
 		FeeChange float64 `json:"change"`
 		TxCount   int64   `json:"tx_count"`

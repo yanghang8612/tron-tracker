@@ -353,7 +353,7 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 
 func GetStockData(date time.Time, days int) [][]interface{} {
 	symbol := "TRON.US"
-	start := subtractBusinessDays(date, days).Format("20060102")
+	start := date.AddDate(0, 0, -days*2).Format("20060102")
 	end := date.Format("20060102")
 
 	url := fmt.Sprintf(
@@ -372,10 +372,11 @@ func GetStockData(date time.Time, days int) [][]interface{} {
 
 	var stockData [][]interface{}
 	lines := strings.Split(string(resp.Body()), "\r\n")
-	for i, line := range lines {
+	lines = lines[len(lines)-days:]
+	for _, line := range lines {
 		data := strings.Split(line, ",")
 
-		if i == 0 || len(data) < 6 {
+		if len(data) < 6 {
 			continue
 		}
 

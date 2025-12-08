@@ -34,6 +34,7 @@ func FormatAbChangePercent(prev, curr float64) string {
 	if prev == 0 {
 		return "∞%"
 	}
+
 	return fmt.Sprintf("%+.2f%%", (prev-curr)/math.Abs(prev)*100)
 }
 

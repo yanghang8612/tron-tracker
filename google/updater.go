@@ -914,7 +914,7 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	textWithAnchor := fmt.Sprintf(template,
 		common.FormatWithUnits(float64(thisWeekGenerated)), common.FormatChangePercent(int64(lastWeekGenerated), int64(thisWeekGenerated)),
 		common.FormatWithUnits(float64(thisWeekBurned)), common.FormatChangePercent(int64(lastWeekBurned), int64(thisWeekBurned)),
-		common.FormatWithSignAndUnits(float64(thisWeekNetInc)), common.FormatChangePercent(int64(lastWeekNetInc), int64(thisWeekNetInc)),
+		common.FormatWithSignAndUnits(float64(thisWeekNetInc)), common.FormatAbChangePercent(float64(lastWeekNetInc), float64(thisWeekNetInc)),
 		rows[0][0], rows[0][1], rows[0][2],
 		rows[1][0], rows[1][1], rows[1][2],
 		rows[2][0], rows[2][1], rows[2][2],

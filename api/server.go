@@ -376,9 +376,10 @@ func (s *Server) exchangesTokenWeeklyStatistic(c *gin.Context) {
 
 func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) map[string][]*ExchangeTokenStatisticInResult {
 	chargeResults := make([]*ExchangeTokenStatisticInResult, 0)
+	collectResults := make([]*ExchangeTokenStatisticInResult, 0)
 	withdrawResults := make([]*ExchangeTokenStatisticInResult, 0)
-	chargeCount, withdrawCount := int64(0), int64(0)
-	chargeFee, withdrawFee := int64(0), int64(0)
+	chargeCount, collectCount, withdrawCount := int64(0), int64(0), int64(0)
+	chargeFee, collectFee, withdrawFee := int64(0), int64(0), int64(0)
 
 	for token, es := range ets {
 		if es.ChargeTxCount > 0 {
@@ -394,9 +395,9 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 		}
 
 		if es.CollectTxCount > 0 {
-			chargeCount += es.CollectTxCount
-			chargeFee += es.CollectFee
-			chargeResults = append(chargeResults, &ExchangeTokenStatisticInResult{
+			collectCount += es.CollectTxCount
+			collectFee += es.CollectFee
+			collectResults = append(collectResults, &ExchangeTokenStatisticInResult{
 				Name:           token,
 				Fee:            es.CollectFee,
 				FeePercent:     "",
@@ -423,6 +424,11 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 		res.TxCountPercent = common.FormatOfPercent(chargeCount, res.TxCount)
 	}
 
+	for _, res := range collectResults {
+		res.FeePercent = common.FormatOfPercent(collectFee, res.Fee)
+		res.TxCountPercent = common.FormatOfPercent(collectCount, res.TxCount)
+	}
+
 	for _, res := range withdrawResults {
 		res.FeePercent = common.FormatOfPercent(withdrawFee, res.Fee)
 		res.TxCountPercent = common.FormatOfPercent(withdrawCount, res.TxCount)
@@ -432,12 +438,17 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 		return chargeResults[i].Fee > chargeResults[j].Fee
 	})
 
+	sort.Slice(collectResults, func(i, j int) bool {
+		return collectResults[i].Fee > collectResults[j].Fee
+	})
+
 	sort.Slice(withdrawResults, func(i, j int) bool {
 		return withdrawResults[i].Fee > withdrawResults[j].Fee
 	})
 
 	return map[string][]*ExchangeTokenStatisticInResult{
 		"charge":   chargeResults,
+		"collect":  collectResults,
 		"withdraw": withdrawResults,
 	}
 }

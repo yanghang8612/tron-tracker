@@ -610,9 +610,9 @@ func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnD
 
 	queryDate := date.Format("060102")
 	if isUnDelegate {
-		db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 58, 158).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+		db.db.Table("transactions_"+queryDate).Where("type = ? OR type = ?", 58, 158).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
 	} else {
-		db.db.Table("transactions_"+queryDate).Where("type = ? or type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+		db.db.Table("transactions_"+queryDate).Where("type = ? OR type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
 	}
 
 	return txs
@@ -637,9 +637,9 @@ func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contra
 
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 		if len(contract) > 0 {
-			db.db.Table("transactions_"+queryDate).Where("type = 31 and name = ? and result = ?", contract, result).Find(&txs)
+			db.db.Table("transactions_"+queryDate).Where("type = 31 AND name = ? AND result = ?", contract, result).Find(&txs)
 		} else {
-			db.db.Table("transactions_"+queryDate).Where("type = 31 and result = ?", result).Find(&txs)
+			db.db.Table("transactions_"+queryDate).Where("type = 31 AND result = ?", result).Find(&txs)
 		}
 
 		if len(txs) != 0 {
@@ -701,7 +701,7 @@ func (db *RawDB) GetTopNFromStatisticByDateDays(date time.Time, days, n int, ord
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		dayStats := make([]*models.UserStatistic, 0)
-		db.db.Table("from_stats_" + queryDate).Order(orderByField + " desc").Limit(n).Find(&dayStats)
+		db.db.Table("from_stats_" + queryDate).Order(orderByField + " DESC").Limit(n).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			user := dayStat.Address
@@ -723,7 +723,7 @@ func (db *RawDB) GetFeeAndEnergyByDateUsers(date string, users []string) (int64,
 		E int64
 	}
 	var res result
-	db.db.Table("from_stats_"+date).Select("sum(fee) as f, sum(energy_total) as e").Where("address IN ?", users).Limit(1).Find(&res)
+	db.db.Table("from_stats_"+date).Select("SUM(fee) AS f, SUM(energy_total) AS e").Where("address IN ?", users).Limit(1).Find(&res)
 	return res.F, res.E
 }
 
@@ -791,7 +791,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int,
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		db.db.Table("user_token_stats_"+queryDate).Where("token = ? and "+cond, tokenAddress).Find(&dayStats)
+		db.db.Table("user_token_stats_"+queryDate).Where("token = ? AND "+cond, tokenAddress).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {
@@ -813,7 +813,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysUserToken(date time.Time, days 
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		db.db.Table("user_token_stats_"+queryDate).Where("user = ? and token = ?", user, token).Find(&dayStats)
+		db.db.Table("user_token_stats_"+queryDate).Where("user = ? AND token = ?", user, token).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {
@@ -835,7 +835,7 @@ func (db *RawDB) GetExchangeStatisticsByDateDays(date time.Time, days int) map[s
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.ExchangeStatistic
-		db.db.Where("date = ? and token = ?", queryDate, "_").Find(&dayStats)
+		db.db.Where("date = ? AND token = ?", queryDate, "_").Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.Name]; !ok {
@@ -855,20 +855,14 @@ func (db *RawDB) GetExchangeTokenStatisticsByDateDays(date time.Time, days int) 
 		queryDate := date.AddDate(0, 0, i)
 
 		var dayStats []*models.ExchangeStatistic
-		db.db.Where("date = ? and token <> ?", queryDate.Format("060102"), "Special").Find(&dayStats)
+		db.db.Where("date = ? AND token NOT IN ?", queryDate.Format("060102"), []string{"Special", "_"}).Find(&dayStats)
 
 		for _, es := range dayStats {
 			if _, ok := resultMap[es.Name]; !ok {
 				resultMap[es.Name] = make(map[string]*models.ExchangeStatistic)
 			}
 
-			// Skip total statistics
-			var tokenName string
-			if es.Token == "_" {
-				tokenName = "TOTAL"
-			} else {
-				tokenName = db.GetTokenName(es.Token)
-			}
+			tokenName := db.GetTokenName(es.Token)
 
 			if _, ok := resultMap[es.Name][tokenName]; !ok {
 				resultMap[es.Name][tokenName] = models.NewExchangeStatistic("", "", "")
@@ -892,7 +886,7 @@ func (db *RawDB) GetFungibleTokenStatisticsByDateDaysTokenType(date time.Time, d
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStat *models.FungibleTokenStatistic
-		db.db.Where("date = ? and address = ? and type = ?", queryDate, token, typeName).Find(&dayStat)
+		db.db.Where("date = ? AND address = ? AND type = ?", queryDate, token, typeName).Find(&dayStat)
 
 		results = append(results, dayStat)
 	}
@@ -905,10 +899,10 @@ func (db *RawDB) GetAvgFungibleTokenStatisticsByDateDaysTokenType(date time.Time
 	endDate := date.AddDate(0, 0, days).Format("060102")
 
 	var avgStat *models.FungibleTokenStatistic
-	db.db.Select("round(avg(count)) as count, "+
-		"round(avg(cast(amount_sum as unsigned))) as amount_sum, "+
-		"round(avg(unique_user)) as unique_user").
-		Where("date >= ? and date < ? and address = ? and type = ?", startDate, endDate, token, typeName).
+	db.db.Select("round(AVG(count)) AS count, "+
+		"ROUND(AVG(CAST(amount_sum AS UNSIGNED))) AS amount_sum, "+
+		"ROUND(AVG(unique_user)) AS unique_user").
+		Where("date >= ? AND date < ? AND address = ? AND type = ?", startDate, endDate, token, typeName).
 		Find(&avgStat)
 
 	return avgStat
@@ -955,7 +949,7 @@ func (db *RawDB) getAvgOpenOrClosePriceByTokenDateDays(token string, date time.T
 		var price float64
 		db.db.Table(queryDateDBName).
 			Select("price").
-			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
+			Where("price <> 0 AND datetime LIKE ? AND exchange_name = ? AND pair = ?",
 				queryDate.Format("02")+"%", exchangeName, token+"/USDT").
 			Order("id " + order).Limit(1).Find(&price)
 
@@ -997,7 +991,7 @@ func (db *RawDB) GetAvgTokenPriceByDateDays(token string, date time.Time, days i
 		var avgPrice float64
 		db.db.Table(queryDateDBName).
 			Select("avg(price)").
-			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
+			Where("price <> 0 AND datetime LIKE ? AND exchange_name = ? AND pair = ?",
 				queryDate.Format("02")+"%", exchangeName, token+"/USDT").
 			Find(&avgPrice)
 
@@ -1033,8 +1027,8 @@ func (db *RawDB) GetTokenPriceRangeByDateDays(token string, date time.Time, days
 
 		var minPrice, maxPrice float64
 		row := db.db.Table(queryDateDBName).
-			Select("min(price) AS min_price, max(price) AS max_price").
-			Where("price <> 0 and datetime like ? and exchange_name = ? and pair = ?",
+			Select("MIN(price) AS min_price, MAX(price) AS max_price").
+			Where("price <> 0 AND datetime LIKE ? AND exchange_name = ? AND pair = ?",
 				queryDate.Format("02")+"%", exchangeName, token+"/USDT").
 			Row()
 
@@ -1059,13 +1053,13 @@ func (db *RawDB) GetTokenPriceRangeByDateDays(token string, date time.Time, days
 
 func (db *RawDB) GetMarketPairRulesByToken(token string) []*models.Rule {
 	var rules []*models.Rule
-	db.db.Where("pair like ?", "%"+token+"/%").Find(&rules)
+	db.db.Where("pair LIKE ?", "%"+token+"/%").Find(&rules)
 	return rules
 }
 
 func (db *RawDB) GetMarketPairRulesStatsByTokenDateDays(token string, date time.Time, days int) map[string]*models.Rule {
 	var rules []*models.Rule
-	db.db.Where("pair like ?", "%"+token+"/%").Find(&rules)
+	db.db.Where("pair LIKE ?", "%"+token+"/%").Find(&rules)
 
 	rulesStats := make(map[string]*models.Rule)
 	for _, rule := range rules {
@@ -1105,7 +1099,7 @@ func (db *RawDB) GetMarketPairRulesStatsByTokenDateDays(token string, date time.
 
 func (db *RawDB) GetMarketPairRuleByExchangePair(exchangeName, pair string) *models.Rule {
 	var rule models.Rule
-	db.db.Where("exchange_name = ? and pair = ?", exchangeName, pair).Find(&rule)
+	db.db.Where("exchange_name = ? AND pair = ?", exchangeName, pair).Find(&rule)
 	return &rule
 }
 
@@ -1129,7 +1123,7 @@ func (db *RawDB) ContainExchangeAndPairInMarketPairStatistics(exchangeName, pair
 
 	var count int64
 	db.db.Table(queryDBName).
-		Where("exchange_name = ? and pair = ?", exchangeName, pair).
+		Where("exchange_name = ? AND pair = ?", exchangeName, pair).
 		Count(&count)
 
 	return count > 0
@@ -1144,7 +1138,7 @@ func (db *RawDB) GetMarketPairStatistics(data time.Time, days int, token string)
 
 		var dayStats []*models.MarketPairStatistic
 		db.db.Table(queryDBName).
-			Where("datetime like ? and token = ?", queryDate.Format("02")+"%", token).
+			Where("datetime LIKE ? AND token = ?", queryDate.Format("02")+"%", token).
 			Find(&dayStats)
 
 		stats = append(stats, dayStats...)
@@ -1168,7 +1162,7 @@ func (db *RawDB) GetMergedMarketPairStatistics(date time.Time, days int, token s
 		var earliestDatetime string
 		db.db.Table(queryDBName).
 			Select("datetime").
-			Where("datetime like ? and token = ? and percent > 0", queryDate.Format("02")+"%", token).
+			Where("datetime LIKE ? AND token = ? AND percent > 0", queryDate.Format("02")+"%", token).
 			Order("datetime").Limit(1).
 			Find(&earliestDatetime)
 
@@ -1176,7 +1170,7 @@ func (db *RawDB) GetMergedMarketPairStatistics(date time.Time, days int, token s
 		var volumeStats []*models.MarketPairStatistic
 		db.db.Table(queryDBName).
 			Select("exchange_name", "pair", "volume").
-			Where("datetime = ? and token = ? and percent > 0 and volume > 0", earliestDatetime, token).
+			Where("datetime = ? AND token = ? AND percent > 0 AND volume > 0", earliestDatetime, token).
 			Find(&volumeStats)
 
 		if len(volumeStats) == 0 {
@@ -1205,7 +1199,7 @@ func (db *RawDB) GetMergedMarketPairStatistics(date time.Time, days int, token s
 
 			var depthStats []*models.MarketPairStatistic
 			db.db.Table(todayDBName).
-				Where("datetime = ? and token = ?", generateMarketPairDepthDailyKey(today), token).
+				Where("datetime = ? AND token = ?", generateMarketPairDepthDailyKey(today), token).
 				Find(&depthStats)
 
 			for _, depthStat := range depthStats {
@@ -1255,7 +1249,7 @@ func (db *RawDB) GetMarketPairDailyVolumesByDateDaysToken(date time.Time, days i
 
 		var todayStats []*models.MarketPairStatistic
 		result := db.db.Table(todayDBName).Select("exchange_name", "pair", "reputation", "volume", "percent").
-			Where("datetime = ? and token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
+			Where("datetime = ? AND token = ?", queryDate.Format("02")+"0000", token).Find(&todayStats)
 
 		if result.Error != nil {
 			actualDays -= 1
@@ -1307,7 +1301,7 @@ func (db *RawDB) GetMarketPairAverageDepthsByDateDaysToken(date time.Time, days 
 		todayDBName := "market_pair_statistics_" + dbNameSuffix
 
 		var todayStats []*models.MarketPairStatistic
-		result := db.db.Table(todayDBName).Where("datetime like ?", queryDate.Format("02")+"%").Find(&todayStats)
+		result := db.db.Table(todayDBName).Where("datetime LIKE ?", queryDate.Format("02")+"%").Find(&todayStats)
 
 		if result.Error != nil {
 			actualDays -= 1
@@ -1362,7 +1356,7 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 
 	var todayStat models.TokenListingStatistic
 	db.db.Table(queryDateDBName).
-		Where("datetime like ? and token = ?", date.Format("02")+"%", strings.ToUpper(token)).
+		Where("datetime LIKE ? AND token = ?", date.Format("02")+"%", strings.ToUpper(token)).
 		Order("datetime").Limit(1).
 		Find(&todayStat)
 
@@ -1372,7 +1366,7 @@ func (db *RawDB) GetTokenListingStatistic(date time.Time, token string) *models.
 
 func (db *RawDB) GetHoldingsStatistic(date time.Time, user, token string) *models.HoldingsStatistic {
 	var stat models.HoldingsStatistic
-	db.db.Where("date = ? and user = ? and token = ?", date.Format("060102"), user, token).Find(&stat)
+	db.db.Where("date = ? AND user = ? AND token = ?", date.Format("060102"), user, token).Find(&stat)
 	return &stat
 }
 
@@ -1384,7 +1378,7 @@ func (db *RawDB) GetUSDTSupplyByDate(date time.Time) []*models.USDTSupplyStatist
 
 func (db *RawDB) GetUSDTSupplyByDateChain(date time.Time, chain string) *models.USDTSupplyStatistic {
 	var stat *models.USDTSupplyStatistic
-	db.db.Where("datetime = ? and chain = ?", date.Format("060102")+"00", chain).Find(&stat)
+	db.db.Where("datetime = ? AND chain = ?", date.Format("060102")+"00", chain).Find(&stat)
 	return stat
 }
 
@@ -1879,9 +1873,9 @@ func (db *RawDB) doMarketPairDepthStatistics(day time.Time) {
 		var depthStats []*models.MarketPairStatistic
 		db.db.Table(table).
 			Select("token", "exchange_name", "pair",
-				"avg(depth_usd_positive_two) as depth_usd_positive_two",
-				"avg(depth_usd_negative_two) as depth_usd_negative_two").
-			Where("datetime like ? and percent > 0", day.Format("02")+"%").
+				"AVG(depth_usd_positive_two) AS depth_usd_positive_two",
+				"AVG(depth_usd_negative_two) AS depth_usd_negative_two").
+			Where("datetime LIKE ? AND percent > 0", day.Format("02")+"%").
 			Group("token, exchange_name, pair").
 			Find(&depthStats)
 
@@ -1949,7 +1943,7 @@ func (db *RawDB) countForDate(date string, isManual bool) {
 	USDTStats["1e0"] = models.NewFungibleTokenStatistic(date, "USDT", "1e0", nil)
 
 	result := db.db.Table("transactions_"+date).
-		Where("type = ? or name = ?", 1, USDT).
+		Where("type = ? OR name = ?", 1, USDT).
 		FindInBatches(&results, 500, func(tx *gorm.DB, _ int) error {
 			for _, result := range results {
 				if len(result.ToAddr) == 0 || result.Result != 1 {
@@ -2062,7 +2056,7 @@ func (db *RawDB) countForWeek(startDate string) string {
 
 	for generateWeek(countingDate) == week {
 		result := db.db.Table("transactions_"+countingDate).
-			Where("type = ? or name = ?", 1, USDT).
+			Where("type = ? OR name = ?", 1, USDT).
 			FindInBatches(&results, 100, func(tx *gorm.DB, _ int) error {
 				for _, result := range results {
 					if len(result.ToAddr) == 0 || result.Result != 1 {

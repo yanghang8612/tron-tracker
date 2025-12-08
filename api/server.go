@@ -393,6 +393,18 @@ func analyzeExchangeTokenStatistics(ets map[string]*models.ExchangeStatistic) ma
 			})
 		}
 
+		if es.CollectTxCount > 0 {
+			chargeCount += es.CollectTxCount
+			chargeFee += es.CollectFee
+			chargeResults = append(chargeResults, &ExchangeTokenStatisticInResult{
+				Name:           token,
+				Fee:            es.CollectFee,
+				FeePercent:     "",
+				TxCount:        es.CollectTxCount,
+				TxCountPercent: "",
+			})
+		}
+
 		if es.WithdrawTxCount > 0 {
 			withdrawCount += es.WithdrawTxCount
 			withdrawFee += es.WithdrawFee

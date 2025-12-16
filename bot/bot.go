@@ -2,6 +2,7 @@ package bot
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -129,7 +130,7 @@ func (tb *TelegramBot) Start() {
 					}
 
 					tb.logger.Infof("User %s started PPT update for [%s]", update.Message.From.UserName, updateDate.Format("2006-01-02"))
-					tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
+					_, _ = tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", "Updating PPT...", nil)
 
 					tb.isUpdatingPPT = true
 					go func() {
@@ -139,7 +140,7 @@ func (tb *TelegramBot) Start() {
 						tb.logger.Infof("User %s finished PPT update", update.Message.From.UserName)
 						textMsg = fmt.Sprintf("PPT updated successfully for date %s", updateDate.Format("2006-01-02"))
 
-						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
+						_, _ = tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
 					}()
 				case "q":
 					sql := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/q"))
@@ -164,7 +165,7 @@ func (tb *TelegramBot) Start() {
 					}
 
 					for _, msg := range messages {
-						tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", msg, nil)
+						_, _ = tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", msg, nil)
 					}
 				default:
 					textMsg = "Unknown command. Available commands: /update_ppt"
@@ -172,7 +173,7 @@ func (tb *TelegramBot) Start() {
 			}
 
 			if textMsg != "" {
-				tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
+				_, _ = tb.sendTrackerMessage(update.Message.Chat.ID, 0, "", textMsg, nil)
 			}
 		}
 	}()
@@ -257,7 +258,7 @@ func (tb *TelegramBot) Start() {
 				case "report":
 					data := strings.Fields(update.Message.Text)
 					if len(data) == 1 {
-						tb.ReportMarketPairStatistics(time.Now())
+						_ = tb.ReportMarketPairStatistics(time.Now())
 					} else if len(data) == 2 {
 						reportDate, err := time.Parse("2006-01-02", data[1])
 						if err != nil {
@@ -265,7 +266,7 @@ func (tb *TelegramBot) Start() {
 							break
 						}
 
-						tb.ReportMarketPairStatistics(reportDate)
+						_ = tb.ReportMarketPairStatistics(reportDate)
 					} else {
 						textMsg = "Too many arguments. Please use /report [YYYY-MM-DD] format."
 					}
@@ -293,23 +294,23 @@ func (tb *TelegramBot) Start() {
 			}
 
 			if textMsg != "" {
-				tb.sendVolumeMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
+				_, _ = tb.sendVolumeMessage(update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
 			}
 		}
 	}()
 }
 
-func (tb *TelegramBot) sendTrackerMessage(chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+func (tb *TelegramBot) sendTrackerMessage(chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) (int, error) {
 	return tb.sendMessage(tb.trackerBotApi, chatID, msgID, mode, textMsg, replyMarkup)
 }
 
-func (tb *TelegramBot) sendVolumeMessage(msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+func (tb *TelegramBot) sendVolumeMessage(msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) (int, error) {
 	return tb.sendMessage(tb.volumeBotApi, tb.volumeChatID, msgID, mode, textMsg, replyMarkup)
 }
 
-func (tb *TelegramBot) sendMessage(botApi *tgbotapi.BotAPI, chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) int {
+func (tb *TelegramBot) sendMessage(botApi *tgbotapi.BotAPI, chatID int64, msgID int, mode, textMsg string, replyMarkup *tgbotapi.InlineKeyboardMarkup) (int, error) {
 	if chatID == 0 {
-		return -1
+		return 0, errors.New("zero chat id")
 	}
 
 	msg := tgbotapi.NewMessage(chatID, textMsg)
@@ -326,10 +327,10 @@ func (tb *TelegramBot) sendMessage(botApi *tgbotapi.BotAPI, chatID int64, msgID 
 
 	if err != nil {
 		tb.logger.Errorf("Error sending message: %v", err)
-		return 0
+		return 0, err
 	}
 
-	return msgSent.MessageID
+	return msgSent.MessageID, nil
 }
 
 func (tb *TelegramBot) addRule(data []string) (bool, string) {
@@ -360,19 +361,19 @@ func (tb *TelegramBot) addRule(data []string) (bool, string) {
 	if tb.db.GetMarketPairRuleByExchangePair(exchangeName, pair).ID == 0 {
 		tb.db.SaveMarketPairRule(rule)
 		return true, fmt.Sprintf("Added rule %s-%s [volume]: $%s, [+/-2%% Depth]: $%s", exchangeName, pair, data[2], data[3])
-	} else {
-		return false, fmt.Sprintf("Rule for %s-%s aleady exists", exchangeName, pair)
 	}
+
+	return false, fmt.Sprintf("Rule for %s-%s aleady exists", exchangeName, pair)
 }
 
-func (tb *TelegramBot) DoMarketPairStatistics() {
+func (tb *TelegramBot) DoMarketPairStatistics() error {
 	tb.logger.Infof("Start doing market pair statistics")
 
 	for i, token := range tb.tokens {
 		originData, marketPairs, err := net.GetMarketPairs(token, tb.slugs[i])
 		if err != nil {
 			tb.logger.Errorf("Get %s market pairs error: [%s]", token, err.Error())
-			return
+			return err
 		}
 
 		tb.db.SaveMarketPairStatistics(token, originData, marketPairs)
@@ -381,23 +382,27 @@ func (tb *TelegramBot) DoMarketPairStatistics() {
 	}
 
 	tb.logger.Infof("Finish doing market pair statistics")
+
+	return nil
 }
 
-func (tb *TelegramBot) DoTokenListingStatistics() {
+func (tb *TelegramBot) DoTokenListingStatistics() error {
 	tb.logger.Infof("Start doing token listing statistics")
 
 	originData, tokenListings, err := net.GetTokenListings()
 	if err != nil {
 		tb.logger.Errorf("Get token listing error: [%s]", err.Error())
-		return
+		return err
 	}
 
 	tb.db.SaveTokenListingStatistics(originData, tokenListings)
 
 	tb.logger.Infof("Finish doing token listing statistics")
+
+	return nil
 }
 
-func (tb *TelegramBot) DoHoldingsStatistics() {
+func (tb *TelegramBot) DoHoldingsStatistics() error {
 	tb.logger.Infof("Start doing holdings statistics")
 
 	user := "TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT"
@@ -405,19 +410,24 @@ func (tb *TelegramBot) DoHoldingsStatistics() {
 	originData, err := net.Trigger(sTRX, "balanceOf(address)", "00000000000000000000000036e3acd0ad0533e30ee61e194818344c9d2a09b0")
 	if err != nil {
 		tb.logger.Errorf("Get holdings error: [%s]", err.Error())
-		return
+		return err
 	}
 
 	tb.db.SaveHoldingsStatistics(user, sTRX, common.ConvertHexToBigInt(originData).Text(10))
 
 	tb.logger.Infof("Finish doing holdings statistics")
+
+	return nil
 }
 
-func (tb *TelegramBot) CheckMarketPairs(remind bool) {
+func (tb *TelegramBot) CheckMarketPairs(remind bool) error {
 	tb.logger.Infof("Start checking market pairs")
 
 	textMsg := "<strong>[Daily checks for the past 7 days]</strong>\n\n"
-	tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
+	_, err := tb.sendVolumeMessage(0, tgbotapi.ModeHTML, textMsg, nil)
+	if err != nil {
+		return err
+	}
 
 	brokenRulesStats := make([]*models.Rule, 0)
 	lastWeek := time.Now().AddDate(0, 0, -7)
@@ -439,9 +449,15 @@ func (tb *TelegramBot) CheckMarketPairs(remind bool) {
 	}
 
 	if len(brokenRulesStats) == 0 {
-		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, "All rules are complied. No issues found.\n", nil)
+		_, err = tb.sendVolumeMessage(0, tgbotapi.ModeHTML, "All rules are complied. No issues found.\n", nil)
+		if err != nil {
+			return err
+		}
 	} else {
-		tb.sendVolumeMessage(0, tgbotapi.ModeHTML, formatTable("", brokenRulesStats, false), nil)
+		_, err = tb.sendVolumeMessage(0, tgbotapi.ModeHTML, formatTable("", brokenRulesStats, false), nil)
+		if err != nil {
+			return err
+		}
 
 		if remind {
 			reminders := tb.db.GetVolumeReminders()
@@ -451,14 +467,20 @@ func (tb *TelegramBot) CheckMarketPairs(remind bool) {
 					mentions.WriteString("@" + reminder + " ")
 				}
 			}
-			tb.sendVolumeMessage(0, "", mentions.String()+" Broken rules found.\n", nil)
+
+			_, err = tb.sendVolumeMessage(0, "", mentions.String()+" Broken rules found.\n", nil)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	tb.logger.Infof("Finish checking market pairs")
+
+	return nil
 }
 
-func (tb *TelegramBot) ReportMarketPairStatistics(date time.Time) {
+func (tb *TelegramBot) ReportMarketPairStatistics(date time.Time) error {
 	tb.logger.Infof("Start reporting market pair statistics")
 
 	textMsg := "<strong>[Statistics for the past 7 days]</strong>\n\n"
@@ -484,6 +506,8 @@ func (tb *TelegramBot) ReportMarketPairStatistics(date time.Time) {
 	}
 
 	tb.logger.Infof("Finish reporting market pair statistics")
+
+	return nil
 }
 
 func formatTable(token string, rulesStats []*models.Rule, sortRules bool) string {

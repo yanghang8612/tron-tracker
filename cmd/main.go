@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +17,7 @@ import (
 	"tron-tracker/tron"
 
 	"github.com/robfig/cron/v3"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -37,36 +39,63 @@ func main() {
 	tgBot := bot.New(&cfg.Bot, db, updater)
 	tgBot.Start()
 
-	c := cron.New(cron.WithSeconds())
-	_, _ = c.AddFunc("0 0 */1 * * *", func() {
-		db.DoUSDTSupplyStatistics()
-	})
-	_, _ = c.AddFunc("0 */5 5-12 * * *", func() {
-		db.DoTronLinkWeeklyStatistics(time.Now(), false)
-	})
-	_, _ = c.AddFunc("0 */10 * * * *", func() {
-		tgBot.DoMarketPairStatistics()
-	})
-	_, _ = c.AddFunc("0 0 0 * * *", func() {
-		tgBot.DoHoldingsStatistics()
-	})
-	_, _ = c.AddFunc("0 0 7 * * 0,2-4,6", func() {
-		tgBot.CheckMarketPairs(false)
-	})
-	_, _ = c.AddFunc("0 0 7 * * 1,5", func() {
-		tgBot.CheckMarketPairs(true)
-	})
-	_, _ = c.AddFunc("30 1/30 * * * *", func() {
-		tgBot.DoTokenListingStatistics()
-	})
-	_, _ = c.AddFunc("0 */10 * * * *", func() {
-		tracker.Report()
-		db.Report()
+	loggerForCron := cron.PrintfLogger(zap.NewStdLog(zap.L()))
+	c := cron.New(cron.WithSeconds(), cron.WithLogger(loggerForCron), cron.WithChain(cron.Recover(loggerForCron)))
 
-		if !tracker.IsTracking() {
-			net.ReportWarningToSlack("Not tracking, Please check app or fullnode!")
+	wrapper := func(task func() error) func() {
+		return func() {
+			err := task()
+			if err != nil {
+				net.ReportWarningToSlack(err.Error())
+			}
 		}
-	})
+	}
+
+	// Schedule tasks for USDT Supply statistics
+	_, _ = c.AddFunc("0 0 */1 * * *", wrapper(func() error {
+		return db.DoUSDTSupplyStatistics()
+	}))
+
+	// TronLink data is no longer provided by us.
+	// _, _ = c.AddFunc("0 */5 5-12 * * *", func() {
+	// 	db.DoTronLinkWeeklyStatistics(time.Now(), false)
+	// })
+
+	_, _ = c.AddFunc("0 */10 * * * *",
+		wrapper(func() error {
+			return tgBot.DoMarketPairStatistics()
+		}))
+
+	_, _ = c.AddFunc("0 0 0 * * *",
+		wrapper(func() error {
+			return tgBot.DoHoldingsStatistics()
+		}))
+
+	_, _ = c.AddFunc("0 0 7 * * *",
+		wrapper(func() error {
+			if time.Now().Weekday() == time.Monday || time.Now().Weekday() == time.Friday {
+				return tgBot.CheckMarketPairs(true)
+			}
+			return tgBot.CheckMarketPairs(false)
+		}))
+
+	_, _ = c.AddFunc("30 1/30 * * * *",
+		wrapper(func() error {
+			return tgBot.DoTokenListingStatistics()
+		}))
+
+	_, _ = c.AddFunc("0 */10 * * * *",
+		wrapper(func() error {
+			tracker.Report()
+			db.Report()
+
+			if !tracker.IsTracking() {
+				return errors.New("not tracking, Please check app or fullnode")
+			}
+
+			return nil
+		}))
+
 	c.Start()
 
 	watchOSSignal(tracker, apiSrv)

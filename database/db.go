@@ -1584,13 +1584,13 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 	stats[tx.ToAddr+tx.Name].AddTo(tx)
 }
 
-func (db *RawDB) DoUSDTSupplyStatistics() {
+func (db *RawDB) DoUSDTSupplyStatistics() error {
 	db.logger.Infof("Start doing USDT supply statistics")
 
 	USDTSupply, err := net.GetUSDTSupply()
 	if err != nil {
 		db.logger.Errorf("Get USDT supply error: [%s]", err.Error())
-		return
+		return err
 	}
 
 	res := db.db.Create(USDTSupply)
@@ -1601,6 +1601,8 @@ func (db *RawDB) DoUSDTSupplyStatistics() {
 	}
 
 	db.logger.Infof("Finish doing USDT supply statistics")
+
+	return nil
 }
 
 func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {

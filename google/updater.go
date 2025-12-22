@@ -435,12 +435,12 @@ func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {
 
 	fees := make([]string, 0)
 	allFees := net.GetFees(startDate, 7)
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["tronLowPrice"]))
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["tronHighPrice"]))
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["tronLowPrice"]*burnPercent))
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["tronHighPrice"]*burnPercent))
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["ethLowPrice"]))
-	fees = append(fees, fmt.Sprintf("$%.2f", allFees["ethHighPrice"]))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["tronLowPrice"]))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["tronHighPrice"]))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["tronLowPrice"]*burnPercent))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["tronHighPrice"]*burnPercent))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["ethLowPrice"]))
+	fees = append(fees, fmt.Sprintf("$%.3f", allFees["ethHighPrice"]))
 
 	feeText := extractText(page.PageElements[4])
 	feeObjectId := page.PageElements[4].ObjectId

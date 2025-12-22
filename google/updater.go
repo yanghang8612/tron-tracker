@@ -874,10 +874,10 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[1], today)...)
 
 	template :=
-		"#Summary:#\n" +
-			"   Generated:\t%s  (%s)\n" +
-			"   Burned:\t%s  (%s)\n" +
-			"   #Net Inc.:\t%s  (%s)#\n\n" +
+		"#Weekly Summary:#\n" +
+			"   Generated:\t%s TRX (%s)\n" +
+			"   Burned:\t%s TRX (%s)\n" +
+			"   #Net Inc.:\t%s TRX#\n\n" +
 			"#Daily Burned and Net Inc.:#\n" +
 			"   %s:\t%s  (Net: %s)\n" +
 			"   %s:\t%s  (Net: %s)\n" +
@@ -895,7 +895,7 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	thisWeekBurned := int(u.db.GetTotalStatisticsByDateDays(thisWeek, 7).Fee / 1e6)
 	lastWeekBurned := int(u.db.GetTotalStatisticsByDateDays(lastWeek, 7).Fee / 1e6)
 	thisWeekNetInc := thisWeekGenerated - thisWeekBurned
-	lastWeekNetInc := lastWeekGenerated - lastWeekBurned
+	// lastWeekNetInc := lastWeekGenerated - lastWeekBurned
 
 	rows := make([][]string, 0)
 	for i := 0; i < 7; i++ {
@@ -914,7 +914,7 @@ func (u *Updater) updateNetIncData(page *slides.Page, today time.Time) {
 	textWithAnchor := fmt.Sprintf(template,
 		common.FormatWithUnits(float64(thisWeekGenerated)), common.FormatChangePercent(int64(lastWeekGenerated), int64(thisWeekGenerated)),
 		common.FormatWithUnits(float64(thisWeekBurned)), common.FormatChangePercent(int64(lastWeekBurned), int64(thisWeekBurned)),
-		common.FormatWithSignAndUnits(float64(thisWeekNetInc)), common.FormatAbChangePercent(float64(lastWeekNetInc), float64(thisWeekNetInc)),
+		common.FormatWithSignAndUnits(float64(thisWeekNetInc)),
 		rows[0][0], rows[0][1], rows[0][2],
 		rows[1][0], rows[1][1], rows[1][2],
 		rows[2][0], rows[2][1], rows[2][2],

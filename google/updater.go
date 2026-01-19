@@ -695,7 +695,11 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 		// Update percent cell
 		percent := fmt.Sprintf("%.2f%%", stat.Percent*100)
-		percentChange := fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastMarketPairStats[key].Percent)*100))
+		lastPercent := 0.0
+		if lastMarketPairStats[key] != nil {
+			lastPercent = lastMarketPairStats[key].Percent
+		}
+		percentChange := fmt.Sprintf("%s", common.FormatPercentWithSign((stat.Percent-lastPercent)*100))
 		reqs = append(reqs, buildTextAndChangeRequests(volumeTableObjectId, rowIndex, 3, percent, percentChange, 7, 5, false)...)
 
 		rowIndex++

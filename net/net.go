@@ -57,6 +57,20 @@ func ReportWarningToSlack(msg string) {
 	zap.S().Infof("Report to slack: %s", resp)
 }
 
+func ReportNotificationToSlack(msg string, isWarning bool) {
+	if isWarning {
+		msg += "\nPlease check this! <@U01DFGWQ2JK>"
+	}
+
+	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.NotifierWebhook)
+	if err != nil {
+		zap.S().Error(err)
+		return
+	}
+
+	zap.S().Infof("Report to slack: %s", resp)
+}
+
 func GetNowBlock() (*types.Block, error) {
 	url := configs.FullNode + GetNowBlockPath
 	var block types.Block

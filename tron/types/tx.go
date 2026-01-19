@@ -160,6 +160,7 @@ type Log struct {
 	Address string   `json:"address"`
 	Topics  []string `json:"topics"`
 	Data    string   `json:"data"`
+	ID      string   `json:"-"`
 }
 
 type InternalTx struct {
@@ -179,7 +180,7 @@ type TransactionInfo struct {
 	ContractResult         []string     `json:"contractResult"`
 	ContractAddress        string       `json:"contract_address"`
 	Receipt                Receipt      `json:"receipt"`
-	Logs                   []Log        `json:"logs"`
+	Logs                   []Log        `json:"log"`
 	InternalTxs            []InternalTx `json:"internal_transactions"`
 	Result                 string       `json:"result"`
 	WithdrawAmount         int64        `json:"withdraw_amount"`

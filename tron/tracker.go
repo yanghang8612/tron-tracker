@@ -28,6 +28,8 @@ type Tracker struct {
 	loopWG     sync.WaitGroup
 	quitCh     chan struct{}
 
+	filters map[string]chan<- types.Log
+
 	blockNumAtLastCheck uint
 
 	logger *zap.SugaredLogger
@@ -48,6 +50,8 @@ func NewTracker(db *database.RawDB) *Tracker {
 			return fmt.Sprintf("Tracked [%d] blocks in [%.2fs], speed [%.2fblocks/sec]", rs.CountInc, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime)
 		}),
 		quitCh: make(chan struct{}),
+
+		filters: make(map[string]chan<- types.Log),
 
 		blockNumAtLastCheck: db.GetLastTrackedBlockNum(),
 
@@ -82,6 +86,20 @@ func (t *Tracker) Report() {
 			t.db.GetLastTrackedBlockNum(),
 			time.Unix(t.db.GetLastTrackedBlockTime(), 0).Format("2006-01-02 15:04:05"))
 	}
+}
+
+func (t *Tracker) AddFilter(address, topic string, logCh chan<- types.Log) {
+	address = strings.ToLower(address)
+	if strings.HasPrefix(address, "0x") {
+		address = address[2:]
+	}
+
+	topic = strings.ToLower(topic)
+	if strings.HasPrefix(topic, "0x") {
+		topic = topic[2:]
+	}
+
+	t.filters[address+topic] = logCh
 }
 
 func (t *Tracker) loop() {
@@ -223,6 +241,13 @@ func (t *Tracker) doTrackBlock() {
 				// Filter zero value charger
 				if txToDB.FromAddr == fromAddr || common.ConvertHexToBigInt(log.Data).Int64() > 0 {
 					t.db.SaveCharger(fromAddr, toAddr, common.EncodeToBase58(log.Address))
+				}
+			}
+
+			if len(log.Topics) > 0 {
+				if logCh, ok := t.filters[log.Address+log.Topics[0]]; ok {
+					log.ID = txInfoList[idx].ID
+					logCh <- log
 				}
 			}
 		}

@@ -1,4 +1,6 @@
 [bot]
+  infura_token = "...(your infura token)..."
+  alert_bot_token = "...(your alert bot token)..."
   tracker_bot_token = "...(your trakcer bot token)..."
   volume_bot_token = "...(your volume bot token)..."
   valid_users = []
@@ -13,6 +15,7 @@
   fee_node = "...(your fee node)..."
   tronlink_webhook = "...(your tronlink slack webhook url)..."
   warning_webhook = "...(your warning slack webhook url)..."
+  notifier_webhook = "...(your notifier slack webhook url)..."
   cmc_api_key = "...(your cmc api key)..."
 [log]
   log_path = "logs"

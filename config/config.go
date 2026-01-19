@@ -7,6 +7,8 @@ import (
 )
 
 type BotConfig struct {
+	InfuraToken     string   `toml:"infura_token"`
+	AlertBotToken   string   `toml:"alert_bot_token"`
 	TrackerBotToken string   `toml:"tracker_bot_token"`
 	VolumeBotToken  string   `toml:"volume_bot_token"`
 	ValidUsers      []string `toml:"valid_users"`
@@ -27,6 +29,7 @@ type NetConfig struct {
 	FeeNode         string `toml:"fee_node"`
 	TronlinkWebhook string `toml:"tronlink_webhook"`
 	WarningWebhook  string `toml:"warning_webhook"`
+	NotifierWebhook string `toml:"notifier_webhook"`
 	CMCApiKey       string `toml:"cmc_api_key"`
 }
 

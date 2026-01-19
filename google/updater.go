@@ -680,7 +680,11 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 
 		// Update volume cell
 		volume := "$" + common.FormatWithUnits(stat.Volume)
-		volumeChange := common.FormatFloatChangePercent(lastMarketPairStats[key].Volume, stat.Volume)
+		lastVolume := 0.0
+		if lastMarketPairStats[key] != nil {
+			lastVolume = lastMarketPairStats[key].Volume
+		}
+		volumeChange := common.FormatFloatChangePercent(lastVolume, stat.Volume)
 		reqs = append(reqs, buildTextAndChangeRequests(volumeTableObjectId, rowIndex, 1, volume, volumeChange, 7, 5, false)...)
 
 		// Update depth cell

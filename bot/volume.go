@@ -142,6 +142,8 @@ func (vb *VolumeBot) Start() {
 					} else {
 						textMsg = "Too many arguments. Please use /report [YYYY-MM-DD] format."
 					}
+				case "check":
+					vb.CheckMarketPairs(false)
 				default:
 					textMsg = "Unknown command. Available commands: /start, /listrules, /addrule, /editrule, /report"
 				}

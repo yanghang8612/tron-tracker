@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -45,13 +46,26 @@ var (
 
 	TronUSDTAddress            = "a614f803b6fd780986a42c78ec9c7f77e6ded13c"
 	TronUSDCAddress            = "3487b63d30b5b2c87fb7ffa8bcfade38eaac1abe"
-	TronUSDTMultiWalletAddress = "fa695d6b065707cb4e0ef73b751c93347682bf2"
+	TronUSDTMultiWalletAddress = "0fa695d6b065707cb4e0ef73b751c93347682bf2"
 
 	BaseUSDCAddress = common.HexToAddress("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
 
 	AddedBlackListTopic = crypto.Keccak256Hash([]byte("AddedBlackList(address)"))
 	BlacklistedTopic    = crypto.Keccak256Hash([]byte("Blacklisted(address)"))
 	SubmissionTopic     = crypto.Keccak256Hash([]byte("Submission(uint256)"))
+
+	actionsMap = map[string]string{
+		"0xf2fde38b": "transferOwnership(address)",
+		"0x8456cb59": "pause()",
+		"0x3f4ba83a": "unpause()",
+		"0x0ecb93c0": "addBlackList(address)",
+		"0xe4997dc5": "removeBlackList(address)",
+		"0xf3bdc228": "destroyBlackFunds(address)",
+		"0x0753c30c": "deprecate(address)",
+		"0xcc872b66": "issue(uint256)",
+		"0xdb006a75": "redeem(uint256)",
+		"0xc0324c77": "setParams(uint256,uint256)",
+	}
 )
 
 type transaction struct {
@@ -70,6 +84,7 @@ type AlertBot struct {
 	baseClient       *ethclient.Client
 	lastBaseBlockNum uint64
 
+	parsedABI abi.ABI
 	tronLogCh chan types.Log
 }
 
@@ -92,6 +107,11 @@ func NewAlertBot(cfg *config.BotConfig, db *database.RawDB) *AlertBot {
 		panic(err)
 	}
 
+	parsedABI, err := abi.JSON(strings.NewReader(txABI))
+	if err != nil {
+		panic(err)
+	}
+
 	alertBot := &AlertBot{
 		Bot: NewBot("alert", cfg.AlertBotToken, -1, db, cfg.ValidUsers),
 
@@ -101,6 +121,7 @@ func NewAlertBot(cfg *config.BotConfig, db *database.RawDB) *AlertBot {
 		baseClient:       baseClient,
 		lastBaseBlockNum: lastBaseBlockNum,
 
+		parsedABI: parsedABI,
 		tronLogCh: make(chan types.Log, 1024),
 	}
 
@@ -108,31 +129,59 @@ func NewAlertBot(cfg *config.BotConfig, db *database.RawDB) *AlertBot {
 }
 
 func (ab *AlertBot) Start() {
-	ab.logger.Infof("Started telegram alert bot")
+	ab.logger.Infof("Started alert bot")
 
 	go func() {
-		select {
-		case vLog := <-ab.tronLogCh:
-			if AddedBlackListTopic.Cmp(common.HexToHash(vLog.Topics[0])) == 0 {
-				usr := tracker_common.EncodeToBase58(common.HexToAddress(vLog.Topics[1]).Hex()[2:])
-				ab.logger.Infof("Detected AddedBlackList event on TRON for address: %s, tx_hash: %s", usr, vLog.ID)
+		for {
+			select {
+			case vLog := <-ab.tronLogCh:
+				if AddedBlackListTopic.Cmp(common.HexToHash(vLog.Topics[0])) == 0 {
+					usr := tracker_common.EncodeToBase58(common.HexToAddress(vLog.Topics[1]).Hex()[2:])
+					ab.logger.Infof("Detected AddedBlackList event on TRON for address: %s, tx_hash: %s", usr, vLog.ID)
 
-				slackMsg := fmt.Sprintf("Found TRON USDT blacklisted address: `%s`, %s", usr, formatTronTxUrl(vLog.ID))
-				net.ReportNotificationToSlack(slackMsg, usr == TronHE)
-			} else if BlacklistedTopic.Cmp(common.HexToHash(vLog.Topics[0])) == 0 {
-				usr := tracker_common.EncodeToBase58(common.HexToAddress(vLog.Topics[1]).Hex()[2:])
-				ab.logger.Infof("Detected Blacklisted event on TRON for address: %s, tx_hash: %s", usr, vLog.ID)
+					slackMsg := fmt.Sprintf("Found `TRON` - :usdtlogo: blacklisted address: `%s`, %s", usr, formatTronTxUrl(vLog.ID))
+					net.ReportNotificationToSlack(slackMsg, usr == TronHE)
+				} else if BlacklistedTopic.Cmp(common.HexToHash(vLog.Topics[0])) == 0 {
+					usr := tracker_common.EncodeToBase58(common.HexToAddress(vLog.Topics[1]).Hex()[2:])
+					ab.logger.Infof("Detected Blacklisted event on TRON for address: %s, tx_hash: %s", usr, vLog.ID)
 
-				slackMsg := fmt.Sprintf("Found TRON USDC blacklisted address: `%s`, %s", usr, formatTronTxUrl(vLog.ID))
-				net.ReportNotificationToSlack(slackMsg, usr == TronHE)
-			} else {
-				txID := new(big.Int).SetBytes(common.HexToHash(vLog.Topics[1]).Bytes()).Uint64()
-				ab.logger.Infof("Detected Submission event on TRON for txID: %d, tx_hash: %s", txID, vLog.ID)
+					slackMsg := fmt.Sprintf("Found `TRON` - :usdclogo: blacklisted address: `%s`, %s", usr, formatTronTxUrl(vLog.ID))
+					net.ReportNotificationToSlack(slackMsg, usr == TronHE)
+				} else {
+					txID := new(big.Int).SetBytes(common.HexToHash(vLog.Topics[1]).Bytes()).Uint64()
+					ab.logger.Infof("Detected Submission event on TRON for txID: %d, tx_hash: %s", txID, vLog.ID)
 
-				slackMsg := fmt.Sprintf("Found TRON USDT multi-sig submission: %s\n"+
-					"> TxId: `%d`\n",
-					formatTronTxUrl(vLog.Data), txID)
-				net.ReportNotificationToSlack(slackMsg, false)
+					// trigger constant
+					originData, err := net.Trigger("TBPxhVAsuzoFnKyXtc1o2UySEydPHgATto",
+						"transactions(uint256)", vLog.Topics[1])
+					if err != nil {
+					}
+
+					var tx transaction
+					if err = ab.parsedABI.UnpackIntoInterface(&tx, "transactions", hexutil.MustDecode("0x"+originData)); err != nil {
+						ab.logger.Errorf("Failed to unpack ABI: %v", err)
+					}
+
+					txData := hexutil.Encode(tx.Data)
+					action := "unknown"
+					usr := ""
+					if len(txData) >= 10 {
+						if act, ok := actionsMap[txData[:10]]; ok {
+							action = act
+							if action == "addBlackList(address)" {
+								usr = tracker_common.EncodeToBase58(common.HexToAddress("0x" + txData[10+24:10+64]).Hex()[2:])
+							}
+						}
+					}
+					slackMsg := fmt.Sprintf("Found `TRON` - :usdtlogo: multi-sig submission: %s\n"+
+						"> TxId: `%d`\n"+
+						"> Destination: %s\n"+
+						"> Value: %s\n"+
+						"> Data: %s\n"+
+						"> Action: `%s`\n",
+						formatEthTxUrl(vLog.ID), txID, tx.Destination.Hex(), tx.Value.String(), txData, action)
+					net.ReportNotificationToSlack(slackMsg, usr == TronHE)
+				}
 			}
 		}
 	}()
@@ -179,34 +228,26 @@ func (ab *AlertBot) GetFilterLogs() {
 			usr := common.BytesToAddress(vLog.Data).Hex()
 			ab.logger.Infof("Detected AddedBlackList event on ETH for address: %s, tx_hash: %s", usr, vLog.TxHash.Hex())
 
-			slackMsg := fmt.Sprintf("Found ETH USDT blacklisted address: `%s`, %s", usr, formatEthTxUrl(vLog.TxHash.Hex()))
+			slackMsg := fmt.Sprintf("Found `ETH` - :usdtlogo: blacklisted address: `%s`, %s", usr, formatEthTxUrl(vLog.TxHash.Hex()))
 			net.ReportNotificationToSlack(slackMsg, usr == EthHE)
 		} else if vLog.Topics[0] == BlacklistedTopic {
 			usr := common.HexToAddress(vLog.Topics[1].Hex()).Hex()
 			ab.logger.Infof("Detected Blacklisted event on ETH for address: %s, tx_hash: %s", usr, vLog.TxHash.Hex())
 
-			slackMsg := fmt.Sprintf("Found ETH USDC blacklisted address: `%s`, %s", usr, formatEthTxUrl(vLog.TxHash.Hex()))
+			slackMsg := fmt.Sprintf("Found `ETH` - :usdclogo: blacklisted address: `%s`, %s", usr, formatEthTxUrl(vLog.TxHash.Hex()))
 			net.ReportNotificationToSlack(slackMsg, usr == EthHE)
 		} else {
 			txID := new(big.Int).SetBytes(vLog.Topics[1].Bytes()).Uint64()
 			ab.logger.Infof("Detected Submission event on ETH for txID: %d, tx_hash: %s", txID, vLog.TxHash.Hex())
 
 			var (
-				parsedABI abi.ABI
-				data      []byte
-				outBytes  []byte
-				tx        transaction
+				data     []byte
+				outBytes []byte
+				tx       transaction
 			)
 
-			// abi
-			parsedABI, err = abi.JSON(strings.NewReader(txABI))
-			if err != nil {
-				ab.logger.Errorf("Failed to parse ABI: %v", err)
-				continue
-			}
-
 			// calldata
-			data, err = parsedABI.Pack("transactions", new(big.Int).SetUint64(txID))
+			data, err = ab.parsedABI.Pack("transactions", new(big.Int).SetUint64(txID))
 			if err != nil {
 				ab.logger.Errorf("Failed to pack ABI: %v", err)
 			}
@@ -222,18 +263,24 @@ func (ab *AlertBot) GetFilterLogs() {
 			}
 
 			// 解码返回值
-			if err = parsedABI.UnpackIntoInterface(&tx, "transactions", outBytes); err != nil {
+			if err = ab.parsedABI.UnpackIntoInterface(&tx, "transactions", outBytes); err != nil {
 				ab.logger.Errorf("Failed to unpack ABI: %v", err)
 			}
 
-			txData := common.Bytes2Hex(tx.Data)
-			slackMsg := fmt.Sprintf("Found ETH USDT multi-sig submission: %s\n"+
+			txData := hexutil.Encode(tx.Data)
+			action := "unknown"
+			if len(txData) >= 10 {
+				if act, ok := actionsMap[txData[:10]]; ok {
+					action = act
+				}
+			}
+			slackMsg := fmt.Sprintf("Found `ETH` - :usdtlogo: multi-sig submission: %s\n"+
 				"> TxId: `%d`\n"+
 				"> Destination: %s\n"+
 				"> Value: %s\n"+
 				"> Data: %s\n"+
-				"> Executed: %v\n",
-				formatEthTxUrl(vLog.TxHash.Hex()), txID, tx.Destination.Hex(), tx.Value.String(), txData, tx.Executed)
+				"> Action: `%s`\n",
+				formatEthTxUrl(vLog.TxHash.Hex()), txID, tx.Destination.Hex(), tx.Value.String(), txData, action)
 			net.ReportNotificationToSlack(slackMsg, strings.Contains(txData, strings.ToLower(EthHE)[2:]))
 		}
 	}
@@ -272,7 +319,7 @@ func (ab *AlertBot) GetFilterLogs() {
 		usr := common.HexToAddress(vLog.Topics[1].Hex()).Hex()
 		ab.logger.Infof("Detected Blacklisted event on Base for address: %s, tx_hash: %s", usr, vLog.TxHash.Hex())
 
-		slackMsg := fmt.Sprintf("Found Base USDC blacklisted address: `%s`, %s", usr, formatBaseTxUrl(vLog.TxHash.Hex()))
+		slackMsg := fmt.Sprintf("Found `Base` - :usdclogo: blacklisted address: `%s`, %s", usr, formatBaseTxUrl(vLog.TxHash.Hex()))
 		net.ReportNotificationToSlack(slackMsg, usr == EthHE)
 	}
 

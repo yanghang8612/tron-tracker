@@ -54,7 +54,7 @@ func main() {
 		return func() {
 			err := task()
 			if err != nil {
-				net.ReportWarningToSlack(err.Error())
+				net.ReportWarningToSlack(err.Error(), true)
 			}
 		}
 	}

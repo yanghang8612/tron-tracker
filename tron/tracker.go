@@ -282,7 +282,7 @@ func (t *Tracker) doTrackBlock() {
 		// If there is concerned event, report to slack
 		if !t.isCatching && (txToDB.Type == 154 || txToDB.Type == 157) && len(txToDB.Amount.String()) >= 8+7 {
 			net.ReportWarningToSlack(fmt.Sprintf("[block - %d] - index %d: [%s] -> [%s], amount [%s]",
-				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)))
+				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)), true)
 		}
 	}
 	t.db.SaveTransactions(transactions)

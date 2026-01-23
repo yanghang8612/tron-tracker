@@ -35,9 +35,9 @@ func main() {
 	apiSrv := api.New(db, updater, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()
 
-	alertBot := bot.NewAlertBot(&cfg.Bot, db)
-	alertBot.Start()
-	alertBot.RegisterFilters(tracker)
+	// alertBot := bot.NewAlertBot(&cfg.Bot, db)
+	// alertBot.Start()
+	// alertBot.RegisterFilters(tracker)
 
 	trackerBot := bot.NewTrackerBot(&cfg.Bot, db, updater)
 	trackerBot.Start()
@@ -59,7 +59,7 @@ func main() {
 		}
 	}
 
-	_, _ = c.AddFunc("0 */1 * * * *", alertBot.GetFilterLogs)
+	// _, _ = c.AddFunc("0 */1 * * * *", alertBot.GetFilterLogs)
 
 	// Schedule tasks for USDT Supply statistics
 	_, _ = c.AddFunc("0 0 */1 * * *", wrapper(func() error {

@@ -41,14 +41,14 @@ var (
 	TronHE = "TKVnVyJiTzyCDgTkZRYc5LM4q8B7xXEbh5"
 
 	EthUSDTAddress            = common.HexToAddress("0xdAC17F958D2ee523a2206206994597C13D831ec7")
-	EthUSDCAddress            = common.HexToAddress("0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+	EthUSDCAddress            = common.HexToAddress("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
 	EthUSDTMultiWalletAddress = common.HexToAddress("0xC6CDE7C39eB2f0F0095F41570af89eFC2C1Ea828")
 
 	TronUSDTAddress            = "a614f803b6fd780986a42c78ec9c7f77e6ded13c"
 	TronUSDCAddress            = "3487b63d30b5b2c87fb7ffa8bcfade38eaac1abe"
 	TronUSDTMultiWalletAddress = "0fa695d6b065707cb4e0ef73b751c93347682bf2"
 
-	BaseUSDCAddress = common.HexToAddress("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913")
+	BaseUSDCAddress = common.HexToAddress("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 
 	AddedBlackListTopic = crypto.Keccak256Hash([]byte("AddedBlackList(address)"))
 	BlacklistedTopic    = crypto.Keccak256Hash([]byte("Blacklisted(address)"))

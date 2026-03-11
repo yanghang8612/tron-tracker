@@ -200,6 +200,10 @@ func GetMarketPairs(token, slug string) (string, []*models.MarketPairStatistic, 
 		return "", nil, err
 	}
 
+	if resp.StatusCode() != 200 {
+		return "", nil, fmt.Errorf("failed to get market pairs for %s: status code %d", token, resp.StatusCode())
+	}
+
 	var response MarketPairsResponse
 	err = json.Unmarshal(resp.Body(), &response)
 	if err != nil {

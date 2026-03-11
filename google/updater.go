@@ -377,7 +377,7 @@ func (u *Updater) Update(date time.Time) {
 	startDate := date.AddDate(0, 0, -7*13)
 	netIncData := make([][]interface{}, 0)
 	for i := 0; i < 13; i++ {
-		firstDayOfWeek := startDate.AddDate(0, 0, i*7)
+		firstDayOfWeek := startDate.AddDate(0, 0, (i+1)*7)
 
 		row := make([]interface{}, 0)
 		row = append(row, firstDayOfWeek.Format("2006-01-02"))

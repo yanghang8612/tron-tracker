@@ -25,7 +25,7 @@ var trimRules = regexp.MustCompile(`[.:\s-]+(?:` +
 	`SR|Partner|Service|Provider|Batch|Sender|Multisig|` +
 	// resource related
 	`Energy|Rent|Bank|Fee` +
-	`)\d*|\s+\d+$`)
+	`)\d*|\s+\d+$|[.:\s-]+$`)
 
 func TrimExchangeName(name string) string {
 	if strings.Contains(name, "Bitpie") || strings.Contains(name, "bitpie") {

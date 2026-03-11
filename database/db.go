@@ -335,10 +335,42 @@ func (db *RawDB) loadExchanges() {
 
 	exchanges := net.GetExchanges()
 	for _, exchange := range exchanges.Val {
-		exchange.Name = common.TrimExchangeName(exchange.OriginName)
+		exchange.Name = db.resolveExchangeName(common.TrimExchangeName(exchange.OriginName))
 		db.db.Create(&exchange)
 		db.exchanges[exchange.Address] = exchange
 	}
+}
+
+// resolveExchangeName resolves the canonical exchange name by checking existing exchanges.
+// When a case-insensitive match is found, it prefers the form with more uppercase letters
+// (e.g., "CoinEx" over "Coinex") to preserve meaningful casing.
+func (db *RawDB) resolveExchangeName(name string) string {
+	for _, e := range db.exchanges {
+		if strings.EqualFold(e.Name, name) {
+			if countUpper(name) > countUpper(e.Name) {
+				oldName := e.Name
+				for _, ex := range db.exchanges {
+					if ex.Name == oldName {
+						ex.Name = name
+					}
+				}
+				db.db.Model(&models.Exchange{}).Where("name = ?", oldName).Update("name", name)
+				return name
+			}
+			return e.Name
+		}
+	}
+	return name
+}
+
+func countUpper(s string) int {
+	n := 0
+	for _, c := range s {
+		if c >= 'A' && c <= 'Z' {
+			n++
+		}
+	}
+	return n
 }
 
 func (db *RawDB) updateExchanges() {
@@ -360,7 +392,7 @@ func (db *RawDB) updateExchanges() {
 				db.db.Model(&oldExchange).Update("origin_name", newExchange.OriginName)
 			}
 		} else {
-			newExchange.Name = common.TrimExchangeName(newExchange.OriginName)
+			newExchange.Name = db.resolveExchangeName(common.TrimExchangeName(newExchange.OriginName))
 			db.db.Create(&newExchange)
 			db.exchanges[newExchange.Address] = newExchange
 			db.logger.Infof("New exchange added: [%s - %s] - [%s]",

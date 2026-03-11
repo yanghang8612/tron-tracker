@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"os"
 	"strconv"
 	"strings"
@@ -176,7 +177,7 @@ func New(cfg *config.DBConfig) *RawDB {
 
 	rawDB.loadExchanges()
 	rawDB.loadChargers()
-	// rawDB.refreshChargers()
+	rawDB.refreshChargers()
 
 	return rawDB
 }
@@ -257,8 +258,9 @@ func (db *RawDB) refreshChargers() {
 	chargersToSave := make(map[string]*models.Charger)
 	count := 0
 	for _, charger := range db.chargers {
-		if charger.ExchangeName != common.TrimExchangeName(charger.ExchangeName) {
-			charger.ExchangeName = common.TrimExchangeName(charger.ExchangeName)
+		newName := db.resolveExchangeName(common.TrimExchangeName(charger.ExchangeName))
+		if charger.ExchangeName != newName {
+			charger.ExchangeName = newName
 
 			if charger.IsFake && len(charger.BackupAddress) == 0 {
 				charger.IsFake = false
@@ -321,8 +323,27 @@ func (db *RawDB) loadExchanges() {
 
 		db.logger.Info("Start building exchanges map")
 		for _, exchange := range exchanges {
+			newName := common.TrimExchangeName(exchange.OriginName)
+			if exchange.Name != newName {
+				db.logger.Infof("Exchange name re-trimmed: [%s] - [%s -> %s]",
+					exchange.Address, exchange.Name, newName)
+				exchange.Name = newName
+				db.db.Model(exchange).Update("name", newName)
+			}
 			db.exchanges[exchange.Address] = exchange
 		}
+
+		// Resolve case-insensitive duplicates (e.g., "Kucoin" -> "KuCoin")
+		for _, exchange := range db.exchanges {
+			resolved := db.resolveExchangeName(exchange.Name)
+			if exchange.Name != resolved {
+				db.logger.Infof("Exchange name normalized: [%s] - [%s -> %s]",
+					exchange.Address, exchange.Name, resolved)
+				exchange.Name = resolved
+				db.db.Model(exchange).Update("name", resolved)
+			}
+		}
+
 		db.logger.Info("Complete building exchanges map")
 
 		return
@@ -858,6 +879,42 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysUserToken(date time.Time, days 
 	}
 
 	return resultMap
+}
+
+func (db *RawDB) GetTransferSummary(date time.Time, days int, addresses []string, token string, minAmountLen int) (inCount, outCount int64, inAmount, outAmount *big.Int) {
+	inAmount = big.NewInt(0)
+	outAmount = big.NewInt(0)
+
+	type aggResult struct {
+		Cnt   int64
+		Total string
+	}
+
+	for i := 0; i < days; i++ {
+		tableName := "transactions_" + date.AddDate(0, 0, i).Format("060102")
+
+		var inRes aggResult
+		db.db.Table(tableName).
+			Select("COUNT(*) as cnt, CAST(COALESCE(SUM(CAST(amount AS DECIMAL(65,0))), 0) AS CHAR) as total").
+			Where("to_addr IN ? AND name = ? AND LENGTH(amount) >= ?", addresses, token, minAmountLen).
+			Scan(&inRes)
+		inCount += inRes.Cnt
+		if amt, ok := new(big.Int).SetString(inRes.Total, 10); ok {
+			inAmount.Add(inAmount, amt)
+		}
+
+		var outRes aggResult
+		db.db.Table(tableName).
+			Select("COUNT(*) as cnt, CAST(COALESCE(SUM(CAST(amount AS DECIMAL(65,0))), 0) AS CHAR) as total").
+			Where("from_addr IN ? AND name = ? AND LENGTH(amount) >= ?", addresses, token, minAmountLen).
+			Scan(&outRes)
+		outCount += outRes.Cnt
+		if amt, ok := new(big.Int).SetString(outRes.Total, 10); ok {
+			outAmount.Add(outAmount, amt)
+		}
+	}
+
+	return
 }
 
 func (db *RawDB) GetExchangeStatisticsByDateDays(date time.Time, days int) map[string]*models.ExchangeStatistic {
@@ -2264,11 +2321,11 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	// End of flushing user token statistics
 	db.logger.Info(reporter.Finish("Flushing user_token_stats"))
 
+	// Refresh chargers before exchange statistics so names are up-to-date
+	db.refreshChargers()
+
 	// Start doing exchange statistics
 	db.DoExchangeStatistics(cache.date)
-
-	// Refresh chargers
-	db.refreshChargers()
 
 	db.logger.Infof("Complete flushing cache to DB for date [%s]", cache.date)
 }

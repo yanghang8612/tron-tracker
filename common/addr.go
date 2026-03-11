@@ -16,7 +16,16 @@ func EncodeToBase58(addrInHex string) string {
 	return base58.CheckEncode(addressBytes, 0x41)
 }
 
-var trimRules = regexp.MustCompile(`[.:\s-]+(?:Global|Reserves|Exchange|Deposit(?:AndWithdraw)?|[Ww]allet|[Hh]ot|[Cc]old|[Ww]arm)\d*|\s+\d+$`)
+var trimRules = regexp.MustCompile(`[.:\s-]+(?:` +
+	// exchange/wallet types
+	`Global|Reserves|Exchange|Deposit(?:AndWithdraw)?|[Ww]allet|[Hh]ot|[Cc]old|[Ww]arm|` +
+	// function/service descriptors
+	`cross-chain|Bridge|Funder|Marketing|Autobot|Earn|[Dd]e[Ff]i|` +
+	// roles/identifiers
+	`SR|Partner|Service|Provider|Batch|Sender|Multisig|` +
+	// resource related
+	`Energy|Rent|Bank|Fee` +
+	`)\d*|\s+\d+$`)
 
 func TrimExchangeName(name string) string {
 	if strings.Contains(name, "Bitpie") || strings.Contains(name, "bitpie") {

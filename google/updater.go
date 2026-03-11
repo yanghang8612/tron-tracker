@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"math/big"
 	"net/http"
 	"os"
 	"regexp"
@@ -1144,28 +1145,90 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	oneWeekAgo := today.AddDate(0, 0, -7)
 
 	// Update the value of digital assets held
-	thisSTRXPrice := u.db.GetClosePriceByTokenDate("sTRX", today)
-	lastSTRXPrice := u.db.GetClosePriceByTokenDate("sTRX", oneWeekAgo)
-	user := "TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT"
-	sTRX := "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5"
-	thisSTRXAmount := common.DropDecimal(common.ConvertDecToBigInt(u.db.GetHoldingsStatistic(today, user, sTRX).Balance), 18)
-	lastSTRXAmount := common.DropDecimal(common.ConvertDecToBigInt(u.db.GetHoldingsStatistic(oneWeekAgo, user, sTRX).Balance), 18)
-	thisHeldValue := thisSTRXPrice * float64(thisSTRXAmount.Int64())
-	lastHeldValue := lastSTRXPrice * float64(lastSTRXAmount.Int64())
-	heldAsset := fmt.Sprintf("%s   sTRX   /   $%s", common.FormatWithUnits(float64(thisSTRXAmount.Int64())), common.FormatWithUnits(thisHeldValue))
+	srmAddresses := []string{
+		"TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6", // sunewikeSRM
+		"TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT", // SRMTroninc
+	}
+	type srmToken struct {
+		symbol   string
+		address  string
+		decimals int
+	}
+	srmTokens := []srmToken{
+		{"sTRX", "TU3kjFuhtEo42tsCBtfYUAZxoqQ4yuSLQ5", 18},
+		{"TRX", "TRX", 6},
+	}
+
+	thisHeldValue, lastHeldValue := 0.0, 0.0
+	holdingsNote := strings.Builder{}
+	holdingsNote.WriteString("链上目前持有的代币如下：\n")
+	valueData := make([][]interface{}, 0, len(srmTokens))
+
+	for _, token := range srmTokens {
+		thisPrice := u.db.GetClosePriceByTokenDate(token.symbol, today)
+		lastPrice := u.db.GetClosePriceByTokenDate(token.symbol, oneWeekAgo)
+		thisAmount, lastAmount := big.NewInt(0), big.NewInt(0)
+
+		for _, addr := range srmAddresses {
+			thisBalance := common.DropDecimal(common.ConvertDecToBigInt(
+				u.db.GetHoldingsStatistic(today, addr, token.address).Balance), token.decimals)
+			lastBalance := common.DropDecimal(common.ConvertDecToBigInt(
+				u.db.GetHoldingsStatistic(oneWeekAgo, addr, token.address).Balance), token.decimals)
+			thisAmount.Add(thisAmount, thisBalance)
+			lastAmount.Add(lastAmount, lastBalance)
+		}
+
+		thisTokenValue := thisPrice * float64(thisAmount.Int64())
+		lastTokenValue := lastPrice * float64(lastAmount.Int64())
+		thisHeldValue += thisTokenValue
+		lastHeldValue += lastTokenValue
+
+		holdingsNote.WriteString(fmt.Sprintf("  - %s，%s枚，价值$%s\n",
+			token.symbol, humanize.Commaf(float64(thisAmount.Int64())), common.FormatWithUnits(thisTokenValue)))
+
+		valueData = append(valueData, []interface{}{
+			fmt.Sprintf("%s (%s)", token.symbol, common.FormatWithUnits(float64(thisAmount.Int64()))),
+			thisTokenValue,
+		})
+	}
+
+	// Weekly transfers (last Tuesday to this Monday)
+	daysSinceMonday := (int(today.Weekday()) + 6) % 7
+	thisMonday := today.AddDate(0, 0, -daysSinceMonday)
+	lastTuesday := thisMonday.AddDate(0, 0, -6)
+
+	holdingsNote.WriteString("上周代币转入/转出情况（上周二到本周一）：\n")
+	for _, token := range srmTokens {
+		// minAmountLen filters out small transfers (e.g., 9 digits for TRX = 1000 TRX)
+		minAmountLen := token.decimals + 3
+		inCount, outCount, inAmount, outAmount := u.db.GetTransferSummary(lastTuesday, 7, srmAddresses, token.address, minAmountLen)
+		inAmountDropped := common.DropDecimal(inAmount, token.decimals)
+		outAmountDropped := common.DropDecimal(outAmount, token.decimals)
+
+		if inCount == 0 && outCount == 0 {
+			holdingsNote.WriteString(fmt.Sprintf("  - %s：无转入/转出\n", token.symbol))
+		} else {
+			inStr := "无转入"
+			if inCount > 0 {
+				inStr = fmt.Sprintf("转入%d笔，共计%s枚", inCount, humanize.Commaf(float64(inAmountDropped.Int64())))
+			}
+			outStr := "无转出"
+			if outCount > 0 {
+				outStr = fmt.Sprintf("转出%d笔，共计%s枚", outCount, humanize.Commaf(float64(outAmountDropped.Int64())))
+			}
+			holdingsNote.WriteString(fmt.Sprintf("  - %s：%s；%s\n", token.symbol, inStr, outStr))
+		}
+	}
+
+	heldAsset := "$" + common.FormatWithUnits(thisHeldValue)
 	heldAssetChange := common.FormatFloatChangePercent(lastHeldValue, thisHeldValue)
 	heldAssetObjectId := page.PageElements[17].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
 
 	// Update the value of digital assets held in the Stock sheet
-	valueData := make([][]interface{}, 1)
-	valueData[0] = make([]interface{}, 2)
-	valueData[0][0] = fmt.Sprintf("sTRX (%s)", common.FormatWithUnits(float64(thisSTRXAmount.Int64())))
-	valueData[0][1] = thisHeldValue
-	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId, "SRM!I2:J2",
-		&sheets.ValueRange{
-			Values: valueData,
-		}).ValueInputOption("USER_ENTERED").Do()
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId,
+		fmt.Sprintf("SRM!I2:J%d", 1+len(srmTokens)),
+		&sheets.ValueRange{Values: valueData}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update Stock sheet: %v", err)
 	}
@@ -1219,9 +1282,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (33.47M股) + PIPE Warrants (220M股)\n"+
 		"  - 注意不同网站在计算Cap时在计不计入PIPE Warrants上有差异，导致其显示市值不同\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
-		"链上地址目前只持有一种代币为sTRX，共持有%s枚sTRX\n\n"+
+		"%s\n"+
 		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+
-		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", humanize.Commaf(float64(thisSTRXAmount.Int64())), stockDataStr.String())
+		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", holdingsNote.String(), stockDataStr.String())
 	noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 	reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
 

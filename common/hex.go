@@ -21,6 +21,9 @@ func ConvertDecToBigInt(decStr string) *big.Int {
 }
 
 func WithDecimal(value *big.Int, decimals int) *big.Int {
+	if value == nil {
+		return big.NewInt(0)
+	}
 	ten := big.NewInt(10)
 	exp := big.NewInt(int64(decimals))
 	multiplier := new(big.Int).Exp(ten, exp, nil)
@@ -28,6 +31,9 @@ func WithDecimal(value *big.Int, decimals int) *big.Int {
 }
 
 func DropDecimal(value *big.Int, decimals int) *big.Int {
+	if value == nil {
+		return big.NewInt(0)
+	}
 	ten := big.NewInt(10)
 	exp := big.NewInt(int64(decimals))
 	divisor := new(big.Int).Exp(ten, exp, nil)

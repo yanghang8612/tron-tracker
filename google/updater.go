@@ -1301,7 +1301,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
 		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (33.47M股) + PIPE Warrants (220M股)\n"+
 		"  - 注意不同网站在计算Cap时在计不计入PIPE Warrants上有差异，导致其显示市值不同\n"+
-		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n"+
+		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n\n"+
 		"%s\n"+
 		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+
 		"SRMTroninc: TEySEZLJf6rs2mCujGpDEsgoMVWKLAk9mT\n\n%s\n", holdingsNote.String(), stockDataStr.String())

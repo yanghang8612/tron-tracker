@@ -1161,7 +1161,10 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 
 	thisHeldValue, lastHeldValue := 0.0, 0.0
 	var thisSTRXAmount *big.Int
-	var thisSTRXValue float64
+	var thisSTRXValue, lastSTRXValue float64
+
+	holdingsNote := strings.Builder{}
+	holdingsNote.WriteString("链上目前持有的代币如下：\n")
 
 	for _, token := range srmTokens {
 		thisPrice := u.db.GetAvgClosePriceByTokenDateDays(token.symbol, today.AddDate(0, 0, -7), 7)
@@ -1195,16 +1198,15 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		thisHeldValue += thisTokenValue
 		lastHeldValue += lastTokenValue
 
+		holdingsNote.WriteString(fmt.Sprintf("  - %s，%s枚，价值$%s\n",
+			token.symbol, humanize.Commaf(float64(thisAmount.Int64())), common.FormatWithUnits(thisTokenValue)))
+
 		if token.symbol == "sTRX" {
 			thisSTRXAmount = new(big.Int).Set(thisAmount)
 			thisSTRXValue = thisTokenValue
+			lastSTRXValue = lastTokenValue
 		}
 	}
-
-	// Build holdings note (sTRX only)
-	holdingsNote := strings.Builder{}
-	holdingsNote.WriteString(fmt.Sprintf("链上地址目前持有sTRX %s枚，价值$%s\n",
-		humanize.Commaf(float64(thisSTRXAmount.Int64())), common.FormatWithUnits(thisSTRXValue)))
 
 	// Weekly transfers (last Tuesday to this Monday)
 	daysSinceMonday := (int(today.Weekday()) + 6) % 7
@@ -1234,8 +1236,9 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		}
 	}
 
-	heldAsset := "$" + common.FormatWithUnits(thisHeldValue)
-	heldAssetChange := common.FormatFloatChangePercent(lastHeldValue, thisHeldValue)
+	heldAsset := fmt.Sprintf("%s   sTRX   /   $%s",
+		common.FormatWithUnits(float64(thisSTRXAmount.Int64())), common.FormatWithUnits(thisSTRXValue))
+	heldAssetChange := common.FormatFloatChangePercent(lastSTRXValue, thisSTRXValue)
 	heldAssetObjectId := page.PageElements[17].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
 

@@ -1160,18 +1160,30 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	}
 
 	thisHeldValue, lastHeldValue := 0.0, 0.0
-	holdingsNote := strings.Builder{}
-	holdingsNote.WriteString("链上目前持有的代币如下：\n")
-	valueData := make([][]interface{}, 0, len(srmTokens))
+	var thisSTRXAmount *big.Int
+	var thisSTRXValue float64
 
 	for _, token := range srmTokens {
-		thisPrice := u.db.GetClosePriceByTokenDate(token.symbol, today)
-		lastPrice := u.db.GetClosePriceByTokenDate(token.symbol, oneWeekAgo)
+		thisPrice := u.db.GetAvgClosePriceByTokenDateDays(token.symbol, today.AddDate(0, 0, -7), 7)
+		lastPrice := u.db.GetAvgClosePriceByTokenDateDays(token.symbol, today.AddDate(0, 0, -14), 7)
 		thisAmount, lastAmount := big.NewInt(0), big.NewInt(0)
 
 		for _, addr := range srmAddresses {
-			thisBalance := common.DropDecimal(common.ConvertDecToBigInt(
-				u.db.GetHoldingsStatistic(today, addr, token.address).Balance), token.decimals)
+			// Query current balance from fullnode API
+			var rawBalance *big.Int
+			var err error
+			if token.address == "TRX" {
+				rawBalance, err = net.GetAccountBalance(addr)
+			} else {
+				rawBalance, err = net.GetTRC20Balance(token.address, addr)
+			}
+			if err != nil {
+				u.logger.Errorf("Failed to get %s balance for %s: %v", token.symbol, addr, err)
+				rawBalance = big.NewInt(0)
+			}
+			thisBalance := common.DropDecimal(rawBalance, token.decimals)
+
+			// Historical balance from DB
 			lastBalance := common.DropDecimal(common.ConvertDecToBigInt(
 				u.db.GetHoldingsStatistic(oneWeekAgo, addr, token.address).Balance), token.decimals)
 			thisAmount.Add(thisAmount, thisBalance)
@@ -1183,14 +1195,16 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		thisHeldValue += thisTokenValue
 		lastHeldValue += lastTokenValue
 
-		holdingsNote.WriteString(fmt.Sprintf("  - %s，%s枚，价值$%s\n",
-			token.symbol, humanize.Commaf(float64(thisAmount.Int64())), common.FormatWithUnits(thisTokenValue)))
-
-		valueData = append(valueData, []interface{}{
-			fmt.Sprintf("%s (%s)", token.symbol, common.FormatWithUnits(float64(thisAmount.Int64()))),
-			thisTokenValue,
-		})
+		if token.symbol == "sTRX" {
+			thisSTRXAmount = new(big.Int).Set(thisAmount)
+			thisSTRXValue = thisTokenValue
+		}
 	}
+
+	// Build holdings note (sTRX only)
+	holdingsNote := strings.Builder{}
+	holdingsNote.WriteString(fmt.Sprintf("链上地址目前持有sTRX %s枚，价值$%s\n",
+		humanize.Commaf(float64(thisSTRXAmount.Int64())), common.FormatWithUnits(thisSTRXValue)))
 
 	// Weekly transfers (last Tuesday to this Monday)
 	daysSinceMonday := (int(today.Weekday()) + 6) % 7
@@ -1225,9 +1239,12 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	heldAssetObjectId := page.PageElements[17].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(heldAssetObjectId, -1, -1, heldAsset, heldAssetChange, 11, 7, true)...)
 
-	// Update the value of digital assets held in the Stock sheet
+	// Update the value of digital assets held in the Stock sheet (sTRX only)
+	valueData := [][]interface{}{
+		{fmt.Sprintf("sTRX (%s)", common.FormatWithUnits(float64(thisSTRXAmount.Int64()))), thisSTRXValue},
+	}
 	_, err = u.sheetsService.Spreadsheets.Values.Update(u.volumeId,
-		fmt.Sprintf("SRM!I2:J%d", 1+len(srmTokens)),
+		"SRM!I2:J2",
 		&sheets.ValueRange{Values: valueData}).ValueInputOption("USER_ENTERED").Do()
 	if err != nil {
 		u.logger.Errorf("Unable to update Stock sheet: %v", err)

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"tron-tracker/database/models"
 	"tron-tracker/tron/types"
 
+	"github.com/btcsuite/btcd/btcutil/base58"
 	"github.com/go-resty/resty/v2"
 	"go.uber.org/zap"
 )
@@ -24,6 +26,7 @@ type slackMessage struct {
 const (
 	GetBlockPath               = "/wallet/getblockbynum?num="
 	GetNowBlockPath            = "/wallet/getnowblock"
+	GetAccountPath             = "/wallet/getaccount"
 	GetTransactionInfoListPath = "/wallet/gettransactioninfobyblocknum?num="
 	TriggerPath                = "/wallet/triggerconstantcontract"
 )
@@ -149,6 +152,41 @@ func Trigger(addr, selector, param string) (string, error) {
 	}
 
 	return "", fmt.Errorf("no return value")
+}
+
+func GetAccountBalance(address string) (*big.Int, error) {
+	resData, err := client.R().SetBody(map[string]interface{}{
+		"address": address,
+		"visible": true,
+	}).Post(configs.FullNode + GetAccountPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var res struct {
+		Balance int64 `json:"balance"`
+	}
+	_ = json.Unmarshal(resData.Body(), &res)
+	return big.NewInt(res.Balance), nil
+}
+
+func GetTRC20Balance(contractAddr, ownerAddr string) (*big.Int, error) {
+	decoded, _, err := base58.CheckDecode(ownerAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid address %s: %w", ownerAddr, err)
+	}
+	param := fmt.Sprintf("%064x", new(big.Int).SetBytes(decoded))
+
+	result, err := Trigger(contractAddr, "balanceOf(address)", param)
+	if err != nil {
+		return nil, err
+	}
+
+	balance, ok := new(big.Int).SetString(result, 16)
+	if !ok {
+		return big.NewInt(0), nil
+	}
+	return balance, nil
 }
 
 func GetExchanges() *models.Exchanges {

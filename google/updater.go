@@ -1137,7 +1137,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, avgDailyVolume, avgDailyVolumeChange, 11, 7, true)...)
 
 	// Update the market cap
-	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*25346.8e4)
+	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*274382064)
 	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	marketCapObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)
@@ -1299,7 +1299,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Low/High]分别为上周内的最低价与最高价\n"+
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（按美元计价）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
-		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (33.47M股) + PIPE Warrants (220M股)\n"+
+		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (54.38M股) + PIPE Warrants (220M股)\n"+
 		"  - 注意不同网站在计算Cap时在计不计入PIPE Warrants上有差异，导致其显示市值不同\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n\n"+
 		"%s\n"+

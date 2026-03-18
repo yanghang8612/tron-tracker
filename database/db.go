@@ -473,17 +473,19 @@ func (db *RawDB) GetExchanges() map[string]*models.Exchange {
 }
 
 func (db *RawDB) AddOrOverrideExchange(addr, name string) {
+	resolved := db.resolveExchangeName(common.TrimExchangeName(name))
 	if exchange, ok := db.exchanges[addr]; ok {
-		db.logger.Infof("Updated exchange name: [%s] - [%s -> %s]", addr, exchange.Name, name)
+		db.logger.Infof("Updated exchange name: [%s] - [%s -> %s]", addr, exchange.Name, resolved)
 
-		exchange.Name = name
+		exchange.Name = resolved
+		exchange.OriginName = name
 		db.db.Save(exchange)
 	} else {
-		db.logger.Infof("Added exchange from asuka: [%s - %s]", addr, name)
+		db.logger.Infof("Added exchange from asuka: [%s - %s]", addr, resolved)
 
 		exchangeToSave := &models.Exchange{
 			Address:    addr,
-			Name:       name,
+			Name:       resolved,
 			OriginName: name,
 			FromAsuka:  true,
 		}

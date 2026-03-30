@@ -1,13 +1,11 @@
 package net
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/http"
+	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"tron-tracker/config"
@@ -411,42 +409,64 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 	return USDTSupply, nil
 }
 
-func GetStockData(date time.Time, days int) [][]interface{} {
-	symbol := "TRON.US"
-	start := date.AddDate(0, 0, -days*2).Format("20060102")
-	end := date.Format("20060102")
+type AlphaVantageResponse struct {
+	TimeSeries map[string]struct {
+		Open   string `json:"1. open"`
+		High   string `json:"2. high"`
+		Low    string `json:"3. low"`
+		Close  string `json:"4. close"`
+		Volume string `json:"5. volume"`
+	} `json:"Time Series (Daily)"`
+}
 
+func GetStockData(date time.Time, days int) [][]interface{} {
+	symbol := "TRON"
 	url := fmt.Sprintf(
-		"https://stooq.com/q/d/l/?s=%s&d1=%s&d2=%s&i=d",
-		symbol, start, end,
+		"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=%s&outputsize=compact&apikey=%s",
+		symbol, configs.AlphaVantageApiKey,
 	)
 
-	tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-	resp, err := resty.NewWithClient(&http.Client{Transport: tr}).R().Get(url)
+	resp, err := client.R().Get(url)
 	if err != nil {
 		zap.S().Errorf("Failed to fetch stock data for %s: %v", symbol, err)
 		return nil
 	}
 
-	var stockData [][]interface{}
-	lines := strings.Split(string(resp.Body()), "\r\n")
-	lines = lines[len(lines)-days:]
-	for _, line := range lines {
-		data := strings.Split(line, ",")
+	var response AlphaVantageResponse
+	if err = json.Unmarshal(resp.Body(), &response); err != nil {
+		zap.S().Errorf("Failed to parse stock data for %s: %v", symbol, err)
+		return nil
+	}
 
-		if len(data) < 6 {
-			continue
+	// Collect and sort dates
+	dates := make([]string, 0, len(response.TimeSeries))
+	for d := range response.TimeSeries {
+		dates = append(dates, d)
+	}
+	sort.Strings(dates)
+
+	// Filter dates up to the given date and take the last `days` entries
+	endDate := date.Format("2006-01-02")
+	var filtered []string
+	for _, d := range dates {
+		if d <= endDate {
+			filtered = append(filtered, d)
 		}
+	}
+	if len(filtered) > days {
+		filtered = filtered[len(filtered)-days:]
+	}
 
-		open, _ := strconv.ParseFloat(data[1], 64)
-		high, _ := strconv.ParseFloat(data[2], 64)
-		low, _ := strconv.ParseFloat(data[3], 64)
-		close, _ := strconv.ParseFloat(data[4], 64)
-		volume, _ := strconv.ParseFloat(data[5], 64)
+	var stockData [][]interface{}
+	for _, d := range filtered {
+		ts := response.TimeSeries[d]
+		open, _ := strconv.ParseFloat(ts.Open, 64)
+		high, _ := strconv.ParseFloat(ts.High, 64)
+		low, _ := strconv.ParseFloat(ts.Low, 64)
+		close, _ := strconv.ParseFloat(ts.Close, 64)
+		volume, _ := strconv.ParseFloat(ts.Volume, 64)
 
-		stockData = append(stockData, []interface{}{data[0][5:], open, high, low, close, volume})
+		stockData = append(stockData, []interface{}{d[5:], open, high, low, close, volume})
 	}
 
 	return stockData

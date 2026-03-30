@@ -25,12 +25,13 @@ type ServerConfig struct {
 }
 
 type NetConfig struct {
-	FullNode        string `toml:"full_node"`
-	FeeNode         string `toml:"fee_node"`
-	TronlinkWebhook string `toml:"tronlink_webhook"`
-	WarningWebhook  string `toml:"warning_webhook"`
-	NotifierWebhook string `toml:"notifier_webhook"`
-	CMCApiKey       string `toml:"cmc_api_key"`
+	FullNode           string `toml:"full_node"`
+	FeeNode            string `toml:"fee_node"`
+	TronlinkWebhook    string `toml:"tronlink_webhook"`
+	WarningWebhook     string `toml:"warning_webhook"`
+	NotifierWebhook    string `toml:"notifier_webhook"`
+	CMCApiKey          string `toml:"cmc_api_key"`
+	AlphaVantageApiKey string `toml:"alpha_vantage_api_key"`
 }
 
 type LogConfig struct {

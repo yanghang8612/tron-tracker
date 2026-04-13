@@ -1805,8 +1805,7 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
 	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
 		if _, ok := db.validTokens[tx.Name]; !ok ||
-			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 ||
-			tx.Amount.Length() < 6 {
+			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
 			return
 		}
 
@@ -1816,9 +1815,15 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 
 		if db.IsExchange(from) {
 			exchange := db.GetExchange(from).Name
-			setExchangeStatsMap(exchangeStats, date, exchange, token)
-			exchangeStats[exchange]["_"].AddWithdraw(tx)
-			exchangeStats[exchange][token].AddWithdraw(tx)
+
+			if _, toIsCharger := db.isCharger(to); toIsCharger {
+				setExchangeStatsMap(exchangeStats, date, exchange, token)
+				exchangeStats[exchange]["_"].CollectFee += tx.Fee
+			} else {
+				setExchangeStatsMap(exchangeStats, date, exchange, token)
+				exchangeStats[exchange]["_"].AddWithdraw(tx)
+				exchangeStats[exchange][token].AddWithdraw(tx)
+			}
 
 		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
 			exchange := db.GetExchange(to).Name
@@ -1827,6 +1832,9 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 			exchangeStats[exchange][token].AddCollect(tx)
 
 		} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+			if tx.Amount.Length() < 6 {
+				return
+			}
 			setExchangeStatsMap(exchangeStats, date, charger.ExchangeName, token)
 			exchangeStats[charger.ExchangeName]["_"].AddCharge(tx)
 			exchangeStats[charger.ExchangeName][token].AddCharge(tx)

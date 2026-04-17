@@ -156,12 +156,12 @@ func (s *Server) diffExchangesStatistic(c *gin.Context) {
 		return
 	}
 
-	go func() {
-		for i := 0; i < days; i++ {
-			queryDate := startDate.AddDate(0, 0, i)
-			s.db.DoExchangeStatisticsDiff(queryDate.Format("060102"))
-		}
-	}()
+	dates := make([]string, 0, days)
+	for i := 0; i < days; i++ {
+		dates = append(dates, startDate.AddDate(0, 0, i).Format("060102"))
+	}
+
+	go s.db.DoExchangeStatisticsDiff(dates)
 
 	c.JSON(200, "diff started, check logs")
 }

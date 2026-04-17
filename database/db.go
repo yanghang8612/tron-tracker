@@ -7,6 +7,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1850,70 +1851,71 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 }
 
 // DoExchangeStatisticsDiff runs both the previous and current classification
-// rules for DoExchangeStatistics over the given date and logs the delta per
-// exchange. It does NOT touch the database, so it is safe to run locally to
-// quantify the impact of the rule change introduced in d43b114.
-func (db *RawDB) DoExchangeStatisticsDiff(date string) {
-	db.logger.Infof("Start diff exchange statistics for date [%s]", date)
+// rules for DoExchangeStatistics over the given date range, accumulates the
+// totals across all dates, and logs a single aggregated delta per exchange
+// sorted by new-rule total fee (charge + collect + withdraw) descending.
+// It does NOT touch the database, so it is safe to run locally to quantify
+// the impact of the rule change introduced in d43b114.
+func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
+	if len(dates) == 0 {
+		return
+	}
 
-	oldStats := make(map[string]map[string]*models.ExchangeStatistic)
-	newStats := make(map[string]map[string]*models.ExchangeStatistic)
+	rangeLabel := dates[0]
+	if len(dates) > 1 {
+		rangeLabel = fmt.Sprintf("%s..%s", dates[0], dates[len(dates)-1])
+	}
+	db.logger.Infof("Start diff exchange statistics for [%s] (%d day(s))", rangeLabel, len(dates))
 
-	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
-		if _, ok := db.validTokens[tx.Name]; !ok ||
-			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
-			return
+	oldStats := make(map[string]*models.ExchangeStatistic)
+	newStats := make(map[string]*models.ExchangeStatistic)
+	get := func(m map[string]*models.ExchangeStatistic, exchange string) *models.ExchangeStatistic {
+		if _, ok := m[exchange]; !ok {
+			m[exchange] = models.NewExchangeStatistic(rangeLabel, exchange, "_")
 		}
+		return m[exchange]
+	}
 
-		from := tx.FromAddr
-		to := tx.ToAddr
-		token := db.validTokens[tx.Name]
-		smallAmount := tx.Amount.Length() < 6
-
-		// ---- previous rule: top-level small-amount filter, no CollectFee branch ----
-		if !smallAmount {
-			if db.IsExchange(from) {
-				exchange := db.GetExchange(from).Name
-				setExchangeStatsMap(oldStats, date, exchange, token)
-				oldStats[exchange]["_"].AddWithdraw(tx)
-				oldStats[exchange][token].AddWithdraw(tx)
-			} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
-				exchange := db.GetExchange(to).Name
-				setExchangeStatsMap(oldStats, date, exchange, token)
-				oldStats[exchange]["_"].AddCollect(tx)
-				oldStats[exchange][token].AddCollect(tx)
-			} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
-				setExchangeStatsMap(oldStats, date, charger.ExchangeName, token)
-				oldStats[charger.ExchangeName]["_"].AddCharge(tx)
-				oldStats[charger.ExchangeName][token].AddCharge(tx)
-			}
-		}
-
-		// ---- current rule: keep small-amount txs, split exchange->charger into CollectFee ----
-		if db.IsExchange(from) {
-			exchange := db.GetExchange(from).Name
-			if _, toIsCharger := db.isCharger(to); toIsCharger {
-				setExchangeStatsMap(newStats, date, exchange, token)
-				newStats[exchange]["_"].CollectFee += tx.Fee
-			} else {
-				setExchangeStatsMap(newStats, date, exchange, token)
-				newStats[exchange]["_"].AddWithdraw(tx)
-				newStats[exchange][token].AddWithdraw(tx)
-			}
-		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
-			exchange := db.GetExchange(to).Name
-			setExchangeStatsMap(newStats, date, exchange, token)
-			newStats[exchange]["_"].AddCollect(tx)
-			newStats[exchange][token].AddCollect(tx)
-		} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
-			if smallAmount {
+	for _, date := range dates {
+		db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
+			if _, ok := db.validTokens[tx.Name]; !ok ||
+				len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
 				return
 			}
-			setExchangeStatsMap(newStats, date, charger.ExchangeName, token)
-			newStats[charger.ExchangeName]["_"].AddCharge(tx)
-			newStats[charger.ExchangeName][token].AddCharge(tx)
-		}
-	})
+
+			from := tx.FromAddr
+			to := tx.ToAddr
+			smallAmount := tx.Amount.Length() < 6
+
+			// ---- previous rule: top-level small-amount filter, no CollectFee branch ----
+			if !smallAmount {
+				if db.IsExchange(from) {
+					get(oldStats, db.GetExchange(from).Name).AddWithdraw(tx)
+				} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+					get(oldStats, db.GetExchange(to).Name).AddCollect(tx)
+				} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+					get(oldStats, charger.ExchangeName).AddCharge(tx)
+				}
+			}
+
+			// ---- current rule: keep small-amount txs, split exchange->charger into CollectFee ----
+			if db.IsExchange(from) {
+				exchange := db.GetExchange(from).Name
+				if _, toIsCharger := db.isCharger(to); toIsCharger {
+					get(newStats, exchange).CollectFee += tx.Fee
+				} else {
+					get(newStats, exchange).AddWithdraw(tx)
+				}
+			} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+				get(newStats, db.GetExchange(to).Name).AddCollect(tx)
+			} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+				if smallAmount {
+					return
+				}
+				get(newStats, charger.ExchangeName).AddCharge(tx)
+			}
+		})
+	}
 
 	exchanges := make(map[string]struct{})
 	for k := range oldStats {
@@ -1923,20 +1925,29 @@ func (db *RawDB) DoExchangeStatisticsDiff(date string) {
 		exchanges[k] = struct{}{}
 	}
 
-	var totWTx, totWFee, totCTx, totCFee int64
-	empty := func(ex string) *models.ExchangeStatistic {
-		return models.NewExchangeStatistic(date, ex, "_")
+	type row struct {
+		exchange     string
+		oldAgg       *models.ExchangeStatistic
+		newAgg       *models.ExchangeStatistic
+		newTotalFee  int64
+		wTx, wFee    int64
+		cTx, cFee    int64
 	}
 
-	db.logger.Infof("Exchange statistics diff for date [%s] (new - old):", date)
+	empty := func(ex string) *models.ExchangeStatistic {
+		return models.NewExchangeStatistic(rangeLabel, ex, "_")
+	}
+
+	rows := make([]row, 0, len(exchanges))
+	var totWTx, totWFee, totCTx, totCFee int64
 	for exchange := range exchanges {
 		oldAgg := empty(exchange)
 		newAgg := empty(exchange)
-		if m, ok := oldStats[exchange]; ok && m["_"] != nil {
-			oldAgg = m["_"]
+		if v, ok := oldStats[exchange]; ok {
+			oldAgg = v
 		}
-		if m, ok := newStats[exchange]; ok && m["_"] != nil {
-			newAgg = m["_"]
+		if v, ok := newStats[exchange]; ok {
+			newAgg = v
 		}
 
 		wTx := newAgg.WithdrawTxCount - oldAgg.WithdrawTxCount
@@ -1953,19 +1964,38 @@ func (db *RawDB) DoExchangeStatisticsDiff(date string) {
 		totCTx += cTx
 		totCFee += cFee
 
+		rows = append(rows, row{
+			exchange:    exchange,
+			oldAgg:      oldAgg,
+			newAgg:      newAgg,
+			newTotalFee: newAgg.ChargeFee + newAgg.CollectFee + newAgg.WithdrawFee,
+			wTx:         wTx,
+			wFee:        wFee,
+			cTx:         cTx,
+			cFee:        cFee,
+		})
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		return rows[i].newTotalFee > rows[j].newTotalFee
+	})
+
+	db.logger.Infof("Exchange statistics diff for [%s] (new - old), sorted by new total fee desc:", rangeLabel)
+	for _, r := range rows {
 		db.logger.Infof(
-			"  [%s] withdraw_tx %s->%s (%+d), withdraw_fee %s->%s (%+d), collect_tx %s->%s (%+d), collect_fee %s->%s (%+d)",
-			exchange,
-			humanize.Comma(oldAgg.WithdrawTxCount), humanize.Comma(newAgg.WithdrawTxCount), wTx,
-			humanize.Comma(oldAgg.WithdrawFee), humanize.Comma(newAgg.WithdrawFee), wFee,
-			humanize.Comma(oldAgg.CollectTxCount), humanize.Comma(newAgg.CollectTxCount), cTx,
-			humanize.Comma(oldAgg.CollectFee), humanize.Comma(newAgg.CollectFee), cFee,
+			"  [%s] total_fee %s | withdraw_tx %s->%s (%+d), withdraw_fee %s->%s (%+d), collect_tx %s->%s (%+d), collect_fee %s->%s (%+d)",
+			r.exchange,
+			humanize.Comma(r.newTotalFee),
+			humanize.Comma(r.oldAgg.WithdrawTxCount), humanize.Comma(r.newAgg.WithdrawTxCount), r.wTx,
+			humanize.Comma(r.oldAgg.WithdrawFee), humanize.Comma(r.newAgg.WithdrawFee), r.wFee,
+			humanize.Comma(r.oldAgg.CollectTxCount), humanize.Comma(r.newAgg.CollectTxCount), r.cTx,
+			humanize.Comma(r.oldAgg.CollectFee), humanize.Comma(r.newAgg.CollectFee), r.cFee,
 		)
 	}
 
 	db.logger.Infof(
 		"Total diff for [%s]: withdraw_tx %+d, withdraw_fee %+d, collect_tx %+d, collect_fee %+d",
-		date, totWTx, totWFee, totCTx, totCFee,
+		rangeLabel, totWTx, totWFee, totCTx, totCFee,
 	)
 }
 

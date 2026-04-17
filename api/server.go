@@ -65,6 +65,7 @@ func New(db *database.RawDB, updater *google.Updater, serverCfg *config.ServerCo
 
 func (s *Server) Start() {
 	s.router.GET("/repair_exchange_statistics", s.repairExchangesStatistic)
+	s.router.GET("/diff_exchange_statistics", s.diffExchangesStatistic)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
 	s.router.GET("/exchange_statistics_now", s.exchangesStatisticNow)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
@@ -147,6 +148,22 @@ func (s *Server) repairExchangesStatistic(c *gin.Context) {
 	}()
 
 	c.JSON(200, "repairing started")
+}
+
+func (s *Server) diffExchangesStatistic(c *gin.Context) {
+	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
+	if !ok {
+		return
+	}
+
+	go func() {
+		for i := 0; i < days; i++ {
+			queryDate := startDate.AddDate(0, 0, i)
+			s.db.DoExchangeStatisticsDiff(queryDate.Format("060102"))
+		}
+	}()
+
+	c.JSON(200, "diff started, check logs")
 }
 
 func (s *Server) exchangesStatistic(c *gin.Context) {

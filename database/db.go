@@ -1849,6 +1849,126 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 	}
 }
 
+// DoExchangeStatisticsDiff runs both the previous and current classification
+// rules for DoExchangeStatistics over the given date and logs the delta per
+// exchange. It does NOT touch the database, so it is safe to run locally to
+// quantify the impact of the rule change introduced in d43b114.
+func (db *RawDB) DoExchangeStatisticsDiff(date string) {
+	db.logger.Infof("Start diff exchange statistics for date [%s]", date)
+
+	oldStats := make(map[string]map[string]*models.ExchangeStatistic)
+	newStats := make(map[string]map[string]*models.ExchangeStatistic)
+
+	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
+		if _, ok := db.validTokens[tx.Name]; !ok ||
+			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
+			return
+		}
+
+		from := tx.FromAddr
+		to := tx.ToAddr
+		token := db.validTokens[tx.Name]
+		smallAmount := tx.Amount.Length() < 6
+
+		// ---- previous rule: top-level small-amount filter, no CollectFee branch ----
+		if !smallAmount {
+			if db.IsExchange(from) {
+				exchange := db.GetExchange(from).Name
+				setExchangeStatsMap(oldStats, date, exchange, token)
+				oldStats[exchange]["_"].AddWithdraw(tx)
+				oldStats[exchange][token].AddWithdraw(tx)
+			} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+				exchange := db.GetExchange(to).Name
+				setExchangeStatsMap(oldStats, date, exchange, token)
+				oldStats[exchange]["_"].AddCollect(tx)
+				oldStats[exchange][token].AddCollect(tx)
+			} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+				setExchangeStatsMap(oldStats, date, charger.ExchangeName, token)
+				oldStats[charger.ExchangeName]["_"].AddCharge(tx)
+				oldStats[charger.ExchangeName][token].AddCharge(tx)
+			}
+		}
+
+		// ---- current rule: keep small-amount txs, split exchange->charger into CollectFee ----
+		if db.IsExchange(from) {
+			exchange := db.GetExchange(from).Name
+			if _, toIsCharger := db.isCharger(to); toIsCharger {
+				setExchangeStatsMap(newStats, date, exchange, token)
+				newStats[exchange]["_"].CollectFee += tx.Fee
+			} else {
+				setExchangeStatsMap(newStats, date, exchange, token)
+				newStats[exchange]["_"].AddWithdraw(tx)
+				newStats[exchange][token].AddWithdraw(tx)
+			}
+		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+			exchange := db.GetExchange(to).Name
+			setExchangeStatsMap(newStats, date, exchange, token)
+			newStats[exchange]["_"].AddCollect(tx)
+			newStats[exchange][token].AddCollect(tx)
+		} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+			if smallAmount {
+				return
+			}
+			setExchangeStatsMap(newStats, date, charger.ExchangeName, token)
+			newStats[charger.ExchangeName]["_"].AddCharge(tx)
+			newStats[charger.ExchangeName][token].AddCharge(tx)
+		}
+	})
+
+	exchanges := make(map[string]struct{})
+	for k := range oldStats {
+		exchanges[k] = struct{}{}
+	}
+	for k := range newStats {
+		exchanges[k] = struct{}{}
+	}
+
+	var totWTx, totWFee, totCTx, totCFee int64
+	empty := func(ex string) *models.ExchangeStatistic {
+		return models.NewExchangeStatistic(date, ex, "_")
+	}
+
+	db.logger.Infof("Exchange statistics diff for date [%s] (new - old):", date)
+	for exchange := range exchanges {
+		oldAgg := empty(exchange)
+		newAgg := empty(exchange)
+		if m, ok := oldStats[exchange]; ok && m["_"] != nil {
+			oldAgg = m["_"]
+		}
+		if m, ok := newStats[exchange]; ok && m["_"] != nil {
+			newAgg = m["_"]
+		}
+
+		wTx := newAgg.WithdrawTxCount - oldAgg.WithdrawTxCount
+		wFee := newAgg.WithdrawFee - oldAgg.WithdrawFee
+		cTx := newAgg.CollectTxCount - oldAgg.CollectTxCount
+		cFee := newAgg.CollectFee - oldAgg.CollectFee
+
+		if wTx == 0 && wFee == 0 && cTx == 0 && cFee == 0 {
+			continue
+		}
+
+		totWTx += wTx
+		totWFee += wFee
+		totCTx += cTx
+		totCFee += cFee
+
+		db.logger.Infof(
+			"  [%s] withdraw_tx %s->%s (%+d), withdraw_fee %s->%s (%+d), collect_tx %s->%s (%+d), collect_fee %s->%s (%+d)",
+			exchange,
+			humanize.Comma(oldAgg.WithdrawTxCount), humanize.Comma(newAgg.WithdrawTxCount), wTx,
+			humanize.Comma(oldAgg.WithdrawFee), humanize.Comma(newAgg.WithdrawFee), wFee,
+			humanize.Comma(oldAgg.CollectTxCount), humanize.Comma(newAgg.CollectTxCount), cTx,
+			humanize.Comma(oldAgg.CollectFee), humanize.Comma(newAgg.CollectFee), cFee,
+		)
+	}
+
+	db.logger.Infof(
+		"Total diff for [%s]: withdraw_tx %+d, withdraw_fee %+d, collect_tx %+d, collect_fee %+d",
+		date, totWTx, totWFee, totCTx, totCFee,
+	)
+}
+
 func (db *RawDB) ManualCountForDate(date string) {
 	db.logger.Infof("Start manual count for date [%s]", date)
 

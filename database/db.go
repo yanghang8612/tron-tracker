@@ -1817,7 +1817,7 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 		if db.IsExchange(from) {
 			exchange := db.GetExchange(from).Name
 
-			if _, toIsCharger := db.isCharger(to); toIsCharger {
+			if charger, toIsCharger := db.isCharger(to); toIsCharger && charger.ExchangeName != exchange {
 				setExchangeStatsMap(exchangeStats, date, exchange, token)
 				exchangeStats[exchange]["_"].CollectFee += tx.Fee
 			} else {
@@ -1901,7 +1901,7 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 			// ---- current rule: keep small-amount txs, split exchange->charger into CollectFee ----
 			if db.IsExchange(from) {
 				exchange := db.GetExchange(from).Name
-				if _, toIsCharger := db.isCharger(to); toIsCharger {
+				if charger, toIsCharger := db.isCharger(to); toIsCharger && charger.ExchangeName != exchange {
 					get(newStats, exchange).CollectFee += tx.Fee
 				} else {
 					get(newStats, exchange).AddWithdraw(tx)
@@ -1926,12 +1926,12 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 	}
 
 	type row struct {
-		exchange     string
-		oldAgg       *models.ExchangeStatistic
-		newAgg       *models.ExchangeStatistic
-		newTotalFee  int64
-		wTx, wFee    int64
-		cTx, cFee    int64
+		exchange    string
+		oldAgg      *models.ExchangeStatistic
+		newAgg      *models.ExchangeStatistic
+		newTotalFee int64
+		wTx, wFee   int64
+		cTx, cFee   int64
 	}
 
 	empty := func(ex string) *models.ExchangeStatistic {

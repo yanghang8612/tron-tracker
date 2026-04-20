@@ -369,6 +369,8 @@ type ExchangeStatistic struct {
 	WithdrawEnergyTotal int64        `json:"withdraw_energy_total"`
 	WithdrawEnergyFee   int64        `json:"withdraw_energy_fee"`
 	WithdrawEnergyUsage int64        `json:"withdraw_energy_usage"`
+	ActivationTxCount   int64        `json:"activation_tx_count"`
+	ActivationFee       int64        `json:"activation_fee"`
 }
 
 func NewExchangeStatistic(date, name, token string) *ExchangeStatistic {
@@ -412,6 +414,8 @@ func (o *ExchangeStatistic) Merge(other *ExchangeStatistic) {
 	o.WithdrawEnergyTotal += other.WithdrawEnergyTotal
 	o.WithdrawEnergyFee += other.WithdrawEnergyFee
 	o.WithdrawEnergyUsage += other.WithdrawEnergyUsage
+	o.ActivationTxCount += other.ActivationTxCount
+	o.ActivationFee += other.ActivationFee
 }
 
 func (o *ExchangeStatistic) AddCharge(tx *Transaction) {

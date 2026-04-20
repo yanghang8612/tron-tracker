@@ -401,6 +401,10 @@ func (db *RawDB) updateExchanges() {
 	}
 
 	exchanges := net.GetExchanges()
+	if len(exchanges.Val) == 0 {
+		return
+	}
+
 	for _, newExchange := range exchanges.Val {
 		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
 			if oldExchange.OriginName != newExchange.OriginName {

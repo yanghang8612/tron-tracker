@@ -1818,21 +1818,27 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 		to := tx.ToAddr
 		token := db.validTokens[tx.Name]
 
+		charger, toIsCharger := db.isCharger(to)
 		if db.IsExchange(from) {
 			exchange := db.GetExchange(from).Name
-			charger, toIsCharger := db.isCharger(to)
 
 			if !toIsCharger || charger.ExchangeName != exchange {
 				setExchangeStatsMap(exchangeStats, date, exchange, token)
 				exchangeStats[exchange]["_"].AddWithdraw(tx)
 				exchangeStats[exchange][token].AddWithdraw(tx)
+				return
 			}
-		} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+		}
+
+		if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
 			exchange := db.GetExchange(to).Name
 			setExchangeStatsMap(exchangeStats, date, exchange, token)
 			exchangeStats[exchange]["_"].AddCollect(tx)
 			exchangeStats[exchange][token].AddCollect(tx)
-		} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+			return
+		}
+
+		if toIsCharger {
 			if tx.Amount.Length() < 6 {
 				if (tx.Type == 0 || tx.Type == 1) && tx.Fee >= 1e6 {
 					setExchangeStatsMap(exchangeStats, date, charger.ExchangeName, "_")
@@ -1906,16 +1912,22 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 			}
 
 			// ---- current rule: keep small-amount txs, split exchange->own-charger into ActivationFee ----
+			charger, toIsCharger := db.isCharger(to)
 			if db.IsExchange(from) {
 				exchange := db.GetExchange(from).Name
-				charger, toIsCharger := db.isCharger(to)
 
 				if !toIsCharger || charger.ExchangeName != exchange {
 					get(newStats, exchange).AddWithdraw(tx)
+					return
 				}
-			} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
+			}
+
+			if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
 				get(newStats, db.GetExchange(to).Name).AddCollect(tx)
-			} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
+				return
+			}
+
+			if toIsCharger {
 				if smallAmount {
 					if (tx.Type == 0 || tx.Type == 1) && tx.Fee >= 1e6 {
 						stat := get(newStats, charger.ExchangeName)

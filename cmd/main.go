@@ -81,6 +81,11 @@ func main() {
 			return volumeBot.DoHoldingsStatistics()
 		}))
 
+	_, _ = c.AddFunc("0 0 0 * * *",
+		wrapper(func() error {
+			return db.DoExchangeResourceStatistics(time.Now().Format("060102"))
+		}))
+
 	_, _ = c.AddFunc("0 0 7 * * *",
 		func() {
 			if time.Now().Weekday() == time.Monday || time.Now().Weekday() == time.Friday {

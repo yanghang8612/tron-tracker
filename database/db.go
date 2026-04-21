@@ -130,6 +130,11 @@ func New(cfg *config.DBConfig) *RawDB {
 		panic(dbErr)
 	}
 
+	dbErr = db.AutoMigrate(&models.ExchangeResourceStatistic{})
+	if dbErr != nil {
+		panic(dbErr)
+	}
+
 	var trackingDateMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingDateKey}).Attrs(models.Meta{Val: cfg.StartDate}).FirstOrCreate(&trackingDateMeta)
 
@@ -1678,6 +1683,46 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
 	}
 	stats[tx.ToAddr+tx.Name].AddTo(tx)
+}
+
+func (db *RawDB) DoExchangeResourceStatistics(date string) error {
+	db.logger.Infof("Start doing exchange resource statistics for %s", date)
+
+	addrs := make([]string, 0, len(db.exchanges))
+	names := make(map[string]string, len(db.exchanges))
+	for addr, ex := range db.exchanges {
+		addrs = append(addrs, addr)
+		names[addr] = ex.Name
+	}
+
+	const batchSize = 200
+	batch := make([]*models.ExchangeResourceStatistic, 0, batchSize)
+
+	for _, addr := range addrs {
+		bandwidth, energy, err := net.GetAccountFrozenResources(addr)
+		if err != nil {
+			db.logger.Warnf("Get frozen resource failed for [%s]: %s", addr, err.Error())
+			continue
+		}
+		batch = append(batch, &models.ExchangeResourceStatistic{
+			Date:      date,
+			Address:   addr,
+			Name:      names[addr],
+			Bandwidth: bandwidth,
+			Energy:    energy,
+		})
+		if len(batch) >= batchSize {
+			db.db.Create(&batch)
+			batch = batch[:0]
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if len(batch) > 0 {
+		db.db.Create(&batch)
+	}
+
+	db.logger.Infof("Finish exchange resource statistics for %s", date)
+	return nil
 }
 
 func (db *RawDB) DoUSDTSupplyStatistics() error {

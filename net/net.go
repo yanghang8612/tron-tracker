@@ -36,6 +36,10 @@ var (
 
 func Init(cfg *config.NetConfig) {
 	configs = cfg
+	client.
+		SetRetryCount(3).
+		SetRetryWaitTime(500 * time.Millisecond).
+		SetRetryMaxWaitTime(3 * time.Second)
 }
 
 func ReportTronlinkStatsToSlack(msg string) {
@@ -166,6 +170,62 @@ func GetAccountBalance(address string) (*big.Int, error) {
 	}
 	_ = json.Unmarshal(resData.Body(), &res)
 	return big.NewInt(res.Balance), nil
+}
+
+// GetAccountFrozenResources returns the total frozen TRX (in sun) backing the
+// account's bandwidth and energy, matching java-tron's
+// Account.getAllFrozenBalanceForBandwidth / ForEnergy semantics: sum of v1
+// self-frozen, v2 self-frozen, and received delegations (v1 + v2).
+func GetAccountFrozenResources(address string) (bandwidth, energy int64, err error) {
+	resData, err := client.R().SetBody(map[string]interface{}{
+		"address": address,
+		"visible": true,
+	}).Post(configs.FullNode + GetAccountPath)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var res struct {
+		AcquiredDelegatedFrozenBalanceForBandwidth   int64 `json:"acquired_delegated_frozen_balance_for_bandwidth"`
+		AcquiredDelegatedFrozenV2BalanceForBandwidth int64 `json:"acquired_delegated_frozenV2_balance_for_bandwidth"`
+		Frozen                                       []struct {
+			FrozenBalance int64 `json:"frozen_balance"`
+		} `json:"frozen"`
+		FrozenV2 []struct {
+			Type   string `json:"type,omitempty"`
+			Amount int64  `json:"amount"`
+		} `json:"frozenV2"`
+		AccountResource struct {
+			FrozenBalanceForEnergy struct {
+				FrozenBalance int64 `json:"frozen_balance"`
+			} `json:"frozen_balance_for_energy"`
+			AcquiredDelegatedFrozenBalanceForEnergy   int64 `json:"acquired_delegated_frozen_balance_for_energy"`
+			AcquiredDelegatedFrozenV2BalanceForEnergy int64 `json:"acquired_delegated_frozenV2_balance_for_energy"`
+		} `json:"account_resource"`
+	}
+	if err := json.Unmarshal(resData.Body(), &res); err != nil {
+		return 0, 0, err
+	}
+
+	bandwidth = res.AcquiredDelegatedFrozenBalanceForBandwidth + res.AcquiredDelegatedFrozenV2BalanceForBandwidth
+	for _, f := range res.Frozen {
+		bandwidth += f.FrozenBalance
+	}
+
+	energy = res.AccountResource.FrozenBalanceForEnergy.FrozenBalance +
+		res.AccountResource.AcquiredDelegatedFrozenBalanceForEnergy +
+		res.AccountResource.AcquiredDelegatedFrozenV2BalanceForEnergy
+
+	for _, f := range res.FrozenV2 {
+		switch f.Type {
+		case "", "BANDWIDTH":
+			bandwidth += f.Amount
+		case "ENERGY":
+			energy += f.Amount
+		}
+	}
+
+	return bandwidth, energy, nil
 }
 
 func GetTRC20Balance(contractAddr, ownerAddr string) (*big.Int, error) {

@@ -704,3 +704,16 @@ type HoldingsStatistic struct {
 	Token   string `gorm:"size:34" json:"token,omitempty"`
 	Balance string `json:"balance,omitempty"`
 }
+
+// ExchangeResourceStatistic records, for each exchange address, the total
+// frozen TRX backing bandwidth and energy at snapshot time. Semantics match
+// java-tron's Account.getAllFrozenBalanceForBandwidth / ForEnergy: sum of v1
+// frozen, v2 frozen, and received delegations. Values are in sun.
+type ExchangeResourceStatistic struct {
+	ID        uint   `gorm:"primaryKey" json:"-"`
+	Date      string `gorm:"size:6;index" json:"date,omitempty"`
+	Address   string `gorm:"size:34;index" json:"address,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Bandwidth int64  `json:"bandwidth"`
+	Energy    int64  `json:"energy"`
+}

@@ -717,3 +717,11 @@ type ExchangeResourceStatistic struct {
 	Bandwidth int64  `json:"bandwidth"`
 	Energy    int64  `json:"energy"`
 }
+
+func (o *ExchangeResourceStatistic) Merge(other *ExchangeResourceStatistic) {
+	if other == nil {
+		return
+	}
+	o.Bandwidth += other.Bandwidth
+	o.Energy += other.Energy
+}

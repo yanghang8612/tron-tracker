@@ -68,6 +68,7 @@ func (s *Server) Start() {
 	s.router.GET("/diff_exchange_statistics", s.diffExchangesStatistic)
 	s.router.GET("/exchange_statistics", s.exchangesStatistic)
 	s.router.GET("/exchange_statistics_now", s.exchangesStatisticNow)
+	s.router.GET("/exchange_resource_statistics", s.exchangesResourceStatistic)
 	s.router.GET("/exchange_token_statistics", s.exchangesTokenStatistic)
 	s.router.GET("/exchange_token_daily_statistics", s.exchangesTokenDailyStatistic)
 	s.router.GET("/exchange_token_weekly_statistics", s.exchangesTokenWeeklyStatistic)
@@ -195,6 +196,34 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 		"total_fee":                 totalFee,
 		"total_energy_usage":        totalEnergyUsage,
 		"exchanges_total_statistic": resultArray,
+	})
+}
+
+func (s *Server) exchangesResourceStatistic(c *gin.Context) {
+	date, ok := getDateParam(c, "date", time.Now().AddDate(0, 0, -1))
+	if !ok {
+		return
+	}
+
+	stats := s.db.GetExchangeResourceStatisticsByDate(date)
+
+	totalBandwidth, totalEnergy := int64(0), int64(0)
+	result := make([]*models.ExchangeResourceStatistic, 0, len(stats))
+	for _, stat := range stats {
+		totalBandwidth += stat.Bandwidth
+		totalEnergy += stat.Energy
+		result = append(result, stat)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Energy > result[j].Energy
+	})
+
+	c.JSON(200, gin.H{
+		"date":            date.Format("060102"),
+		"total_bandwidth": totalBandwidth,
+		"total_energy":    totalEnergy,
+		"exchanges":       result,
 	})
 }
 

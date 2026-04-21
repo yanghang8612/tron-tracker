@@ -929,6 +929,24 @@ func (db *RawDB) GetTransferSummary(date time.Time, days int, addresses []string
 	return
 }
 
+func (db *RawDB) GetExchangeResourceStatisticsByDate(date time.Time) map[string]*models.ExchangeResourceStatistic {
+	resultMap := make(map[string]*models.ExchangeResourceStatistic)
+
+	var rows []*models.ExchangeResourceStatistic
+	db.db.Where("date = ?", date.Format("060102")).Find(&rows)
+
+	for _, row := range rows {
+		if _, ok := resultMap[row.Name]; !ok {
+			resultMap[row.Name] = &models.ExchangeResourceStatistic{
+				Date: row.Date,
+				Name: row.Name,
+			}
+		}
+		resultMap[row.Name].Merge(row)
+	}
+	return resultMap
+}
+
 func (db *RawDB) GetExchangeStatisticsByDateDays(date time.Time, days int) map[string]*models.ExchangeStatistic {
 	resultMap := make(map[string]*models.ExchangeStatistic)
 

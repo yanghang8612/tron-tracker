@@ -71,8 +71,12 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
+	return LoadConfigFrom("./config.toml")
+}
+
+func LoadConfigFrom(path string) *Config {
 	var config Config
-	data, err := toml.DecodeFile("./config.toml", &config)
+	data, err := toml.DecodeFile(path, &config)
 	if err != nil {
 		fmt.Println(data, err)
 	}

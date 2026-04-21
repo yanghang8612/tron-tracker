@@ -12,7 +12,7 @@ import (
 
 // Usage:
 //   go run ./cmd/backfill -date 260420
-//   go run ./cmd/backfill -date 260420,260421
+//   go run ./cmd/backfill -date 260420,260421 -config /data/tracker/config.toml
 //
 // Stamps the current on-chain frozen-TRX state of every known exchange
 // address with the given date(s) and inserts them into
@@ -21,9 +21,10 @@ import (
 // backfilled rows reflect "now", not the actual value at 00:00 of the date.
 func main() {
 	dateFlag := flag.String("date", time.Now().Format("060102"), "comma-separated YYMMDD dates to backfill")
+	configFlag := flag.String("config", "./config.toml", "path to config.toml")
 	flag.Parse()
 
-	cfg := config.LoadConfig()
+	cfg := config.LoadConfigFrom(*configFlag)
 	net.Init(&cfg.Net)
 	log.Init(&cfg.Log)
 

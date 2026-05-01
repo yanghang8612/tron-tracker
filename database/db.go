@@ -1738,19 +1738,24 @@ func (db *RawDB) DoExchangeResourceStatistics(date string) error {
 				continue
 			}
 			selfName := exchangeNames[addr]
+			var pairErr error
 			for _, to := range toAccounts {
 				toName, ok := exchangeNames[to]
 				if !ok || toName != selfName {
 					continue
 				}
+				time.Sleep(50 * time.Millisecond)
 				bw, en, derr := net.GetDelegatedV2Amount(addr, to)
 				if derr != nil {
 					db.logger.Warnf("Get delegated v2 amount [%s]->[%s] failed: %s", addr, to, derr.Error())
-					continue
+					pairErr = derr
+					break
 				}
 				internalBW += bw
 				internalEN += en
-				time.Sleep(50 * time.Millisecond)
+			}
+			if pairErr != nil {
+				continue
 			}
 		}
 

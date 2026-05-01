@@ -22,11 +22,13 @@ type slackMessage struct {
 }
 
 const (
-	GetBlockPath               = "/wallet/getblockbynum?num="
-	GetNowBlockPath            = "/wallet/getnowblock"
-	GetAccountPath             = "/wallet/getaccount"
-	GetTransactionInfoListPath = "/wallet/gettransactioninfobyblocknum?num="
-	TriggerPath                = "/wallet/triggerconstantcontract"
+	GetBlockPath                           = "/wallet/getblockbynum?num="
+	GetNowBlockPath                        = "/wallet/getnowblock"
+	GetAccountPath                         = "/wallet/getaccount"
+	GetTransactionInfoListPath             = "/wallet/gettransactioninfobyblocknum?num="
+	TriggerPath                            = "/wallet/triggerconstantcontract"
+	GetDelegatedResourceAccountIndexV2Path = "/wallet/getdelegatedresourceaccountindexv2"
+	GetDelegatedResourceV2Path             = "/wallet/getdelegatedresourcev2"
 )
 
 var (
@@ -172,22 +174,39 @@ func GetAccountBalance(address string) (*big.Int, error) {
 	return big.NewInt(res.Balance), nil
 }
 
-// GetAccountFrozenResources returns the total frozen TRX (in sun) backing the
-// account's bandwidth and energy, matching java-tron's
-// Account.getAllFrozenBalanceForBandwidth / ForEnergy semantics: sum of v1
-// self-frozen, v2 self-frozen, and received delegations (v1 + v2).
-func GetAccountFrozenResources(address string) (bandwidth, energy int64, err error) {
+// FrozenResources holds the six raw components of an account's frozen TRX
+// (in sun) needed for precise per-exchange stake accounting:
+//   - Self*:         v1 self-frozen + v2 self-frozen still on this account
+//   - DelegatedOut*: v1 + v2 stake this account has delegated out to others
+//   - Acquired*:     v1 + v2 stake delegated to this account by others
+//
+// "Owned stake" of this account = Self + DelegatedOut.
+// "Available stake" (java-tron getAllFrozenBalanceFor*) = Self + Acquired.
+type FrozenResources struct {
+	SelfBandwidth         int64
+	DelegatedOutBandwidth int64
+	AcquiredBandwidth     int64
+	SelfEnergy            int64
+	DelegatedOutEnergy    int64
+	AcquiredEnergy        int64
+}
+
+// GetAccountFrozenResources returns the 6 frozen-TRX components (in sun)
+// for the given address, derived from /wallet/getaccount.
+func GetAccountFrozenResources(address string) (FrozenResources, error) {
 	resData, err := client.R().SetBody(map[string]interface{}{
 		"address": address,
 		"visible": true,
 	}).Post(configs.FullNode + GetAccountPath)
 	if err != nil {
-		return 0, 0, err
+		return FrozenResources{}, err
 	}
 
 	var res struct {
 		AcquiredDelegatedFrozenBalanceForBandwidth   int64 `json:"acquired_delegated_frozen_balance_for_bandwidth"`
 		AcquiredDelegatedFrozenV2BalanceForBandwidth int64 `json:"acquired_delegated_frozenV2_balance_for_bandwidth"`
+		DelegatedFrozenBalanceForBandwidth           int64 `json:"delegated_frozen_balance_for_bandwidth"`
+		DelegatedFrozenV2BalanceForBandwidth         int64 `json:"delegated_frozenV2_balance_for_bandwidth"`
 		Frozen                                       []struct {
 			FrozenBalance int64 `json:"frozen_balance"`
 		} `json:"frozen"`
@@ -201,31 +220,59 @@ func GetAccountFrozenResources(address string) (bandwidth, energy int64, err err
 			} `json:"frozen_balance_for_energy"`
 			AcquiredDelegatedFrozenBalanceForEnergy   int64 `json:"acquired_delegated_frozen_balance_for_energy"`
 			AcquiredDelegatedFrozenV2BalanceForEnergy int64 `json:"acquired_delegated_frozenV2_balance_for_energy"`
+			DelegatedFrozenBalanceForEnergy           int64 `json:"delegated_frozen_balance_for_energy"`
+			DelegatedFrozenV2BalanceForEnergy         int64 `json:"delegated_frozenV2_balance_for_energy"`
 		} `json:"account_resource"`
 	}
 	if err := json.Unmarshal(resData.Body(), &res); err != nil {
-		return 0, 0, err
+		return FrozenResources{}, err
 	}
 
-	bandwidth = res.AcquiredDelegatedFrozenBalanceForBandwidth + res.AcquiredDelegatedFrozenV2BalanceForBandwidth
+	out := FrozenResources{
+		AcquiredBandwidth: res.AcquiredDelegatedFrozenBalanceForBandwidth +
+			res.AcquiredDelegatedFrozenV2BalanceForBandwidth,
+		DelegatedOutBandwidth: res.DelegatedFrozenBalanceForBandwidth +
+			res.DelegatedFrozenV2BalanceForBandwidth,
+		SelfEnergy: res.AccountResource.FrozenBalanceForEnergy.FrozenBalance,
+		AcquiredEnergy: res.AccountResource.AcquiredDelegatedFrozenBalanceForEnergy +
+			res.AccountResource.AcquiredDelegatedFrozenV2BalanceForEnergy,
+		DelegatedOutEnergy: res.AccountResource.DelegatedFrozenBalanceForEnergy +
+			res.AccountResource.DelegatedFrozenV2BalanceForEnergy,
+	}
 	for _, f := range res.Frozen {
-		bandwidth += f.FrozenBalance
+		out.SelfBandwidth += f.FrozenBalance
 	}
-
-	energy = res.AccountResource.FrozenBalanceForEnergy.FrozenBalance +
-		res.AccountResource.AcquiredDelegatedFrozenBalanceForEnergy +
-		res.AccountResource.AcquiredDelegatedFrozenV2BalanceForEnergy
-
 	for _, f := range res.FrozenV2 {
 		switch f.Type {
 		case "", "BANDWIDTH":
-			bandwidth += f.Amount
+			out.SelfBandwidth += f.Amount
 		case "ENERGY":
-			energy += f.Amount
+			out.SelfEnergy += f.Amount
 		}
 	}
+	return out, nil
+}
 
-	return bandwidth, energy, nil
+// GetAccountDelegatedTo returns the list of addresses to which `address` has
+// outstanding stake-2.0 delegations (the `toAccounts` field of
+// /wallet/getdelegatedresourceaccountindexv2). Returns nil (not error) when
+// the account has no outgoing delegations.
+func GetAccountDelegatedTo(address string) ([]string, error) {
+	resData, err := client.R().SetBody(map[string]interface{}{
+		"value":   address,
+		"visible": true,
+	}).Post(configs.FullNode + GetDelegatedResourceAccountIndexV2Path)
+	if err != nil {
+		return nil, err
+	}
+
+	var res struct {
+		ToAccounts []string `json:"toAccounts"`
+	}
+	if err := json.Unmarshal(resData.Body(), &res); err != nil {
+		return nil, err
+	}
+	return res.ToAccounts, nil
 }
 
 func GetTRC20Balance(contractAddr, ownerAddr string) (*big.Int, error) {

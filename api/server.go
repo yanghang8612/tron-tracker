@@ -207,22 +207,10 @@ func (s *Server) exchangesResourceStatistic(c *gin.Context) {
 
 	stats := s.db.GetExchangeResourceStatisticsByDate(date)
 
-	totalBandwidth, totalEnergy := int64(0), int64(0)
-	totalSelfBW, totalDelegatedOutBW, totalAcquiredBW, totalInternalBW := int64(0), int64(0), int64(0), int64(0)
-	totalSelfEN, totalDelegatedOutEN, totalAcquiredEN, totalInternalEN := int64(0), int64(0), int64(0), int64(0)
-
+	total := &models.ExchangeResourceStatistic{}
 	result := make([]*models.ExchangeResourceStatistic, 0, len(stats))
 	for _, stat := range stats {
-		totalBandwidth += stat.Bandwidth
-		totalEnergy += stat.Energy
-		totalSelfBW += stat.SelfBandwidth
-		totalDelegatedOutBW += stat.DelegatedOutBandwidth
-		totalAcquiredBW += stat.AcquiredBandwidth
-		totalInternalBW += stat.InternalDelegatedOutBandwidth
-		totalSelfEN += stat.SelfEnergy
-		totalDelegatedOutEN += stat.DelegatedOutEnergy
-		totalAcquiredEN += stat.AcquiredEnergy
-		totalInternalEN += stat.InternalDelegatedOutEnergy
+		total.Merge(stat)
 		result = append(result, stat)
 	}
 
@@ -232,17 +220,17 @@ func (s *Server) exchangesResourceStatistic(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"date":            date.Format("060102"),
-		"total_bandwidth": totalBandwidth,
-		"total_energy":    totalEnergy,
+		"total_bandwidth": total.Bandwidth,
+		"total_energy":    total.Energy,
 		"total_breakdown": gin.H{
-			"self_bandwidth":                   totalSelfBW,
-			"delegated_out_bandwidth":          totalDelegatedOutBW,
-			"acquired_bandwidth":               totalAcquiredBW,
-			"internal_delegated_out_bandwidth": totalInternalBW,
-			"self_energy":                      totalSelfEN,
-			"delegated_out_energy":             totalDelegatedOutEN,
-			"acquired_energy":                  totalAcquiredEN,
-			"internal_delegated_out_energy":    totalInternalEN,
+			"self_bandwidth":                   total.SelfBandwidth,
+			"delegated_out_bandwidth":          total.DelegatedOutBandwidth,
+			"acquired_bandwidth":               total.AcquiredBandwidth,
+			"internal_delegated_out_bandwidth": total.InternalDelegatedOutBandwidth,
+			"self_energy":                      total.SelfEnergy,
+			"delegated_out_energy":             total.DelegatedOutEnergy,
+			"acquired_energy":                  total.AcquiredEnergy,
+			"internal_delegated_out_energy":    total.InternalDelegatedOutEnergy,
 		},
 		"exchanges": result,
 	})

@@ -705,17 +705,45 @@ type HoldingsStatistic struct {
 	Balance string `json:"balance,omitempty"`
 }
 
-// ExchangeResourceStatistic records, for each exchange address, the total
-// frozen TRX backing bandwidth and energy at snapshot time. Semantics match
-// java-tron's Account.getAllFrozenBalanceForBandwidth / ForEnergy: sum of v1
-// frozen, v2 frozen, and received delegations. Values are in sun.
+// ExchangeResourceStatistic records, for each exchange address per day, the
+// raw frozen-TRX components needed to compute precise per-exchange stake.
+// All amounts are in sun.
+//
+// Per-address row total = Self + DelegatedOut + Acquired - InternalDelegatedOut
+// (cached in Bandwidth / Energy at write time).
+//
+// Per-exchange aggregate stake = Σ (row total) over all addresses of the
+// exchange. The InternalDelegatedOut subtraction prevents double-counting
+// when address A of an exchange has delegated to address B of the same
+// exchange (A.DelegatedOut + B.Acquired both record that flow once).
+//
+// Limitation: InternalDelegatedOut is computed via the stake-2.0
+// /wallet/getdelegatedresourcev2 endpoint only. Legacy stake-1.0 (v1)
+// intra-exchange delegations are not subtracted. No new v1 delegations
+// are possible on TRON since stake 2.0 became standard (Aug 2023), so
+// any residual overcount is from long-lived v1 leftovers.
 type ExchangeResourceStatistic struct {
-	ID        uint   `gorm:"primaryKey" json:"-"`
-	Date      string `gorm:"size:6;index" json:"date,omitempty"`
-	Address   string `gorm:"size:34;index" json:"address,omitempty"`
-	Name      string `json:"name,omitempty"`
-	Bandwidth int64  `json:"bandwidth"`
-	Energy    int64  `json:"energy"`
+	ID      uint   `gorm:"primaryKey" json:"-"`
+	Date    string `gorm:"size:6;index" json:"date,omitempty"`
+	Address string `gorm:"size:34;index" json:"address,omitempty"`
+	Name    string `json:"name,omitempty"`
+
+	// Total = Self + DelegatedOut + Acquired - InternalDelegatedOut.
+	// Cached at write time so existing read paths (e.g. API total sums)
+	// keep working without recomputing from components.
+	Bandwidth int64 `json:"bandwidth"`
+	Energy    int64 `json:"energy"`
+
+	// Raw components (sun).
+	SelfBandwidth                 int64 `json:"self_bandwidth"`
+	DelegatedOutBandwidth         int64 `json:"delegated_out_bandwidth"`
+	AcquiredBandwidth             int64 `json:"acquired_bandwidth"`
+	InternalDelegatedOutBandwidth int64 `json:"internal_delegated_out_bandwidth"`
+
+	SelfEnergy                 int64 `json:"self_energy"`
+	DelegatedOutEnergy         int64 `json:"delegated_out_energy"`
+	AcquiredEnergy             int64 `json:"acquired_energy"`
+	InternalDelegatedOutEnergy int64 `json:"internal_delegated_out_energy"`
 }
 
 func (o *ExchangeResourceStatistic) Merge(other *ExchangeResourceStatistic) {
@@ -724,4 +752,12 @@ func (o *ExchangeResourceStatistic) Merge(other *ExchangeResourceStatistic) {
 	}
 	o.Bandwidth += other.Bandwidth
 	o.Energy += other.Energy
+	o.SelfBandwidth += other.SelfBandwidth
+	o.DelegatedOutBandwidth += other.DelegatedOutBandwidth
+	o.AcquiredBandwidth += other.AcquiredBandwidth
+	o.InternalDelegatedOutBandwidth += other.InternalDelegatedOutBandwidth
+	o.SelfEnergy += other.SelfEnergy
+	o.DelegatedOutEnergy += other.DelegatedOutEnergy
+	o.AcquiredEnergy += other.AcquiredEnergy
+	o.InternalDelegatedOutEnergy += other.InternalDelegatedOutEnergy
 }

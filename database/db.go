@@ -1706,29 +1706,71 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 func (db *RawDB) DoExchangeResourceStatistics(date string) error {
 	db.logger.Infof("Start doing exchange resource statistics for %s", date)
 
+	// Snapshot the exchanges map upfront — updateExchanges may rewrite it
+	// concurrently. We need both the address list and a stable
+	// address→canonical-name map for the same-exchange check below.
 	addrs := make([]string, 0, len(db.exchanges))
-	names := make(map[string]string, len(db.exchanges))
+	exchangeNames := make(map[string]string, len(db.exchanges))
 	for addr, ex := range db.exchanges {
 		addrs = append(addrs, addr)
-		names[addr] = ex.Name
+		exchangeNames[addr] = ex.Name
 	}
 
 	const batchSize = 200
 	batch := make([]*models.ExchangeResourceStatistic, 0, batchSize)
 
 	for _, addr := range addrs {
-		bandwidth, energy, err := net.GetAccountFrozenResources(addr)
+		fr, err := net.GetAccountFrozenResources(addr)
 		if err != nil {
 			db.logger.Warnf("Get frozen resource failed for [%s]: %s", addr, err.Error())
 			continue
 		}
-		batch = append(batch, &models.ExchangeResourceStatistic{
-			Date:      date,
-			Address:   addr,
-			Name:      names[addr],
-			Bandwidth: bandwidth,
-			Energy:    energy,
-		})
+
+		var internalBW, internalEN int64
+		// Only inspect outgoing delegations if there is any — saves a
+		// round-trip for the (common) case of zero outgoing delegation.
+		if fr.DelegatedOutBandwidth > 0 || fr.DelegatedOutEnergy > 0 {
+			toAccounts, terr := net.GetAccountDelegatedTo(addr)
+			if terr != nil {
+				db.logger.Warnf("Get delegated-to failed for [%s]: %s", addr, terr.Error())
+			} else {
+				selfName := exchangeNames[addr]
+				for _, to := range toAccounts {
+					toName, ok := exchangeNames[to]
+					if !ok || toName != selfName {
+						continue
+					}
+					bw, en, derr := net.GetDelegatedV2Amount(addr, to)
+					if derr != nil {
+						db.logger.Warnf("Get delegated v2 amount [%s]->[%s] failed: %s", addr, to, derr.Error())
+						continue
+					}
+					internalBW += bw
+					internalEN += en
+					time.Sleep(50 * time.Millisecond)
+				}
+			}
+		}
+
+		row := &models.ExchangeResourceStatistic{
+			Date:    date,
+			Address: addr,
+			Name:    exchangeNames[addr],
+
+			SelfBandwidth:                 fr.SelfBandwidth,
+			DelegatedOutBandwidth:         fr.DelegatedOutBandwidth,
+			AcquiredBandwidth:             fr.AcquiredBandwidth,
+			InternalDelegatedOutBandwidth: internalBW,
+
+			SelfEnergy:                 fr.SelfEnergy,
+			DelegatedOutEnergy:         fr.DelegatedOutEnergy,
+			AcquiredEnergy:             fr.AcquiredEnergy,
+			InternalDelegatedOutEnergy: internalEN,
+		}
+		row.Bandwidth = row.SelfBandwidth + row.DelegatedOutBandwidth + row.AcquiredBandwidth - row.InternalDelegatedOutBandwidth
+		row.Energy = row.SelfEnergy + row.DelegatedOutEnergy + row.AcquiredEnergy - row.InternalDelegatedOutEnergy
+
+		batch = append(batch, row)
 		if len(batch) >= batchSize {
 			db.db.Create(&batch)
 			batch = batch[:0]

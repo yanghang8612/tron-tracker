@@ -201,3 +201,65 @@ func TestGetAccountDelegatedTo(t *testing.T) {
 		})
 	}
 }
+
+func TestGetDelegatedV2Amount(t *testing.T) {
+	cases := []struct {
+		name   string
+		resp   string
+		wantBW int64
+		wantEN int64
+	}{
+		{
+			name:   "no delegated resource",
+			resp:   `{"delegatedResource": []}`,
+			wantBW: 0,
+			wantEN: 0,
+		},
+		{
+			name: "single row both resources",
+			resp: `{"delegatedResource":[{"from":"A","to":"B","frozen_balance_for_bandwidth":1000,"frozen_balance_for_energy":2000}]}`,
+			wantBW: 1000,
+			wantEN: 2000,
+		},
+		{
+			name: "multiple rows summed",
+			resp: `{"delegatedResource":[
+				{"from":"A","to":"B","frozen_balance_for_bandwidth":100},
+				{"from":"A","to":"B","frozen_balance_for_energy":200},
+				{"from":"A","to":"B","frozen_balance_for_bandwidth":50,"frozen_balance_for_energy":75}
+			]}`,
+			wantBW: 150,
+			wantEN: 275,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != GetDelegatedResourceV2Path {
+					t.Fatalf("unexpected request path: %s", r.URL.Path)
+				}
+				body, _ := io.ReadAll(r.Body)
+				if !strings.Contains(string(body), `"visible":true`) {
+					t.Fatalf("expected visible:true, got: %s", string(body))
+				}
+				if !strings.Contains(string(body), `"fromAddress":"A"`) {
+					t.Fatalf("expected fromAddress:A, got: %s", string(body))
+				}
+				if !strings.Contains(string(body), `"toAddress":"B"`) {
+					t.Fatalf("expected toAddress:B, got: %s", string(body))
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = io.WriteString(w, tc.resp)
+			}))
+			defer srv.Close()
+
+			configs = &config.NetConfig{FullNode: srv.URL}
+
+			bw, en, err := GetDelegatedV2Amount("A", "B")
+			assert.Equal(t, err, nil)
+			assert.Equal(t, bw, tc.wantBW)
+			assert.Equal(t, en, tc.wantEN)
+		})
+	}
+}

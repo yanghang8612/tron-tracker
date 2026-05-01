@@ -275,6 +275,40 @@ func GetAccountDelegatedTo(address string) ([]string, error) {
 	return res.ToAccounts, nil
 }
 
+// GetDelegatedV2Amount returns the (bandwidth, energy) TRX amounts in sun
+// that `from` has delegated to `to` via stake-2.0
+// (/wallet/getdelegatedresourcev2). Multiple delegated_resource entries are
+// summed. Note: the API field names `frozen_balance_for_bandwidth` and
+// `frozen_balance_for_energy` here actually carry the *delegated* amount,
+// not the source's own frozen balance.
+func GetDelegatedV2Amount(from, to string) (int64, int64, error) {
+	resData, err := client.R().SetBody(map[string]interface{}{
+		"fromAddress": from,
+		"toAddress":   to,
+		"visible":     true,
+	}).Post(configs.FullNode + GetDelegatedResourceV2Path)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var res struct {
+		DelegatedResource []struct {
+			FrozenBalanceForBandwidth int64 `json:"frozen_balance_for_bandwidth"`
+			FrozenBalanceForEnergy    int64 `json:"frozen_balance_for_energy"`
+		} `json:"delegatedResource"`
+	}
+	if err := json.Unmarshal(resData.Body(), &res); err != nil {
+		return 0, 0, err
+	}
+
+	var bw, en int64
+	for _, r := range res.DelegatedResource {
+		bw += r.FrozenBalanceForBandwidth
+		en += r.FrozenBalanceForEnergy
+	}
+	return bw, en, nil
+}
+
 func GetTRC20Balance(contractAddr, ownerAddr string) (*big.Int, error) {
 	decoded, _, err := base58.CheckDecode(ownerAddr)
 	if err != nil {

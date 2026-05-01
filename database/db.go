@@ -1706,9 +1706,11 @@ func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[stri
 func (db *RawDB) DoExchangeResourceStatistics(date string) error {
 	db.logger.Infof("Start doing exchange resource statistics for %s", date)
 
-	// Snapshot the exchanges map upfront — updateExchanges may rewrite it
-	// concurrently. We need both the address list and a stable
-	// address→canonical-name map for the same-exchange check below.
+	// Snapshot exchange addrs+names into local slices/maps so the inner
+	// loop reads stable values even if updateExchanges later rewrites
+	// db.exchanges. Note: db.exchanges itself is not lock-protected — a
+	// rare midnight collision with updateExchanges' write path could
+	// still panic. That is a pre-existing condition, not introduced here.
 	addrs := make([]string, 0, len(db.exchanges))
 	exchangeNames := make(map[string]string, len(db.exchanges))
 	for addr, ex := range db.exchanges {
@@ -1733,22 +1735,22 @@ func (db *RawDB) DoExchangeResourceStatistics(date string) error {
 			toAccounts, terr := net.GetAccountDelegatedTo(addr)
 			if terr != nil {
 				db.logger.Warnf("Get delegated-to failed for [%s]: %s", addr, terr.Error())
-			} else {
-				selfName := exchangeNames[addr]
-				for _, to := range toAccounts {
-					toName, ok := exchangeNames[to]
-					if !ok || toName != selfName {
-						continue
-					}
-					bw, en, derr := net.GetDelegatedV2Amount(addr, to)
-					if derr != nil {
-						db.logger.Warnf("Get delegated v2 amount [%s]->[%s] failed: %s", addr, to, derr.Error())
-						continue
-					}
-					internalBW += bw
-					internalEN += en
-					time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			selfName := exchangeNames[addr]
+			for _, to := range toAccounts {
+				toName, ok := exchangeNames[to]
+				if !ok || toName != selfName {
+					continue
 				}
+				bw, en, derr := net.GetDelegatedV2Amount(addr, to)
+				if derr != nil {
+					db.logger.Warnf("Get delegated v2 amount [%s]->[%s] failed: %s", addr, to, derr.Error())
+					continue
+				}
+				internalBW += bw
+				internalEN += en
+				time.Sleep(50 * time.Millisecond)
 			}
 		}
 

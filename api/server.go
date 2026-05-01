@@ -200,7 +200,7 @@ func (s *Server) exchangesStatistic(c *gin.Context) {
 }
 
 func (s *Server) exchangesResourceStatistic(c *gin.Context) {
-	date, ok := getDateParam(c, "date", time.Now().AddDate(0, 0, -1))
+	date, ok := getDateParam(c, "date", today())
 	if !ok {
 		return
 	}
@@ -208,10 +208,21 @@ func (s *Server) exchangesResourceStatistic(c *gin.Context) {
 	stats := s.db.GetExchangeResourceStatisticsByDate(date)
 
 	totalBandwidth, totalEnergy := int64(0), int64(0)
+	totalSelfBW, totalDelegatedOutBW, totalAcquiredBW, totalInternalBW := int64(0), int64(0), int64(0), int64(0)
+	totalSelfEN, totalDelegatedOutEN, totalAcquiredEN, totalInternalEN := int64(0), int64(0), int64(0), int64(0)
+
 	result := make([]*models.ExchangeResourceStatistic, 0, len(stats))
 	for _, stat := range stats {
 		totalBandwidth += stat.Bandwidth
 		totalEnergy += stat.Energy
+		totalSelfBW += stat.SelfBandwidth
+		totalDelegatedOutBW += stat.DelegatedOutBandwidth
+		totalAcquiredBW += stat.AcquiredBandwidth
+		totalInternalBW += stat.InternalDelegatedOutBandwidth
+		totalSelfEN += stat.SelfEnergy
+		totalDelegatedOutEN += stat.DelegatedOutEnergy
+		totalAcquiredEN += stat.AcquiredEnergy
+		totalInternalEN += stat.InternalDelegatedOutEnergy
 		result = append(result, stat)
 	}
 
@@ -223,7 +234,17 @@ func (s *Server) exchangesResourceStatistic(c *gin.Context) {
 		"date":            date.Format("060102"),
 		"total_bandwidth": totalBandwidth,
 		"total_energy":    totalEnergy,
-		"exchanges":       result,
+		"total_breakdown": gin.H{
+			"self_bandwidth":                   totalSelfBW,
+			"delegated_out_bandwidth":          totalDelegatedOutBW,
+			"acquired_bandwidth":               totalAcquiredBW,
+			"internal_delegated_out_bandwidth": totalInternalBW,
+			"self_energy":                      totalSelfEN,
+			"delegated_out_energy":             totalDelegatedOutEN,
+			"acquired_energy":                  totalAcquiredEN,
+			"internal_delegated_out_energy":    totalInternalEN,
+		},
+		"exchanges": result,
 	})
 }
 

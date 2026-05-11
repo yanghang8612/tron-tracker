@@ -326,66 +326,92 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 		return
 	}
 
-	token, ok := c.GetQuery("token")
-	if !ok {
-		token = "Total"
-	}
+	token := c.DefaultQuery("token", "All")
+	aggregateAllTokens := strings.EqualFold(token, "All")
 
-	concernedExchanges := []string{
-		"Okex",
-		"Binance",
-		"bybit",
-		"WhiteBIT",
-		"MXC",
-		"bitget",
-		"Kraken",
-		"Kucoin",
-		"BtcTurk",
-		"HTX",
-		"Gate",
-		"Bitfinex",
-		"CEX.IO",
+	var requestedExchanges []string
+	if param := c.DefaultQuery("exchanges", ""); param != "" {
+		requestedExchanges = strings.Split(param, ",")
 	}
+	exchangesFiltered := len(requestedExchanges) > 0
 
-	weeklyStats := make([]map[string]map[string]*models.ExchangeStatistic, 0)
+	weeklyStats := make([]map[string]map[string]*models.ExchangeStatistic, weeks)
 	for i := 0; i < weeks; i++ {
 		weekStartDate := startDate.AddDate(0, 0, i*7)
-		weeklyStat := s.db.GetExchangeTokenStatisticsByDateDays(weekStartDate, 7)
-		weeklyStats = append(weeklyStats, weeklyStat)
+		weeklyStats[i] = s.db.GetExchangeTokenStatisticsByDateDays(weekStartDate, 7)
+	}
+
+	lookup := func(weekIdx int, exchange string) *models.ExchangeStatistic {
+		perToken, ok := weeklyStats[weekIdx][exchange]
+		if !ok {
+			return nil
+		}
+		if !aggregateAllTokens {
+			return perToken[token]
+		}
+		agg := models.NewExchangeStatistic("", "", "")
+		for _, es := range perToken {
+			agg.Merge(es)
+		}
+		return agg
+	}
+
+	if !exchangesFiltered {
+		seen := make(map[string]struct{})
+		for _, weeklyStat := range weeklyStats {
+			for name := range weeklyStat {
+				if name == "All" {
+					continue
+				}
+				if _, ok := seen[name]; ok {
+					continue
+				}
+				seen[name] = struct{}{}
+				requestedExchanges = append(requestedExchanges, name)
+			}
+		}
+		sort.Strings(requestedExchanges)
 	}
 
 	result := strings.Builder{}
-	concernedExchangesStats := make([]models.ExchangeStatistic, weeks)
+	listedStats := make([]models.ExchangeStatistic, weeks)
 
-	for _, concernedExchange := range concernedExchanges {
-		result.WriteString(fmt.Sprintf("%s,", concernedExchange))
-
-		for i, weeklyStat := range weeklyStats {
-			if exchangeStat, ok := weeklyStat[concernedExchange]; ok {
-				if es, ok := exchangeStat[token]; ok {
-					concernedExchangesStats[i].Merge(es)
-					result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,", es.ChargeTxCount, es.ChargeFee, es.CollectTxCount, es.CollectFee, es.WithdrawTxCount, es.WithdrawFee))
-				} else {
-					result.WriteString(fmt.Sprintf("0,0,0,0,0,0,"))
-				}
-			} else {
-				result.WriteString(fmt.Sprintf("0,0,0,0,0,0,"))
+	for _, exchange := range requestedExchanges {
+		result.WriteString(exchange)
+		result.WriteString(",")
+		for i := range weeklyStats {
+			es := lookup(i, exchange)
+			if es == nil {
+				result.WriteString("0,0,0,0,0,0,")
+				continue
 			}
+			listedStats[i].Merge(es)
+			result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,",
+				es.ChargeTxCount, es.ChargeFee,
+				es.CollectTxCount, es.CollectFee,
+				es.WithdrawTxCount, es.WithdrawFee))
 		}
 		result.WriteString("\n")
 	}
 
-	result.WriteString(fmt.Sprintf("Other,"))
-	for i, es := range concernedExchangesStats {
-		result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,",
-			weeklyStats[i]["All"][token].ChargeTxCount-es.ChargeTxCount,
-			weeklyStats[i]["All"][token].ChargeFee-es.ChargeFee,
-			weeklyStats[i]["All"][token].CollectTxCount-es.CollectTxCount,
-			weeklyStats[i]["All"][token].CollectFee-es.CollectFee,
-			weeklyStats[i]["All"][token].WithdrawTxCount-es.WithdrawTxCount,
-			weeklyStats[i]["All"][token].WithdrawFee-es.WithdrawFee))
+	if exchangesFiltered {
+		result.WriteString("Other,")
+		for i, listed := range listedStats {
+			all := lookup(i, "All")
+			if all == nil {
+				result.WriteString("0,0,0,0,0,0,")
+				continue
+			}
+			result.WriteString(fmt.Sprintf("%d,%d,%d,%d,%d,%d,",
+				all.ChargeTxCount-listed.ChargeTxCount,
+				all.ChargeFee-listed.ChargeFee,
+				all.CollectTxCount-listed.CollectTxCount,
+				all.CollectFee-listed.CollectFee,
+				all.WithdrawTxCount-listed.WithdrawTxCount,
+				all.WithdrawFee-listed.WithdrawFee))
+		}
+		result.WriteString("\n")
 	}
-	result.WriteString("\n")
 
 	c.String(200, result.String())
 }

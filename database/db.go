@@ -616,6 +616,42 @@ func (db *RawDB) RawSQLQuery(sql string) ([]string, error) {
 	return messages, nil
 }
 
+func (db *RawDB) RawSQLQueryJSON(sql string, limit int) (cols []string, rows [][]interface{}, truncated bool, err error) {
+	sqlRows, err := db.db.Raw(sql).Rows()
+	if err != nil {
+		return nil, nil, false, err
+	}
+	defer sqlRows.Close()
+
+	cols, err = sqlRows.Columns()
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	rows = make([][]interface{}, 0)
+	for sqlRows.Next() {
+		if limit > 0 && len(rows) >= limit {
+			truncated = true
+			break
+		}
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err = sqlRows.Scan(ptrs...); err != nil {
+			return cols, rows, truncated, err
+		}
+		for i, v := range vals {
+			if b, ok := v.([]byte); ok {
+				vals[i] = string(b)
+			}
+		}
+		rows = append(rows, vals)
+	}
+	return cols, rows, truncated, nil
+}
+
 func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
 	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 

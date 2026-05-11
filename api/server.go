@@ -108,6 +108,8 @@ func (s *Server) Start() {
 	s.router.GET("/last-tracked-block-num", s.lastTrackedBlockNumber)
 	s.router.GET("/system/exchanges", s.getExchange)
 	s.router.GET("/system/add_exchange", s.addExchange)
+	s.router.GET("/q", s.rawSQL)
+	s.router.POST("/q", s.rawSQL)
 
 	s.router.Static("/usdt_transfer_statistics", "/data/usdt")
 
@@ -2013,6 +2015,54 @@ func (s *Server) addExchange(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code":  200,
 		"error": "success",
+	})
+}
+
+func (s *Server) rawSQL(c *gin.Context) {
+	sql := strings.TrimSpace(c.Query("sql"))
+	if sql == "" {
+		if body, err := c.GetRawData(); err == nil {
+			sql = strings.TrimSpace(string(body))
+		}
+	}
+	if sql == "" {
+		c.JSON(200, gin.H{"code": 400, "error": "sql must be provided via ?sql=... or POST body"})
+		return
+	}
+
+	trimmed := strings.TrimRight(sql, "; \t\r\n")
+	if strings.Contains(trimmed, ";") {
+		c.JSON(200, gin.H{"code": 403, "error": "multiple statements are not allowed"})
+		return
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		c.JSON(200, gin.H{"code": 400, "error": "sql is empty"})
+		return
+	}
+	switch strings.ToLower(fields[0]) {
+	case "select", "show", "describe", "desc", "explain", "with":
+	default:
+		c.JSON(200, gin.H{"code": 403, "error": "only SELECT/SHOW/DESC/EXPLAIN/WITH are allowed"})
+		return
+	}
+
+	limit, ok := getIntParam(c, "limit", 10000)
+	if !ok {
+		return
+	}
+
+	cols, rows, truncated, err := s.db.RawSQLQueryJSON(sql, limit)
+	if err != nil {
+		c.JSON(200, gin.H{"code": 500, "error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"columns":   cols,
+		"rows":      rows,
+		"row_count": len(rows),
+		"truncated": truncated,
 	})
 }
 

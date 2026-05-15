@@ -425,6 +425,283 @@ func (u *Updater) Update(date time.Time) {
 
 	// Update Stock data
 	u.updateStockData(ppt.Slides[7], date)
+
+	// Update Exchange Stake data
+	if len(ppt.Slides) > 8 {
+		u.updateExchangeStakeData(ppt.Slides[8], date)
+	}
+}
+
+type exchangeStakeMetric int
+
+const (
+	exchangeStakeBandwidth exchangeStakeMetric = iota
+	exchangeStakeEnergy
+
+	exchangeStakeWindowDays = 8
+	exchangeStakeTopN       = 10
+	exchangeStakeSunPerMTRX = int64(1_000_000_000_000)
+	exchangeStakeEventMin   = int64(10_000_000_000_000)
+)
+
+func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
+	bandwidthData, bandwidthNames, bandwidthSeries := u.getExchangeStakeData(today, exchangeStakeBandwidth)
+	energyData, energyNames, energySeries := u.getExchangeStakeData(today, exchangeStakeEnergy)
+
+	_, err := u.sheetsService.Spreadsheets.Values.Clear(u.revenueId, "Bandwidth!A1:K20", &sheets.ClearValuesRequest{}).Do()
+	if err != nil {
+		u.logger.Errorf("Unable to clear exchange bandwidth sheet: %v", err)
+	}
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Bandwidth!A1:K9",
+		&sheets.ValueRange{Values: bandwidthData}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update exchange bandwidth sheet: %v", err)
+	}
+
+	_, err = u.sheetsService.Spreadsheets.Values.Clear(u.revenueId, "Energy!A1:K20", &sheets.ClearValuesRequest{}).Do()
+	if err != nil {
+		u.logger.Errorf("Unable to clear exchange energy sheet: %v", err)
+	}
+	_, err = u.sheetsService.Spreadsheets.Values.Update(u.revenueId, "Energy!A1:K9",
+		&sheets.ValueRange{Values: energyData}).ValueInputOption("USER_ENTERED").Do()
+	if err != nil {
+		u.logger.Errorf("Unable to update exchange energy sheet: %v", err)
+	}
+
+	reqs := make([]*slides.Request, 0)
+	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
+
+	for _, chartId := range []int64{1485277571, 1597183595} {
+		objectId := findSheetsChartObjectId(page, chartId)
+		if objectId == "" {
+			u.logger.Warnf("Unable to find exchange stake chart id %d", chartId)
+			continue
+		}
+		reqs = append(reqs, &slides.Request{
+			RefreshSheetsChart: &slides.RefreshSheetsChartRequest{
+				ObjectId: objectId,
+			},
+		})
+	}
+
+	note := u.buildExchangeStakeNote(today, bandwidthNames, energyNames, bandwidthSeries, energySeries)
+	if len(page.SlideProperties.NotesPage.PageElements) > 0 {
+		noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
+		reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
+	}
+
+	if len(reqs) == 0 {
+		return
+	}
+	_, updateErr := u.slidesService.Presentations.BatchUpdate(u.presentationId,
+		&slides.BatchUpdatePresentationRequest{
+			Requests: reqs,
+		}).Do()
+	if updateErr != nil {
+		u.logger.Error("Failed to update exchange stake slide", zap.Error(updateErr))
+	}
+}
+
+func (u *Updater) getExchangeStakeData(today time.Time, metric exchangeStakeMetric) ([][]interface{}, []string, map[string][]int64) {
+	updateStats := u.db.GetExchangeResourceStatisticsByDate(today)
+
+	names := make([]string, 0, len(updateStats))
+	for name, stat := range updateStats {
+		if name == "HTX" && metric == exchangeStakeBandwidth {
+			continue
+		}
+		if getExchangeStakeValue(stat, metric) == 0 {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		left := getExchangeStakeValue(updateStats[names[i]], metric)
+		right := getExchangeStakeValue(updateStats[names[j]], metric)
+		if left == right {
+			return names[i] < names[j]
+		}
+		return left > right
+	})
+	if len(names) > exchangeStakeTopN {
+		names = names[:exchangeStakeTopN]
+	}
+
+	data := make([][]interface{}, 0, exchangeStakeWindowDays+1)
+	header := make([]interface{}, 0, len(names)+1)
+	header = append(header, "Date")
+	for _, name := range names {
+		header = append(header, name)
+	}
+	data = append(data, header)
+
+	series := make(map[string][]int64, len(names))
+	for _, name := range names {
+		series[name] = make([]int64, 0, exchangeStakeWindowDays)
+	}
+
+	startDate := today.AddDate(0, 0, -(exchangeStakeWindowDays - 1))
+	for i := 0; i < exchangeStakeWindowDays; i++ {
+		day := startDate.AddDate(0, 0, i)
+		dayStats := u.db.GetExchangeResourceStatisticsByDate(day)
+
+		row := make([]interface{}, 0, len(names)+1)
+		row = append(row, day.Format("2006-01-02"))
+		for _, name := range names {
+			value := getExchangeStakeValue(dayStats[name], metric)
+			row = append(row, value)
+			series[name] = append(series[name], value)
+		}
+		data = append(data, row)
+	}
+
+	return data, names, series
+}
+
+func (u *Updater) buildExchangeStakeNote(today time.Time, bandwidthNames, energyNames []string, bandwidthSeries, energySeries map[string][]int64) string {
+	var note strings.Builder
+	note.WriteString("上周主要事件：\n")
+	events := u.getExchangeStakeEvents(today)
+	if len(events) == 0 {
+		note.WriteString("  - 本周主要交易所质押带宽/能量没有超过 10 M TRX 的单日变化。\n")
+	} else {
+		for i, event := range events {
+			if i >= 5 {
+				break
+			}
+			note.WriteString("  - ")
+			note.WriteString(event)
+			note.WriteString("\n")
+		}
+	}
+
+	note.WriteString("\n")
+	note.WriteString(formatExchangeStakeTable(today, "[ Bandwidth Staking Top10 ] (HTX 是集团内部项目，未包含在内)", bandwidthNames, bandwidthSeries))
+	note.WriteString("\n")
+	note.WriteString(formatExchangeStakeTable(today, "[ Energy Staking Top10    ]", energyNames, energySeries))
+	return note.String()
+}
+
+func (u *Updater) getExchangeStakeEvents(today time.Time) []string {
+	type event struct {
+		day      time.Time
+		name     string
+		resource string
+		delta    int64
+	}
+
+	events := make([]event, 0)
+	startDate := today.AddDate(0, 0, -(exchangeStakeWindowDays - 1))
+	for i := 1; i < exchangeStakeWindowDays; i++ {
+		prevDay := startDate.AddDate(0, 0, i-1)
+		curDay := startDate.AddDate(0, 0, i)
+		prevStats := u.db.GetExchangeResourceStatisticsByDate(prevDay)
+		curStats := u.db.GetExchangeResourceStatisticsByDate(curDay)
+
+		names := make(map[string]struct{}, len(prevStats)+len(curStats))
+		for name := range prevStats {
+			names[name] = struct{}{}
+		}
+		for name := range curStats {
+			names[name] = struct{}{}
+		}
+
+		for name := range names {
+			if name != "HTX" {
+				bwDelta := getExchangeStakeValue(curStats[name], exchangeStakeBandwidth) -
+					getExchangeStakeValue(prevStats[name], exchangeStakeBandwidth)
+				if absInt64(bwDelta) >= exchangeStakeEventMin {
+					events = append(events, event{day: curDay, name: name, resource: "带宽", delta: bwDelta})
+				}
+			}
+
+			enDelta := getExchangeStakeValue(curStats[name], exchangeStakeEnergy) -
+				getExchangeStakeValue(prevStats[name], exchangeStakeEnergy)
+			if absInt64(enDelta) >= exchangeStakeEventMin {
+				events = append(events, event{day: curDay, name: name, resource: "能量", delta: enDelta})
+			}
+		}
+	}
+
+	sort.Slice(events, func(i, j int) bool {
+		if absInt64(events[i].delta) == absInt64(events[j].delta) {
+			return events[i].name < events[j].name
+		}
+		return absInt64(events[i].delta) > absInt64(events[j].delta)
+	})
+
+	result := make([]string, 0, len(events))
+	for _, item := range events {
+		result = append(result, fmt.Sprintf("%s：%s %s %s",
+			item.day.Format("1-2"), item.name, item.resource, formatExchangeStakeDelta(item.delta)))
+	}
+	return result
+}
+
+func formatExchangeStakeTable(today time.Time, title string, names []string, series map[string][]int64) string {
+	var sb strings.Builder
+	sb.WriteString(title)
+	sb.WriteString("\n")
+	sb.WriteString("───────────────────────────────────────────────────────────────────────────\n")
+	sb.WriteString("  Date      ")
+	for _, name := range names {
+		sb.WriteString(fmt.Sprintf(" %8s", name))
+	}
+	sb.WriteString("\n")
+
+	startDate := today.AddDate(0, 0, -(exchangeStakeWindowDays - 1))
+	for i := 0; i < exchangeStakeWindowDays; i++ {
+		sb.WriteString(fmt.Sprintf("  %s", startDate.AddDate(0, 0, i).Format("2006-01-02")))
+		for _, name := range names {
+			value := int64(0)
+			if i < len(series[name]) {
+				value = series[name][i]
+			}
+			sb.WriteString(fmt.Sprintf(" %8s", formatExchangeStakeM(value)))
+		}
+		sb.WriteString("\n")
+	}
+	sb.WriteString("───────────────────────────────────────────────────────────────────────────\n")
+	sb.WriteString("(Unit: M TRX)\n\n")
+	return sb.String()
+}
+
+func getExchangeStakeValue(stat *models.ExchangeResourceStatistic, metric exchangeStakeMetric) int64 {
+	if stat == nil {
+		return 0
+	}
+	if metric == exchangeStakeBandwidth {
+		return stat.Bandwidth
+	}
+	return stat.Energy
+}
+
+func findSheetsChartObjectId(page *slides.Page, chartId int64) string {
+	for _, element := range page.PageElements {
+		if element.SheetsChart != nil && element.SheetsChart.ChartId == chartId {
+			return element.ObjectId
+		}
+	}
+	return ""
+}
+
+func formatExchangeStakeM(value int64) string {
+	return fmt.Sprintf("%.0f M", float64(value)/float64(exchangeStakeSunPerMTRX))
+}
+
+func formatExchangeStakeDelta(delta int64) string {
+	sign := "+"
+	if delta < 0 {
+		sign = "-"
+	}
+	return fmt.Sprintf("%s%s", sign, formatExchangeStakeM(absInt64(delta)))
+}
+
+func absInt64(value int64) int64 {
+	if value < 0 {
+		return -value
+	}
+	return value
 }
 
 func (u *Updater) updateChainData(page *slides.Page, startDate time.Time) {

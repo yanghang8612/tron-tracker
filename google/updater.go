@@ -441,7 +441,7 @@ const (
 	exchangeStakeWindowDays = 8
 	exchangeStakeTopN       = 10
 	exchangeStakeSunPerMTRX = int64(1_000_000_000_000)
-	exchangeStakeEventMin   = int64(10_000_000_000_000)
+	exchangeStakeEventMin   = int64(1_000_000_000_000)
 )
 
 func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
@@ -563,7 +563,7 @@ func (u *Updater) buildExchangeStakeNote(today time.Time, bandwidthNames, energy
 	note.WriteString("上周主要事件：\n")
 	events := u.getExchangeStakeEvents(today)
 	if len(events) == 0 {
-		note.WriteString("  - 本周主要交易所质押带宽/能量没有超过 10 M TRX 的单日变化。\n")
+		note.WriteString("  - 本周主要交易所质押带宽/能量没有超过 1 M TRX 的单日变化。\n")
 	} else {
 		for i, event := range events {
 			if i >= 5 {

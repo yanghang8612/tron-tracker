@@ -507,6 +507,9 @@ func (u *Updater) getExchangeStakeData(today time.Time, metric exchangeStakeMetr
 
 	names := make([]string, 0, len(updateStats))
 	for name, stat := range updateStats {
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
 		if name == "HTX" && metric == exchangeStakeBandwidth {
 			continue
 		}
@@ -607,6 +610,9 @@ func (u *Updater) getExchangeStakeEvents(today time.Time) []string {
 		}
 
 		for name := range names {
+			if strings.TrimSpace(name) == "" {
+				continue
+			}
 			if name != "HTX" {
 				bwDelta := getExchangeStakeValue(curStats[name], exchangeStakeBandwidth) -
 					getExchangeStakeValue(prevStats[name], exchangeStakeBandwidth)

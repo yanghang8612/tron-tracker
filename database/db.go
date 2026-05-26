@@ -2516,8 +2516,8 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	// Start doing exchange statistics
 	db.DoExchangeStatistics(cache.date)
 
-	// Drop stats tables older than 2 years (from_stats_*, to_stats_*, user_token_stats_*).
-	if err := db.DropStaleStatsTables(time.Now().AddDate(-2, 0, 0)); err != nil {
+	// Drop stats tables older than 1 year (from_stats_*, to_stats_*, user_token_stats_*).
+	if err := db.DropStaleStatsTables(time.Now().AddDate(-1, 0, 0)); err != nil {
 		db.logger.Errorf("Drop stale stats tables: %v", err)
 	}
 

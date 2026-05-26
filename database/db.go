@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"os"
 	"sort"
@@ -58,9 +57,7 @@ type RawDB struct {
 	isTableMigrated      map[string]bool
 	tableLock            sync.Mutex
 	statsLock            sync.Mutex
-	chargers             map[string]*models.Charger
-	chargersLock         sync.RWMutex
-	chargersToSave       map[string]*models.Charger
+	chargerStore         *ChargerStore
 
 	trackingDate string
 	flushCh      chan *dbCache
@@ -168,8 +165,6 @@ func New(cfg *config.DBConfig) *RawDB {
 
 		lastTrackedBlockNum: uint(trackingStartBlockNum - 1),
 		isTableMigrated:     make(map[string]bool),
-		chargers:            make(map[string]*models.Charger),
-		chargersToSave:      make(map[string]*models.Charger),
 
 		flushCh:     make(chan *dbCache),
 		cache:       newCache(countedDateMeta.Val),
@@ -182,135 +177,20 @@ func New(cfg *config.DBConfig) *RawDB {
 	}
 
 	rawDB.loadExchanges()
-	rawDB.loadChargers()
-	// rawDB.refreshChargers()
+	rawDB.chargerStore = NewChargerStore(db, rawDB.logger)
+	rawDB.chargerStore.Load()
 
 	return rawDB
 }
 
-func (db *RawDB) loadChargers() {
-	if db.db.Migrator().HasTable(&models.Charger{}) {
-		chargers := make([]*models.Charger, 0)
-
-		db.logger.Info("Start loading chargers from db")
-		result := db.db.Find(&chargers)
-		db.logger.Infof("Loaded [%d] chargers from db", result.RowsAffected)
-
-		db.logger.Info("Start building chargers map")
-		for i, charger := range chargers {
-			db.chargers[charger.Address] = charger
-			if i%1_000_000 == 0 {
-				db.logger.Infof("Built [%d] chargers map", i)
-			}
-		}
-		db.logger.Info("Complete building chargers map")
-
-		return
-	}
-
-	dbErr := db.db.AutoMigrate(&models.Charger{})
-	if dbErr != nil {
-		panic(dbErr)
-	}
-
-	f, err := os.Open("all")
-	if err != nil {
-		db.logger.Errorf("Load charger file error: [%s]", err.Error())
-		return
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-
-	db.logger.Info("Start loading chargers")
-	count := 0
-	var chargeToSave []*models.Charger
-	for scanner.Scan() {
-		line := scanner.Text()
-		cols := strings.Split(line, ",")
-		chargeToSave = append(chargeToSave, &models.Charger{
-			Address:      cols[0],
-			ExchangeName: common.TrimExchangeName(cols[1]),
-		})
-		if len(chargeToSave) == 1000 {
-			db.db.Create(&chargeToSave)
-			for _, charger := range chargeToSave {
-				db.chargers[charger.Address] = charger
-			}
-			chargeToSave = make([]*models.Charger, 0)
-		}
-		count++
-		if count%1_000_000 == 0 {
-			db.logger.Infof("Loaded [%d] chargers", count)
-		}
-	}
-	db.db.Create(&chargeToSave)
-	for _, charger := range chargeToSave {
-		db.chargers[charger.Address] = charger
-	}
-	db.logger.Info("Complete loading chargers")
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-}
-
 func (db *RawDB) refreshChargers() {
-	db.chargersLock.Lock()
-	defer db.chargersLock.Unlock()
-
 	db.logger.Info("Start refreshing chargers")
-
-	chargersToSave := make(map[string]*models.Charger)
-	count := 0
-	for _, charger := range db.chargers {
-		newName := db.resolveExchangeName(common.TrimExchangeName(charger.ExchangeName))
-		if charger.ExchangeName != newName {
-			charger.ExchangeName = newName
-
-			if charger.IsFake && len(charger.BackupAddress) == 0 {
-				charger.IsFake = false
-			}
-
-			chargersToSave[charger.Address] = charger
+	db.chargerStore.Refresh(db.resolveExchangeName, func(b58 string) (string, bool) {
+		if db.IsExchange(b58) {
+			return db.GetExchange(b58).Name, true
 		}
-
-		// Sometimes, backup address can become to an exchange address
-		if len(charger.BackupAddress) == 34 && db.IsExchange(charger.BackupAddress) {
-			if charger.ExchangeName != db.GetExchange(charger.BackupAddress).Name {
-				if !charger.IsFake {
-					charger.IsFake = true
-					chargersToSave[charger.Address] = charger
-				}
-			} else {
-				charger.BackupAddress = ""
-				chargersToSave[charger.Address] = charger
-			}
-		}
-
-		if len(chargersToSave) == 200 {
-			chargers := make([]*models.Charger, 0)
-			for _, chargerToSave := range chargersToSave {
-				chargers = append(chargers, chargerToSave)
-			}
-			db.db.Save(chargers)
-			chargersToSave = make(map[string]*models.Charger)
-		}
-
-		count++
-		if count%1_000_000 == 0 {
-			db.logger.Infof("Refreshed [%d] chargers", count)
-		}
-	}
-
-	if len(chargersToSave) != 0 {
-		chargers := make([]*models.Charger, 0)
-		for _, chargerToSave := range chargersToSave {
-			chargers = append(chargers, chargerToSave)
-		}
-		db.db.Save(chargers)
-	}
-
+		return "", false
+	})
 	db.logger.Info("Complete refreshing chargers")
 }
 
@@ -459,14 +339,14 @@ func (db *RawDB) Close() {
 	close(db.quitCh)
 	db.loopWG.Wait()
 
-	db.flushChargerToDB()
+	db.chargerStore.FlushDirty()
 
 	underDB, _ := db.db.DB()
 	_ = underDB.Close()
 }
 
 func (db *RawDB) Report() {
-	db.logger.Infof("Status report, chargers size [%d]", len(db.chargers))
+	db.logger.Infof("Status report, chargers size [%d]", db.chargerStore.Len())
 }
 
 func (db *RawDB) IsExchange(addr string) bool {
@@ -539,10 +419,6 @@ func (db *RawDB) GetTokenAddress(addrOrName string) string {
 		}
 	}
 	return ""
-}
-
-func (db *RawDB) GetChargers() map[string]*models.Charger {
-	return db.chargers
 }
 
 func (db *RawDB) GetTelegramBotChatID() int64 {
@@ -1574,38 +1450,15 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 		return
 	}
 
-	if charger, ok := db.chargers[from]; !ok && db.IsExchange(to) {
-		db.chargersLock.Lock()
-		db.chargers[from] = &models.Charger{
-			Address:      from,
-			ExchangeName: db.GetExchange(to).Name,
-		}
-		db.chargersLock.Unlock()
-
-		db.chargersToSave[from] = db.chargers[from]
-	} else if ok && !charger.IsFake {
-		if db.IsExchange(to) {
-			// Charger interact with other exchange address, so it is a fake charger
-			if db.GetExchange(to).Name != charger.ExchangeName {
-				// Here we save the other exchange address into backup address
-				charger.BackupAddress = db.GetExchange(to).Name
-				charger.IsFake = true
-				db.chargersToSave[from] = charger
-			}
-		} else {
-			// Charger can interact with at most one unknown other address. Otherwise, it is a fake charger
-			if len(charger.BackupAddress) == 0 {
-				charger.BackupAddress = to
-				db.chargersToSave[from] = charger
-			} else if to != charger.BackupAddress {
-				charger.IsFake = true
-				db.chargersToSave[from] = charger
-			}
-		}
+	toIsExchange := db.IsExchange(to)
+	toName := ""
+	if toIsExchange {
+		toName = db.GetExchange(to).Name
 	}
+	db.chargerStore.ApplyCharge(from, to, toIsExchange, toName)
 
-	if len(db.chargersToSave) == 200 {
-		db.flushChargerToDB()
+	if db.chargerStore.DirtyLen() >= 200 {
+		db.chargerStore.FlushDirty()
 	}
 }
 
@@ -1966,11 +1819,11 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 		to := tx.ToAddr
 		token := db.validTokens[tx.Name]
 
-		charger, toIsCharger := db.isCharger(to)
+		chargerExchange, toIsCharger := db.isCharger(to)
 		if db.IsExchange(from) {
 			exchange := db.GetExchange(from).Name
 
-			if !toIsCharger || charger.ExchangeName != exchange {
+			if !toIsCharger || chargerExchange != exchange {
 				setExchangeStatsMap(exchangeStats, date, exchange, token)
 				exchangeStats[exchange]["_"].AddWithdraw(tx)
 				exchangeStats[exchange][token].AddWithdraw(tx)
@@ -1989,17 +1842,17 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 		if toIsCharger {
 			if tx.Amount.Length() < 6 {
 				if (tx.Type == 0 || tx.Type == 1) && tx.Fee >= 1e6 {
-					setExchangeStatsMap(exchangeStats, date, charger.ExchangeName, "_")
-					exchangeStats[charger.ExchangeName]["_"].TotalFee += tx.Fee
-					exchangeStats[charger.ExchangeName]["_"].ActivationTxCount++
-					exchangeStats[charger.ExchangeName]["_"].ActivationFee += tx.Fee
+					setExchangeStatsMap(exchangeStats, date, chargerExchange, "_")
+					exchangeStats[chargerExchange]["_"].TotalFee += tx.Fee
+					exchangeStats[chargerExchange]["_"].ActivationTxCount++
+					exchangeStats[chargerExchange]["_"].ActivationFee += tx.Fee
 				}
 				return
 			}
 
-			setExchangeStatsMap(exchangeStats, date, charger.ExchangeName, token)
-			exchangeStats[charger.ExchangeName]["_"].AddCharge(tx)
-			exchangeStats[charger.ExchangeName][token].AddCharge(tx)
+			setExchangeStatsMap(exchangeStats, date, chargerExchange, token)
+			exchangeStats[chargerExchange]["_"].AddCharge(tx)
+			exchangeStats[chargerExchange][token].AddCharge(tx)
 		}
 	})
 
@@ -2054,17 +1907,17 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 					get(oldStats, db.GetExchange(from).Name).AddWithdraw(tx)
 				} else if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
 					get(oldStats, db.GetExchange(to).Name).AddCollect(tx)
-				} else if charger, toIsCharger := db.isCharger(to); toIsCharger {
-					get(oldStats, charger.ExchangeName).AddCharge(tx)
+				} else if chargerExchange, toIsCharger := db.isCharger(to); toIsCharger {
+					get(oldStats, chargerExchange).AddCharge(tx)
 				}
 			}
 
 			// ---- current rule: keep small-amount txs, split exchange->own-charger into ActivationFee ----
-			charger, toIsCharger := db.isCharger(to)
+			chargerExchange, toIsCharger := db.isCharger(to)
 			if db.IsExchange(from) {
 				exchange := db.GetExchange(from).Name
 
-				if !toIsCharger || charger.ExchangeName != exchange {
+				if !toIsCharger || chargerExchange != exchange {
 					get(newStats, exchange).AddWithdraw(tx)
 					return
 				}
@@ -2078,7 +1931,7 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 			if toIsCharger {
 				if smallAmount {
 					if (tx.Type == 0 || tx.Type == 1) && tx.Fee >= 1e6 {
-						stat := get(newStats, charger.ExchangeName)
+						stat := get(newStats, chargerExchange)
 						stat.TotalFee += tx.Fee
 						stat.ActivationTxCount++
 						stat.ActivationFee += tx.Fee
@@ -2086,7 +1939,7 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 					return
 				}
 
-				get(newStats, charger.ExchangeName).AddCharge(tx)
+				get(newStats, chargerExchange).AddCharge(tx)
 			}
 		})
 	}
@@ -2203,15 +2056,14 @@ func setExchangeStatsMap(stats map[string]map[string]*models.ExchangeStatistic, 
 	}
 }
 
-func (db *RawDB) isCharger(address string) (*models.Charger, bool) {
-	db.chargersLock.RLock()
-	defer db.chargersLock.RUnlock()
+func (db *RawDB) isCharger(address string) (string, bool) {
+	return db.chargerStore.Lookup(address)
+}
 
-	if c, ok := db.chargers[address]; ok && !c.IsFake {
-		return c, true
-	}
-
-	return nil, false
+// IsChargerExchange reports the exchange name of a non-fake charger. Thin
+// wrapper over the store's Lookup for the api package (replaces GetChargers).
+func (db *RawDB) IsChargerExchange(address string) (string, bool) {
+	return db.chargerStore.Lookup(address)
 }
 
 func (db *RawDB) saveMarketPairOriginData(token, data string) {
@@ -2410,11 +2262,11 @@ func (db *RawDB) countForDate(date string, isManual bool) {
 				from := result.FromAddr
 				to := result.ToAddr
 
-				if charger, ok := db.isCharger(to); ok && db.IsExchange(from) {
+				if chargerExchange, ok := db.isCharger(to); ok && db.IsExchange(from) {
 					exchange := db.GetExchange(from)
 					if _, ok = ExchangeSpecialStats[exchange.Name]; !ok {
 						ExchangeSpecialStats[exchange.Name] =
-							models.NewExchangeStatistic(date, charger.ExchangeName, "Special")
+							models.NewExchangeStatistic(date, chargerExchange, "Special")
 
 						ExchangeSpecialStats[exchange.Name].AddWithdraw(result)
 					}
@@ -2545,15 +2397,6 @@ func (db *RawDB) countForWeek(startDate string) string {
 	db.logger.Infof("Finish counting Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	return countingDate
-}
-
-func (db *RawDB) flushChargerToDB() {
-	chargers := make([]*models.Charger, 0)
-	for _, charger := range db.chargersToSave {
-		chargers = append(chargers, charger)
-	}
-	db.db.Save(chargers)
-	db.chargersToSave = make(map[string]*models.Charger)
 }
 
 func (db *RawDB) flushCacheToDB(cache *dbCache) {

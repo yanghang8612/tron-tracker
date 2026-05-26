@@ -271,7 +271,7 @@ func (s *Server) exchangesStatisticNow(c *gin.Context) {
 			exchangeStats[exchange].WithdrawFee += tx.Fee
 			exchangeStats[exchange].WithdrawTxCount += 1
 
-		} else if _, fromIsCharger := s.db.GetChargers()[from]; fromIsCharger && s.db.IsExchange(to) {
+		} else if _, fromIsCharger := s.db.IsChargerExchange(from); fromIsCharger && s.db.IsExchange(to) {
 			exchange := s.db.GetExchange(to).Name
 
 			if _, ok := exchangeStats[exchange]; !ok {
@@ -282,9 +282,7 @@ func (s *Server) exchangesStatisticNow(c *gin.Context) {
 			exchangeStats[exchange].CollectFee += tx.Fee
 			exchangeStats[exchange].CollectTxCount += 1
 
-		} else if charger, toIsCharger := s.db.GetChargers()[to]; toIsCharger {
-			exchange := charger.ExchangeName
-
+		} else if exchange, toIsCharger := s.db.IsChargerExchange(to); toIsCharger {
 			if _, ok := exchangeStats[exchange]; !ok {
 				exchangeStats[exchange] =
 					models.NewExchangeStatistic("", exchange, "")

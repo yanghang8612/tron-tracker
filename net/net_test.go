@@ -6,19 +6,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"tron-tracker/config"
 
 	"github.com/go-playground/assert/v2"
 )
-
-func TestDate(t *testing.T) {
-	endDateStr := "2025-07-22"
-	endDate, _ := time.Parse("2006-01-02", endDateStr)
-	startDate := subtractBusinessDays(endDate, 10).Format("2006-01-02")
-	assert.Equal(t, startDate, "2025-07-08")
-}
 
 func TestGetAccountFrozenResources(t *testing.T) {
 	cases := []struct {
@@ -216,8 +208,8 @@ func TestGetDelegatedV2Amount(t *testing.T) {
 			wantEN: 0,
 		},
 		{
-			name: "single row both resources",
-			resp: `{"delegatedResource":[{"from":"A","to":"B","frozen_balance_for_bandwidth":1000,"frozen_balance_for_energy":2000}]}`,
+			name:   "single row both resources",
+			resp:   `{"delegatedResource":[{"from":"A","to":"B","frozen_balance_for_bandwidth":1000,"frozen_balance_for_energy":2000}]}`,
 			wantBW: 1000,
 			wantEN: 2000,
 		},

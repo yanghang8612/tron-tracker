@@ -165,6 +165,56 @@ func TestApplyChargeBranches(t *testing.T) {
 	}
 }
 
+// Regression for Codex finding #1: a charger that first records an address
+// backup and then conflicts with another exchange must end up with the
+// conflicting exchange NAME as its backup (mirrors db.go single-field overwrite),
+// not the stale address. The two side maps must stay mutually exclusive.
+func TestApplyChargeConflictAfterAddrBackupOverwrites(t *testing.T) {
+	s := newTestStore()
+	c := addrN(1)
+	exA := addrN(100)
+	unknown := addrN(2)
+	exB := addrN(101)
+	key, _ := decodeAddr(c)
+
+	s.ApplyCharge(c, exA, true, "Binance") // new charger on Binance
+	s.ApplyCharge(c, unknown, false, "")   // first unknown address -> addrBackups
+	if _, has := s.addrBackups[key]; !has {
+		t.Fatalf("precondition: expected an address backup")
+	}
+	s.ApplyCharge(c, exB, true, "Okex") // conflicting exchange -> fake + conflict name
+
+	v, _ := s.Get(c)
+	if !v.IsFake || v.BackupAddress != "Okex" {
+		t.Fatalf("conflict after addr backup: expect fake & backup=Okex, got backup=%q fake=%v", v.BackupAddress, v.IsFake)
+	}
+	if _, has := s.addrBackups[key]; has {
+		t.Fatalf("stale addrBackups must be cleared when a conflict exchange backup is set")
+	}
+}
+
+// Regression for Codex finding #4: the address column is not unique. A second
+// row for the same address must clear any side-map backup the first row set,
+// so the in-memory view matches the row we keep.
+func TestApplyModelClearsStaleSideMapsOnDuplicateRow(t *testing.T) {
+	s := newTestStore()
+	addr := addrN(1)
+	key, _ := decodeAddr(addr)
+
+	s.applyModel(&models.Charger{ID: 1, Address: addr, ExchangeName: "Binance", BackupAddress: addrN(2), IsFake: true})
+	if _, has := s.addrBackups[key]; !has {
+		t.Fatalf("precondition: first row should set addrBackups")
+	}
+	// duplicate row, no backup -> the stale addrBackups must be dropped
+	s.applyModel(&models.Charger{ID: 2, Address: addr, ExchangeName: "Okex"})
+	if _, has := s.addrBackups[key]; has {
+		t.Fatalf("duplicate row must clear stale addrBackups")
+	}
+	if v, _ := s.Get(addr); v.BackupAddress != "" || v.ExchangeName != "Okex" || v.IsFake {
+		t.Fatalf("expected clean Okex charger, got %+v", v)
+	}
+}
+
 func TestModelRoundTrip(t *testing.T) {
 	cases := []models.Charger{
 		{ID: 1, Address: addrN(1), ExchangeName: "Binance"},                                       // no backup

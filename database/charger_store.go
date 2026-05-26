@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"math"
 	"os"
 	"strings"
 	"sync"
@@ -152,8 +153,12 @@ func (s *ChargerStore) ApplyCharge(fromB58, toB58 string, toIsExchange bool, toE
 	}
 
 	if toIsExchange {
-		// charger interacts with a different exchange -> fake (record conflict name)
+		// charger interacts with a different exchange -> fake. The conflict
+		// exchange NAME replaces any prior backup (mirrors db.go's single
+		// BackupAddress field), so drop a stale address backup first to keep
+		// the two side maps mutually exclusive.
 		if toExchangeName != s.names[cc.exchangeIdx] {
+			delete(s.addrBackups, key)
 			s.confBackups[key] = s.internName(toExchangeName)
 			cc.isFake = true
 			s.chargers[key] = cc
@@ -214,6 +219,14 @@ func (s *ChargerStore) applyModel(m *models.Charger) {
 		s.logger.Warnf("skip charger with invalid address: %q", m.Address)
 		return
 	}
+	// The address column is not unique; if the same address appears in more
+	// than one row, clear any side-map backup from a prior row so the two maps
+	// stay mutually exclusive and consistent with the row we keep.
+	delete(s.addrBackups, key)
+	delete(s.confBackups, key)
+	if m.ID > math.MaxUint32 {
+		s.logger.Fatalf("charger ID %d exceeds uint32 (address %s)", m.ID, m.Address)
+	}
 	s.chargers[key] = compactCharger{
 		id:          uint32(m.ID),
 		exchangeIdx: s.internName(m.ExchangeName),
@@ -266,7 +279,7 @@ func (s *ChargerStore) loadFromDBLocked() {
 	s.logger.Info("Start loading chargers from db")
 	var batch []*models.Charger
 	loaded := 0
-	s.db.FindInBatches(&batch, 10000, func(tx *gorm.DB, _ int) error {
+	result := s.db.FindInBatches(&batch, 10000, func(tx *gorm.DB, _ int) error {
 		for _, m := range batch {
 			s.applyModel(m)
 			loaded++
@@ -276,6 +289,9 @@ func (s *ChargerStore) loadFromDBLocked() {
 		}
 		return nil
 	})
+	if result.Error != nil {
+		s.logger.Fatalf("Load chargers from db failed after [%d]: %v", loaded, result.Error)
+	}
 	s.logger.Infof("Complete loading chargers: [%d] in memory, [%d] skipped", len(s.chargers), s.skipped)
 }
 
@@ -332,7 +348,12 @@ func (s *ChargerStore) doFlushLocked() {
 		batch = append(batch, s.toModel(key, s.chargers[key]))
 		keys = append(keys, key)
 	}
-	s.db.Save(batch)
+	if err := s.db.Save(batch).Error; err != nil {
+		// Keep dirty for retry on the next flush; do not back-fill or clear,
+		// otherwise id==0 rows would be lost and re-inserted later.
+		s.logger.Errorf("Flush %d chargers failed, keeping dirty for retry: %v", len(batch), err)
+		return
+	}
 	// back-fill auto-incremented IDs for freshly inserted rows
 	for i, m := range batch {
 		id := uint32(m.ID)

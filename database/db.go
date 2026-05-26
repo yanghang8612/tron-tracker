@@ -60,8 +60,7 @@ type RawDB struct {
 	chargerStore         *ChargerStore
 
 	trackingDate string
-	flushCh      chan *dbCache
-	cache        *dbCache
+	flushedDate  string
 	countedDate  string
 	countedWeek  string
 	statsCh      chan string
@@ -70,6 +69,31 @@ type RawDB struct {
 	quitCh chan struct{}
 
 	logger *zap.SugaredLogger
+}
+
+// resumeBlockNum decides where to resume tracking for trackingDate. If
+// transactions_<trackingDate> exists and is non-empty, returns MAX(height) and
+// resumed=true (caller resumes at MAX+1, keeps the table). Otherwise returns
+// fallbackStartNum-1 and resumed=false (caller drops + starts the day fresh).
+func resumeBlockNum(gdb *gorm.DB, trackingDate string, fallbackStartNum int) (lastNum uint, resumed bool) {
+	// fallbackStartNum is the configured/persisted day-start block (always >= 1 in
+	// practice), so fallbackStartNum-1 is a valid pre-day-start resume cursor.
+	table := "transactions_" + trackingDate
+	if !gdb.Migrator().HasTable(table) {
+		return uint(fallbackStartNum - 1), false
+	}
+	var maxHeight uint
+	// Fail loud on a query error: silently treating it as "empty" (maxHeight==0)
+	// would make the caller drop the day's table and re-sync the whole day from the
+	// network — the exact behavior this change removes. New() panics on DB errors
+	// throughout, so stay consistent.
+	if err := gdb.Table(table).Select("COALESCE(MAX(height), 0)").Scan(&maxHeight).Error; err != nil {
+		panic(fmt.Sprintf("resumeBlockNum: query MAX(height) of %s: %v", table, err))
+	}
+	if maxHeight == 0 {
+		return uint(fallbackStartNum - 1), false
+	}
+	return maxHeight, true
 }
 
 func New(cfg *config.DBConfig) *RawDB {
@@ -141,15 +165,26 @@ func New(cfg *config.DBConfig) *RawDB {
 	var countedWeekMeta models.Meta
 	db.Where(models.Meta{Key: models.CountedWeekKey}).Attrs(models.Meta{Val: cfg.StartDate}).FirstOrCreate(&countedWeekMeta)
 
-	db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
 	db.Migrator().DropTable("transfers_" + trackingDateMeta.Val)
 
 	var trackingStartBlockNumMeta models.Meta
 	db.Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Attrs(models.Meta{Val: strconv.Itoa(cfg.StartNum)}).FirstOrCreate(&trackingStartBlockNumMeta)
 	trackingStartBlockNum, _ := strconv.Atoi(trackingStartBlockNumMeta.Val)
 
+	lastNum, resumed := resumeBlockNum(db, trackingDateMeta.Val, trackingStartBlockNum)
+	if !resumed {
+		db.Migrator().DropTable("transactions_" + trackingDateMeta.Val)
+	}
+
 	var volumeReminders models.Meta
 	db.Where(models.Meta{Key: models.VolumeReminders}).Attrs(models.Meta{Val: ""}).FirstOrCreate(&volumeReminders)
+
+	defaultFlushed := ""
+	if td, err := time.Parse("060102", trackingDateMeta.Val); err == nil {
+		defaultFlushed = td.AddDate(0, 0, -1).Format("060102")
+	}
+	var flushedDateMeta models.Meta
+	db.Where(models.Meta{Key: models.FlushedDateKey}).Attrs(models.Meta{Val: defaultFlushed}).FirstOrCreate(&flushedDateMeta)
 
 	validTokens := make(map[string]string)
 	for _, token := range cfg.ValidTokens {
@@ -163,14 +198,14 @@ func New(cfg *config.DBConfig) *RawDB {
 		exchanges:   make(map[string]*models.Exchange),
 		validTokens: validTokens,
 
-		lastTrackedBlockNum: uint(trackingStartBlockNum - 1),
+		lastTrackedBlockNum: lastNum,
 		isTableMigrated:     make(map[string]bool),
 
-		flushCh:     make(chan *dbCache),
-		cache:       newCache(countedDateMeta.Val),
-		countedDate: countedDateMeta.Val,
-		countedWeek: countedWeekMeta.Val,
-		statsCh:     make(chan string),
+		trackingDate: trackingDateMeta.Val,
+		flushedDate:  flushedDateMeta.Val,
+		countedDate:  countedDateMeta.Val,
+		countedWeek:  countedWeekMeta.Val,
+		statsCh:      make(chan string),
 
 		quitCh: make(chan struct{}),
 		logger: zap.S().Named("[db]"),
@@ -528,7 +563,7 @@ func (db *RawDB) RawSQLQueryJSON(sql string, limit int) (cols []string, rows [][
 	return cols, rows, truncated, nil
 }
 
-func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) {
+func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*models.Transaction)) error {
 	db.logger.Infof("Start traversing transactions for date [%s], batch size [%d]", date, batchSize)
 
 	var (
@@ -552,6 +587,7 @@ func (db *RawDB) TraverseTransactions(date string, batchSize int, handler func(*
 		})
 
 	db.logger.Infof("Traversed [%d] transactions, cost: [%s], error: [%v]", result.RowsAffected, time.Since(start), result.Error)
+	return result.Error
 }
 
 func (db *RawDB) GetBlockCntByDateDays(date time.Time, days int) int {
@@ -1462,14 +1498,14 @@ func (db *RawDB) SaveCharger(from, to, token string) {
 	}
 }
 
-func (db *RawDB) SaveTransactions(transactions []*models.Transaction) {
-	if transactions == nil || len(transactions) == 0 {
-		return
+func (db *RawDB) SaveTransactions(transactions []*models.Transaction) error {
+	if len(transactions) == 0 {
+		return nil
 	}
 
 	dbName := "transactions_" + db.trackingDate
 	db.createTableIfNotExist(dbName, models.Transaction{})
-	db.db.Table(dbName).Create(transactions)
+	return db.db.Table(dbName).Create(transactions).Error
 }
 
 func (db *RawDB) SaveMarketPairRule(rule *models.Rule) {
@@ -1528,43 +1564,59 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 	if db.trackingDate == "" {
 		db.trackingDate = trackingDate
 	} else if db.trackingDate != trackingDate {
-		db.flushCh <- db.cache
-		db.statsCh <- db.cache.date
+		// 完成的那天交给 market-pair 深度统计（仍事件驱动）；
+		// 五类统计由游标循环扫表完成，无需在此触发。
+		db.statsCh <- db.trackingDate
 
 		db.trackingDate = trackingDate
-		db.cache = newCache(trackingDate)
-
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).Update("val", trackingDate)
-		db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).Update("val", strconv.Itoa(int(block.BlockHeader.RawData.Number)))
+		if err := db.persistTrackingMeta(trackingDate, int64(block.BlockHeader.RawData.Number)); err != nil {
+			db.logger.Errorf("persist tracking meta for %s: %v", trackingDate, err)
+		}
 	}
 
 	db.lastTrackedBlockNum = block.BlockHeader.RawData.Number
 	db.lastTrackedBlockTime = block.BlockHeader.RawData.Timestamp
 }
 
-func (db *RawDB) UpdateStatistics(ts int64, tx *models.Transaction) {
-	db.updateUserStatistic(tx.OwnerAddr, ts, tx, db.cache.fromStats)
-	db.updateUserStatistic("total", ts, tx, db.cache.fromStats)
+// persistTrackingMeta updates tracking_date and tracking_start_block_num in a
+// single transaction so a crash can't leave them inconsistent (point 11).
+func (db *RawDB) persistTrackingMeta(trackingDate string, startBlockNum int64) error {
+	return db.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingDateKey}).
+			Update("val", trackingDate).Error; err != nil {
+			return err
+		}
+		return tx.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).
+			Update("val", strconv.FormatInt(startBlockNum, 10)).Error
+	})
+}
+
+// accumulate folds one transaction into cache's stat maps. Single source of
+// truth for daily-stat attribution, shared by the scan-based flush.
+// cache.date is owned by the caller (NOT set here). Attribution:
+// fromStats by OwnerAddr, toStats by ToAddr.
+func (db *RawDB) accumulate(cache *dbCache, tx *models.Transaction) {
+	db.updateUserStatistic(tx.OwnerAddr, tx, cache.fromStats)
+	db.updateUserStatistic("total", tx, cache.fromStats)
 
 	if len(tx.ToAddr) > 0 {
-		db.updateUserStatistic(tx.ToAddr, ts, tx, db.cache.toStats)
+		db.updateUserStatistic(tx.ToAddr, tx, cache.toStats)
 	}
 
 	if len(tx.Name) > 0 {
-		db.updateTokenStatistic(tx.Name, tx, db.cache.tokenStats)
-		db.updateTokenStatistic("total", tx, db.cache.tokenStats)
+		db.updateTokenStatistic(tx.Name, tx, cache.tokenStats)
+		db.updateTokenStatistic("total", tx, cache.tokenStats)
 		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
-			db.updateUserTokenStatistic(tx, db.cache.userTokenStats)
+			db.updateUserTokenStatistic(tx, cache.userTokenStats)
 		}
 	}
 
 	if tx.Fee > 0 {
-		db.cache.feeStats.Add(tx)
+		cache.feeStats.Add(tx)
 	}
 }
 
-func (db *RawDB) updateUserStatistic(user string, ts int64, tx *models.Transaction, stats map[string]*models.UserStatistic) {
-	db.cache.date = generateDate(ts)
+func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
 	if _, ok := stats[user]; !ok {
 		stats[user] = models.NewUserStatistic(user)
 	}
@@ -1757,7 +1809,7 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 		db.logger.Infof("Start querying transactions for date: %s", queryDate)
 
 		txCount := 0
-		db.TraverseTransactions(queryDate, 500, func(tx *models.Transaction) {
+		if err := db.TraverseTransactions(queryDate, 500, func(tx *models.Transaction) {
 			user := tx.OwnerAddr
 			if _, ok := users[user]; !ok {
 				return
@@ -1781,7 +1833,9 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 			if txCount%1_000_000 == 0 {
 				db.logger.Infof("Queried rows: %d", txCount)
 			}
-		})
+		}); err != nil {
+			db.logger.Errorf("traverse transactions %s: %v", queryDate, err)
+		}
 		db.logger.Infof("Total fee: %d, total energy: %d", totalFee, totalEnergy)
 		db.logger.Infof("Withdraw fee: %d, withdraw energy: %d", withdrawFee, withdrawEnergy)
 		db.logger.Infof("Collect fee: %d, collect energy: %d", collectFee, collectEnergy)
@@ -1805,11 +1859,11 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 	net.ReportTronlinkStatsToSlack(slackMessage)
 }
 
-func (db *RawDB) DoExchangeStatistics(date string) {
+func (db *RawDB) DoExchangeStatistics(date string) error {
 	db.logger.Infof("Start doing exchange statistics for date [%s]", date)
 
 	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
-	db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
+	if err := db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
 		if _, ok := db.validTokens[tx.Name]; !ok ||
 			len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
 			return
@@ -1854,14 +1908,21 @@ func (db *RawDB) DoExchangeStatistics(date string) {
 			exchangeStats[chargerExchange]["_"].AddCharge(tx)
 			exchangeStats[chargerExchange][token].AddCharge(tx)
 		}
-	})
+	}); err != nil {
+		return fmt.Errorf("traverse transactions %s: %w", date, err)
+	}
 
-	db.db.Delete(&models.ExchangeStatistic{}, "date = ?", date)
+	if err := db.db.Delete(&models.ExchangeStatistic{}, "date = ?", date).Error; err != nil {
+		return fmt.Errorf("delete exchange stats %s: %w", date, err)
+	}
 	for _, stats := range exchangeStats {
 		for _, stat := range stats {
-			db.db.Create(stat)
+			if err := db.db.Create(stat).Error; err != nil {
+				return fmt.Errorf("create exchange stat %s: %w", date, err)
+			}
 		}
 	}
+	return nil
 }
 
 // DoExchangeStatisticsDiff runs both the previous and current classification
@@ -1891,7 +1952,7 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 	}
 
 	for _, date := range dates {
-		db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
+		if err := db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
 			if _, ok := db.validTokens[tx.Name]; !ok ||
 				len(tx.FromAddr) == 0 || len(tx.ToAddr) == 0 {
 				return
@@ -1941,7 +2002,9 @@ func (db *RawDB) DoExchangeStatisticsDiff(dates []string) {
 
 				get(newStats, chargerExchange).AddCharge(tx)
 			}
-		})
+		}); err != nil {
+			db.logger.Errorf("traverse transactions %s: %v", date, err)
+		}
 	}
 
 	exchanges := make(map[string]struct{})
@@ -2181,8 +2244,21 @@ func (db *RawDB) cacheFlushLoop() {
 			db.logger.Info("cache flush loop ended")
 			db.loopWG.Done()
 			return
-		case cache := <-db.flushCh:
-			db.flushCacheToDB(cache)
+		default:
+			trackingDate, errT := time.Parse("060102", db.trackingDate)
+			flushedDate, errF := time.Parse("060102", db.flushedDate)
+			if errT == nil && errF == nil && trackingDate.Sub(flushedDate).Hours() > 24 {
+				dateToFlush := flushedDate.AddDate(0, 0, 1).Format("060102")
+				if err := db.flushDailyStats(dateToFlush); err != nil {
+					db.logger.Errorf("flush daily stats for %s failed, will retry: %v", dateToFlush, err)
+					net.ReportWarningToSlack(fmt.Sprintf("flush %s failed: %v", dateToFlush, err), true)
+				} else {
+					db.flushedDate = dateToFlush
+					db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.FlushedDateKey}).
+						Update("val", dateToFlush)
+				}
+			}
+			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -2399,129 +2475,119 @@ func (db *RawDB) countForWeek(startDate string) string {
 	return countingDate
 }
 
-func (db *RawDB) flushCacheToDB(cache *dbCache) {
-	// First flush fee statistics
-	db.db.Save(cache.feeStats)
-
-	if len(cache.fromStats) == 0 && len(cache.toStats) == 0 {
-		return
-	}
-
-	db.logger.Infof("Start flushing cache to DB for date [%s]", cache.date)
-
-	// Start flushing user from statistics
-	db.logger.Info("Start flushing from_stats")
-
-	fromStatsDBName := "from_stats_" + cache.date
-	db.createTableIfNotExist(fromStatsDBName, models.UserStatistic{})
-
-	reporter := common.NewReporter(0, 60*time.Second, len(cache.fromStats), makeReporterFunc("from_stats"))
-
-	fromStatsToPersist := make([]*models.UserStatistic, 0)
-	for _, stats := range cache.fromStats {
-		fromStatsToPersist = append(fromStatsToPersist, stats)
-		if len(fromStatsToPersist) == 200 {
-			db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
-			fromStatsToPersist = make([]*models.UserStatistic, 0)
+// createInBatches inserts all map values into table in fixed-size batches,
+// stopping at the first error.
+func createInBatches[T any](gdb *gorm.DB, table string, items map[string]*T) error {
+	const batch = 200
+	buf := make([]*T, 0, batch)
+	flush := func() error {
+		if len(buf) == 0 {
+			return nil
 		}
-		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			db.logger.Info(reportContent)
+		if err := gdb.Table(table).Create(buf).Error; err != nil {
+			return err
+		}
+		buf = buf[:0]
+		return nil
+	}
+	for _, it := range items {
+		buf = append(buf, it)
+		if len(buf) == batch {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
-	db.db.Table(fromStatsDBName).Create(&fromStatsToPersist)
+	return flush()
+}
 
-	// End of flushing user from statistics
-	db.logger.Info(reporter.Finish("Flushing from_stats"))
+// flushDailyStats computes the five daily statistics for date by scanning the
+// persisted transactions_<date> table (excluding synthesized transfers,
+// type=255) and writes them idempotently. Missing table => empty day, still
+// writes empty stat tables and returns nil so the cursor can advance.
+func (db *RawDB) flushDailyStats(date string) error {
+	cache := newCache(date)
+	cache.date = date
 
-	// Covering index for top-fee queries (ORDER BY fee DESC LIMIT n).
-	db.ensureIndex(fromStatsDBName, "idx_fee_addr", "fee, address")
-
-	// Start flushing user to statistics
-	db.logger.Info("Start flushing to_stats")
-
-	toStatsDBName := "to_stats_" + cache.date
-	db.createTableIfNotExist(toStatsDBName, models.UserStatistic{})
-
-	reporter = common.NewReporter(0, 60*time.Second, len(cache.toStats), makeReporterFunc("to_stats"))
-
-	toStatsToPersist := make([]*models.UserStatistic, 0)
-	for _, stats := range cache.toStats {
-		toStatsToPersist = append(toStatsToPersist, stats)
-		if len(toStatsToPersist) == 200 {
-			db.db.Table(toStatsDBName).Create(&toStatsToPersist)
-			toStatsToPersist = make([]*models.UserStatistic, 0)
-		}
-		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			db.logger.Info(reportContent)
-		}
-	}
-	db.db.Table(toStatsDBName).Create(&toStatsToPersist)
-
-	// End of flushing user to statistics
-	db.logger.Info(reporter.Finish("Flushing to_stats"))
-
-	// Start flushing token statistics
-	db.logger.Info("Start flushing token_stats")
-
-	tokenStatsDBName := "token_stats_" + cache.date
-	db.createTableIfNotExist(tokenStatsDBName, models.TokenStatistic{})
-
-	reporter = common.NewReporter(0, 60*time.Second, len(cache.tokenStats), makeReporterFunc("token_stats"))
-
-	tokenStatsToPersist := make([]*models.TokenStatistic, 0)
-	for _, stats := range cache.tokenStats {
-		tokenStatsToPersist = append(tokenStatsToPersist, stats)
-		if len(tokenStatsToPersist) == 200 {
-			db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
-			tokenStatsToPersist = make([]*models.TokenStatistic, 0)
-		}
-		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			db.logger.Info(reportContent)
+	table := "transactions_" + date
+	if db.db.Migrator().HasTable(table) {
+		results := make([]*models.Transaction, 0)
+		scan := db.db.Table(table).
+			Where("type <> ?", models.TransferType).
+			FindInBatches(&results, 500, func(_ *gorm.DB, _ int) error {
+				for _, tx := range results {
+					db.accumulate(cache, tx)
+				}
+				return nil
+			})
+		if scan.Error != nil {
+			return fmt.Errorf("scan %s: %w", table, scan.Error)
 		}
 	}
-	db.db.Table(tokenStatsDBName).Create(&tokenStatsToPersist)
 
-	// End of flushing token statistics
-	db.logger.Info(reporter.Finish("Flushing token_stats"))
+	return db.persistDailyStats(cache)
+}
 
-	// Start flushing user token statistics
-	db.logger.Info("Start flushing user_token_stats")
+// persistDailyStats writes cache to DB idempotently: the four per-date stat
+// tables are dropped+recreated (they carry a unique index on address), fee is
+// delete-before-write (Date is not unique), exchange stats are delete-then-create.
+// All write errors propagate so the caller can gate cursor advance on success.
+func (db *RawDB) persistDailyStats(cache *dbCache) error {
+	date := cache.date
 
-	userTokenStatsDBName := "user_token_stats_" + cache.date
-	db.createTableIfNotExist(userTokenStatsDBName, models.UserTokenStatistic{})
-
-	reporter = common.NewReporter(0, 60*time.Second, len(cache.userTokenStats), makeReporterFunc("user_token_stats"))
-
-	userTokenStatsToPersist := make([]*models.UserTokenStatistic, 0)
-	for _, stats := range cache.userTokenStats {
-		userTokenStatsToPersist = append(userTokenStatsToPersist, stats)
-		if len(userTokenStatsToPersist) == 200 {
-			db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
-			userTokenStatsToPersist = make([]*models.UserTokenStatistic, 0)
+	for _, prefix := range []string{"from_stats_", "to_stats_", "token_stats_", "user_token_stats_"} {
+		t := prefix + date
+		if err := db.db.Migrator().DropTable(t); err != nil {
+			return fmt.Errorf("drop %s: %w", t, err)
 		}
-
-		// Check need to report
-		if shouldReport, reportContent := reporter.Add(1); shouldReport {
-			db.logger.Info(reportContent)
-		}
+		db.tableLock.Lock()
+		delete(db.isTableMigrated, t)
+		db.tableLock.Unlock()
 	}
-	db.db.Table(userTokenStatsDBName).Create(&userTokenStatsToPersist)
 
-	// End of flushing user token statistics
-	db.logger.Info(reporter.Finish("Flushing user_token_stats"))
+	if err := db.db.Delete(&models.FeeStatistic{}, "date = ?", date).Error; err != nil {
+		return fmt.Errorf("delete fee %s: %w", date, err)
+	}
+	if err := db.db.Create(cache.feeStats).Error; err != nil {
+		return fmt.Errorf("create fee %s: %w", date, err)
+	}
 
-	// Refresh chargers before exchange statistics so names are up-to-date
+	fromTable := "from_stats_" + date
+	db.createTableIfNotExist(fromTable, models.UserStatistic{})
+	if err := createInBatches(db.db, fromTable, cache.fromStats); err != nil {
+		return fmt.Errorf("flush from_stats %s: %w", date, err)
+	}
+	db.ensureIndex(fromTable, "idx_fee_addr", "fee, address")
+
+	toTable := "to_stats_" + date
+	db.createTableIfNotExist(toTable, models.UserStatistic{})
+	if err := createInBatches(db.db, toTable, cache.toStats); err != nil {
+		return fmt.Errorf("flush to_stats %s: %w", date, err)
+	}
+
+	tokenTable := "token_stats_" + date
+	db.createTableIfNotExist(tokenTable, models.TokenStatistic{})
+	if err := createInBatches(db.db, tokenTable, cache.tokenStats); err != nil {
+		return fmt.Errorf("flush token_stats %s: %w", date, err)
+	}
+
+	utTable := "user_token_stats_" + date
+	db.createTableIfNotExist(utTable, models.UserTokenStatistic{})
+	if err := createInBatches(db.db, utTable, cache.userTokenStats); err != nil {
+		return fmt.Errorf("flush user_token_stats %s: %w", date, err)
+	}
+
 	db.refreshChargers()
-
-	// Start doing exchange statistics
-	db.DoExchangeStatistics(cache.date)
-
-	// Drop stats tables older than 1 year (from_stats_*, to_stats_*, user_token_stats_*).
-	if err := db.DropStaleStatsTables(time.Now().AddDate(-1, 0, 0)); err != nil {
-		db.logger.Errorf("Drop stale stats tables: %v", err)
+	if err := db.DoExchangeStatistics(date); err != nil {
+		return fmt.Errorf("exchange stats %s: %w", date, err)
 	}
 
-	db.logger.Infof("Complete flushing cache to DB for date [%s]", cache.date)
+	if err := db.DropStaleStatsTables(time.Now().AddDate(-1, 0, 0)); err != nil {
+		db.logger.Errorf("drop stale stats tables: %v", err) // non-fatal cleanup
+	}
+
+	db.logger.Infof("Flushed daily stats for [%s]", date)
+	return nil
 }
 
 func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
@@ -2616,12 +2682,4 @@ func generateWeek(date string) string {
 
 func generateMarketPairDepthDailyKey(day time.Time) string {
 	return day.Format("02") + "2500"
-}
-
-func makeReporterFunc(name string) func(common.ReporterState) string {
-	return func(rs common.ReporterState) string {
-		return fmt.Sprintf("Saved [%d] [%s] in [%.2fs], speed [%.2frecords/sec], left [%d/%d] records to save [%.2f%%]",
-			rs.CountInc, name, rs.ElapsedTime, float64(rs.CountInc)/rs.ElapsedTime,
-			rs.CurrentCount, rs.FinishCount, float64(rs.CurrentCount*100)/float64(rs.FinishCount))
-	}
 }

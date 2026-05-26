@@ -231,7 +231,6 @@ func (t *Tracker) doTrackBlock() {
 		}
 
 		transactions = append(transactions, txToDB)
-		t.db.UpdateStatistics(block.BlockHeader.RawData.Timestamp, txToDB)
 
 		for _, log := range txInfoList[idx].Logs {
 			if len(log.Topics) == 3 && log.Topics[0] == TransferTopic {
@@ -285,7 +284,22 @@ func (t *Tracker) doTrackBlock() {
 				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)), true)
 		}
 	}
-	t.db.SaveTransactions(transactions)
+	// Persist this block before advancing — never skip a block, or restart-resume
+	// (MAX(height)) would leave a permanent hole. Retry indefinitely on failure,
+	// but bail out on shutdown so Stop() can't hang; the abandoned block is simply
+	// re-tracked from MAX(height) on the next start.
+	for {
+		if err := t.db.SaveTransactions(transactions); err == nil {
+			break
+		}
+		t.logger.Errorf("save block [%d] transactions failed, retrying: %v",
+			block.BlockHeader.RawData.Number, err)
+		select {
+		case <-t.quitCh:
+			return
+		case <-time.After(1 * time.Second):
+		}
+	}
 }
 
 func convertTransferData(owner, data string) (*transferData, bool) {

@@ -11,6 +11,7 @@ const (
 	TrackingStartBlockNumKey = "tracking_start_block_num"
 	TelegramBotChatID        = "telegram_bot_chat_id"
 	VolumeReminders          = "volume_reminders"
+	FlushedDateKey           = "flushed_date"
 )
 
 type Meta struct {

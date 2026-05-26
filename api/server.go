@@ -144,7 +144,9 @@ func (s *Server) repairExchangesStatistic(c *gin.Context) {
 	go func() {
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
-			s.db.DoExchangeStatistics(queryDate.Format("060102"))
+			if err := s.db.DoExchangeStatistics(queryDate.Format("060102")); err != nil {
+				s.logger.Errorf("repair exchange stats %s: %v", queryDate.Format("060102"), err)
+			}
 		}
 
 		s.isRepairing = false

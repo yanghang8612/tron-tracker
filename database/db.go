@@ -1568,9 +1568,15 @@ func (db *RawDB) SetLastTrackedBlock(block *types.Block) {
 		// 五类统计由游标循环扫表完成，无需在此触发。
 		db.statsCh <- db.trackingDate
 
-		db.trackingDate = trackingDate
-		if err := db.persistTrackingMeta(trackingDate, int64(block.BlockHeader.RawData.Number)); err != nil {
-			db.logger.Errorf("persist tracking meta for %s: %v", trackingDate, err)
+		// Persist the rollover meta BEFORE flipping db.trackingDate. SaveTransactions
+		// (called next in doTrackBlock) routes by db.trackingDate, so flipping before
+		// the meta is durable would let new-day rows persist while tracking_date still
+		// points at the old day — a crash there would re-track and duplicate on restart.
+		// Retry transient failures; only a shutdown leaves trackingDate unflipped (this
+		// block is then saved under the old day's table: a one-block misattribution at
+		// worst, no duplicate, self-healing on the next rollover after restart).
+		if db.persistRolloverMeta(trackingDate, int64(block.BlockHeader.RawData.Number)) {
+			db.trackingDate = trackingDate
 		}
 	}
 
@@ -1589,6 +1595,26 @@ func (db *RawDB) persistTrackingMeta(trackingDate string, startBlockNum int64) e
 		return tx.Model(&models.Meta{}).Where(models.Meta{Key: models.TrackingStartBlockNumKey}).
 			Update("val", strconv.FormatInt(startBlockNum, 10)).Error
 	})
+}
+
+// persistRolloverMeta persists the new day's tracking meta, retrying transient
+// failures every second. Returns true once durably written, or false if the DB
+// is shutting down (quitCh closed). Callers must not advance db.trackingDate
+// until this returns true.
+func (db *RawDB) persistRolloverMeta(trackingDate string, blockNum int64) bool {
+	for {
+		if err := db.persistTrackingMeta(trackingDate, blockNum); err == nil {
+			return true
+		} else {
+			db.logger.Errorf("persist tracking meta for %s failed, retrying: %v", trackingDate, err)
+		}
+
+		select {
+		case <-db.quitCh:
+			return false
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 // accumulate folds one transaction into cache's stat maps. Single source of
@@ -2252,10 +2278,13 @@ func (db *RawDB) cacheFlushLoop() {
 				if err := db.flushDailyStats(dateToFlush); err != nil {
 					db.logger.Errorf("flush daily stats for %s failed, will retry: %v", dateToFlush, err)
 					net.ReportWarningToSlack(fmt.Sprintf("flush %s failed: %v", dateToFlush, err), true)
+				} else if err := db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.FlushedDateKey}).
+					Update("val", dateToFlush).Error; err != nil {
+					// Flush succeeded but persisting the cursor failed; do NOT advance the
+					// in-memory cursor, so the next tick retries (flushDailyStats is idempotent).
+					db.logger.Errorf("persist flushed_date %s failed, will retry: %v", dateToFlush, err)
 				} else {
 					db.flushedDate = dateToFlush
-					db.db.Model(&models.Meta{}).Where(models.Meta{Key: models.FlushedDateKey}).
-						Update("val", dateToFlush)
 				}
 			}
 			time.Sleep(1 * time.Second)
@@ -2506,23 +2535,29 @@ func createInBatches[T any](gdb *gorm.DB, table string, items map[string]*T) err
 // type=255) and writes them idempotently. Missing table => empty day, still
 // writes empty stat tables and returns nil so the cursor can advance.
 func (db *RawDB) flushDailyStats(date string) error {
+	table := "transactions_" + date
+	if !db.db.Migrator().HasTable(table) {
+		// No data tracked for this day — nothing to flush. Return nil so the cursor
+		// advances instead of stalling forever: persistDailyStats -> DoExchangeStatistics
+		// would scan the missing table and error on every retry.
+		db.logger.Infof("No transactions table for [%s], nothing to flush", date)
+		return nil
+	}
+
 	cache := newCache(date)
 	cache.date = date
 
-	table := "transactions_" + date
-	if db.db.Migrator().HasTable(table) {
-		results := make([]*models.Transaction, 0)
-		scan := db.db.Table(table).
-			Where("type <> ?", models.TransferType).
-			FindInBatches(&results, 500, func(_ *gorm.DB, _ int) error {
-				for _, tx := range results {
-					db.accumulate(cache, tx)
-				}
-				return nil
-			})
-		if scan.Error != nil {
-			return fmt.Errorf("scan %s: %w", table, scan.Error)
-		}
+	results := make([]*models.Transaction, 0)
+	scan := db.db.Table(table).
+		Where("type <> ?", models.TransferType).
+		FindInBatches(&results, 500, func(_ *gorm.DB, _ int) error {
+			for _, tx := range results {
+				db.accumulate(cache, tx)
+			}
+			return nil
+		})
+	if scan.Error != nil {
+		return fmt.Errorf("scan %s: %w", table, scan.Error)
 	}
 
 	return db.persistDailyStats(cache)

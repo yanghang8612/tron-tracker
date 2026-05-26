@@ -177,3 +177,17 @@ func TestResumeBlockNum(t *testing.T) {
 		t.Fatalf("empty table: got (%d,%v), want (4999,false)", n, resumed)
 	}
 }
+
+func TestFlushDailyStatsMissingTableNoError(t *testing.T) {
+	db := newFlushTestDB(t)
+	const date = "260301" // within the last year; no transactions_<date> table created
+
+	// Missing transactions table => nothing to flush => nil (cursor can advance),
+	// must NOT error inside DoExchangeStatistics nor leave empty stat tables behind.
+	if err := db.flushDailyStats(date); err != nil {
+		t.Fatalf("flushDailyStats on a missing transactions table must return nil, got: %v", err)
+	}
+	if db.db.Migrator().HasTable("from_stats_" + date) {
+		t.Fatal("flushDailyStats must not create stat tables when there is no transactions table")
+	}
+}

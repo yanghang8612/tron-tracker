@@ -2590,6 +2590,9 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	// End of flushing user from statistics
 	db.logger.Info(reporter.Finish("Flushing from_stats"))
 
+	// Covering index for top-fee queries (ORDER BY fee DESC LIMIT n).
+	db.ensureIndex(fromStatsDBName, "idx_fee_addr", "fee, address")
+
 	// Start flushing user to statistics
 	db.logger.Info("Start flushing to_stats")
 
@@ -2670,6 +2673,11 @@ func (db *RawDB) flushCacheToDB(cache *dbCache) {
 	// Start doing exchange statistics
 	db.DoExchangeStatistics(cache.date)
 
+	// Drop stats tables older than 2 years (from_stats_*, to_stats_*, user_token_stats_*).
+	if err := db.DropStaleStatsTables(time.Now().AddDate(-2, 0, 0)); err != nil {
+		db.logger.Errorf("Drop stale stats tables: %v", err)
+	}
+
 	db.logger.Infof("Complete flushing cache to DB for date [%s]", cache.date)
 }
 
@@ -2685,6 +2693,72 @@ func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
 
 		db.isTableMigrated[tableName] = true
 	}
+}
+
+// ensureIndex creates indexName on (cols) for tableName if missing.
+// cols is a raw column list, e.g. "fee, address".
+func (db *RawDB) ensureIndex(tableName, indexName, cols string) {
+	var n int64
+	if err := db.db.Raw(
+		"SELECT COUNT(*) FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?",
+		tableName, indexName,
+	).Scan(&n).Error; err != nil {
+		db.logger.Errorf("Check index %s on %s: %v", indexName, tableName, err)
+		return
+	}
+	if n > 0 {
+		return
+	}
+	sql := fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, tableName, cols)
+	if err := db.db.Exec(sql).Error; err != nil {
+		db.logger.Errorf("Create index %s on %s: %v", indexName, tableName, err)
+		return
+	}
+	db.logger.Infof("Created index %s on %s", indexName, tableName)
+}
+
+// DropStaleStatsTables drops daily-partitioned stats tables whose YYMMDD
+// suffix is strictly older than cutoff. Targets from_stats_*, to_stats_*,
+// user_token_stats_*. Suffixes that don't parse as YYMMDD are skipped.
+func (db *RawDB) DropStaleStatsTables(cutoff time.Time) error {
+	if cutoff.After(time.Now()) {
+		return fmt.Errorf("cutoff %s is in the future, refusing to drop", cutoff.Format("060102"))
+	}
+	cutoffStr := cutoff.Format("060102")
+
+	prefixes := []string{"from_stats_", "to_stats_", "user_token_stats_"}
+	for _, prefix := range prefixes {
+		var tables []string
+		// Escape `_` so LIKE doesn't treat it as a single-char wildcard.
+		like := strings.ReplaceAll(prefix, "_", `\_`) + "%"
+		if err := db.db.Raw(
+			"SELECT table_name FROM information_schema.tables "+
+				"WHERE table_schema = DATABASE() AND table_name LIKE ?",
+			like,
+		).Scan(&tables).Error; err != nil {
+			return fmt.Errorf("list %s tables: %w", prefix, err)
+		}
+
+		for _, t := range tables {
+			suffix := strings.TrimPrefix(t, prefix)
+			if _, err := time.Parse("060102", suffix); err != nil {
+				continue
+			}
+			if suffix >= cutoffStr {
+				continue
+			}
+			db.logger.Infof("Dropping stale table %s (cutoff=%s)", t, cutoffStr)
+			if err := db.db.Exec("DROP TABLE `" + t + "`").Error; err != nil {
+				db.logger.Errorf("drop %s: %v", t, err)
+				continue
+			}
+			db.tableLock.Lock()
+			delete(db.isTableMigrated, t)
+			db.tableLock.Unlock()
+		}
+	}
+	return nil
 }
 
 func generateDate(ts int64) string {

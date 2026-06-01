@@ -415,13 +415,13 @@ func (u *Updater) Update(date time.Time) {
 		[]string{"Binance-TRX/USDT", "Binance-TRX/BTC", "Bybit-TRX/USDT", "OKX-TRX/USDT", "Upbit-TRX/KRW", "Bitget-TRX/USDT"})
 
 	u.updateCexData(ppt.Slides[4], date, "STEEM", nil,
-		[]string{"Binance-STEEM/USDT", "Binance-STEEM/BTC", "Binance-STEEM/ETH", "Upbit-STEEM/KRW"})
+		[]string{"Binance-STEEM/USDT", "Binance-STEEM/BTC", "Upbit-STEEM/KRW"})
 
 	u.updateCexData(ppt.Slides[5], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
 
 	u.updateCexData(ppt.Slides[6], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
-		[]string{"Binance-WIN/USDT", "Binance-WIN/TRX", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
+		[]string{"Binance-WIN/USDT", "OKX-WIN/USDT", "Bitget-WIN/USDT"})
 
 	// Update Stock data
 	u.updateStockData(ppt.Slides[7], date)
@@ -886,6 +886,16 @@ func (u *Updater) updateCexData(page *slides.Page, today time.Time, token string
 	for _, pair := range concernedPairs {
 		ruleStat := ruleStats[pair]
 		var color string
+
+		if ruleStat == nil {
+			u.logger.Warnf("No market pair rule stats found for token [%s], pair [%s], date [%s]",
+				token, pair, thisWeek.Format("2006-01-02"))
+			reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 2, "N/A", 8, "orange", false)...)
+			reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 3, "N/A", 8, "orange", false)...)
+			reqs = append(reqs, buildFullTextRequests(monitorTableObjectId, rowIndex, 5, "N/A", 8, "orange", false)...)
+			rowIndex++
+			continue
+		}
 
 		// Update +2% depth cell
 		depthPositiveCell, color, shouldAppendStat := getComplianceRateEmojiAndColor(ruleStat.DepthPositiveBrokenCount, ruleStat.HitsCount)
@@ -1619,6 +1629,9 @@ func extractText(element *slides.PageElement) string {
 }
 
 func getComplianceRateEmojiAndColor(brokenCount, hitsCount int) (string, string, bool) {
+	if hitsCount <= 0 {
+		return "N/A", "orange", false
+	}
 	if brokenCount < hitsCount/100 {
 		return "✅", "white", false
 	}

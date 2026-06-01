@@ -34,6 +34,14 @@ type NetConfig struct {
 	AlphaVantageApiKey string `toml:"alpha_vantage_api_key"`
 }
 
+type OnChainMonitorConfig struct {
+	Enabled                   bool   `toml:"enabled"`
+	SlackWebhook              string `toml:"slack_webhook"`
+	StakeThresholdTRX         int64  `toml:"stake_threshold_trx"`
+	TRXTransferThresholdTRX   int64  `toml:"trx_transfer_threshold_trx"`
+	USDTTransferThresholdUSDT int64  `toml:"usdt_transfer_threshold_usdt"`
+}
+
 type LogConfig struct {
 	Path  string `toml:"log_path"`
 	File  string `toml:"log_file"`
@@ -61,13 +69,14 @@ type DBConfig struct {
 }
 
 type Config struct {
-	Bot    BotConfig    `toml:"bot"`
-	PPT    PPTConfig    `toml:"ppt"`
-	Server ServerConfig `toml:"server"`
-	Net    NetConfig    `toml:"net"`
-	Log    LogConfig    `toml:"log"`
-	DB     DBConfig     `toml:"database"`
-	DeFi   DeFiConfig   `toml:"defi"`
+	Bot            BotConfig            `toml:"bot"`
+	PPT            PPTConfig            `toml:"ppt"`
+	Server         ServerConfig         `toml:"server"`
+	Net            NetConfig            `toml:"net"`
+	OnChainMonitor OnChainMonitorConfig `toml:"onchain_monitor"`
+	Log            LogConfig            `toml:"log"`
+	DB             DBConfig             `toml:"database"`
+	DeFi           DeFiConfig           `toml:"defi"`
 }
 
 func LoadConfig() *Config {

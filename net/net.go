@@ -17,8 +17,22 @@ import (
 	"go.uber.org/zap"
 )
 
-type slackMessage struct {
-	Text string `json:"text"`
+type SlackMessage struct {
+	Text   string       `json:"text"`
+	Blocks []SlackBlock `json:"blocks,omitempty"`
+}
+
+type SlackBlock struct {
+	Type     string            `json:"type"`
+	Text     *SlackTextObject  `json:"text,omitempty"`
+	Fields   []SlackTextObject `json:"fields,omitempty"`
+	Elements []SlackTextObject `json:"elements,omitempty"`
+}
+
+type SlackTextObject struct {
+	Type  string `json:"type"`
+	Text  string `json:"text"`
+	Emoji bool   `json:"emoji,omitempty"`
 }
 
 const (
@@ -45,7 +59,7 @@ func Init(cfg *config.NetConfig) {
 }
 
 func ReportTronlinkStatsToSlack(msg string) {
-	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.TronlinkWebhook)
+	resp, err := client.R().SetBody(&SlackMessage{Text: msg}).Post(configs.TronlinkWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return
@@ -54,11 +68,41 @@ func ReportTronlinkStatsToSlack(msg string) {
 	zap.S().Infof("Report to slack: %s", resp)
 }
 
+func ReportToSlackWebhook(webhook, msg string) {
+	ReportSlackMessageToWebhook(webhook, SlackMessage{Text: msg})
+}
+
+func ReportSlackMessageToWebhook(webhook string, msg SlackMessage) {
+	if webhook == "" {
+		zap.S().Warn("Slack webhook is empty, skip reporting")
+		return
+	}
+
+	resp, err := client.R().SetBody(&msg).Post(webhook)
+	if err != nil {
+		zap.S().Error(err)
+		return
+	}
+
+	zap.S().Infof("Report to slack: %s", resp)
+}
+
+func ReportOnChainMonitorToSlack(webhook, msg string) {
+	ReportOnChainMonitorMessageToSlack(webhook, SlackMessage{Text: msg})
+}
+
+func ReportOnChainMonitorMessageToSlack(webhook string, msg SlackMessage) {
+	if webhook == "" && configs != nil {
+		webhook = configs.WarningWebhook
+	}
+	ReportSlackMessageToWebhook(webhook, msg)
+}
+
 func ReportWarningToSlack(msg string, atMe bool) {
 	if atMe {
 		msg += " <@U01DFGWQ2JK>"
 	}
-	resp, err := client.R().SetBody(&slackMessage{Text: msg}).Post(configs.WarningWebhook)
+	resp, err := client.R().SetBody(&SlackMessage{Text: msg}).Post(configs.WarningWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return
@@ -73,7 +117,7 @@ func ReportNotificationToSlack(msg string, isWarning bool) {
 		return
 	}
 
-	resp, err := client.R().SetBody(&slackMessage{Text: msg + "\nPlease check this! <!channel>"}).Post(configs.NotifierWebhook)
+	resp, err := client.R().SetBody(&SlackMessage{Text: msg + "\nPlease check this! <!channel>"}).Post(configs.NotifierWebhook)
 	if err != nil {
 		zap.S().Error(err)
 		return

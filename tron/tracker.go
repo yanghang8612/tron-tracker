@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"tron-tracker/common"
+	"tron-tracker/config"
 	"tron-tracker/database"
 	"tron-tracker/database/models"
 	modeltypes "tron-tracker/database/models/types"
 	"tron-tracker/net"
 	"tron-tracker/tron/types"
 
-	"github.com/dustin/go-humanize"
 	"go.uber.org/zap"
 )
 
@@ -30,6 +30,8 @@ type Tracker struct {
 
 	filters map[string]chan<- types.Log
 
+	activityMonitor *ActivityMonitor
+
 	blockNumAtLastCheck uint
 
 	logger *zap.SugaredLogger
@@ -41,7 +43,7 @@ type transferData struct {
 	Amount modeltypes.BigInt
 }
 
-func NewTracker(db *database.RawDB) *Tracker {
+func NewTracker(db *database.RawDB, monitorCfg *config.OnChainMonitorConfig) *Tracker {
 	return &Tracker{
 		db: db,
 
@@ -52,6 +54,8 @@ func NewTracker(db *database.RawDB) *Tracker {
 		quitCh: make(chan struct{}),
 
 		filters: make(map[string]chan<- types.Log),
+
+		activityMonitor: NewActivityMonitor(monitorCfg),
 
 		blockNumAtLastCheck: db.GetLastTrackedBlockNum(),
 
@@ -183,6 +187,8 @@ func (t *Tracker) doTrackBlock() {
 			txToDB.FromAddr = txToDB.OwnerAddr
 			txToDB.ToAddr = common.EncodeToBase58(tx.RawData.Contract[0].Parameter.Value["to_address"].(string))
 			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["amount"].(float64)))
+		} else if txToDB.Type == 11 {
+			txToDB.SetAmount(int64(tx.RawData.Contract[0].Parameter.Value["frozen_balance"].(float64)))
 		} else if txToDB.Type == 12 {
 			txToDB.SetAmount(txInfoList[idx].UnfreezeAmount)
 		} else if txToDB.Type == 13 {
@@ -232,6 +238,10 @@ func (t *Tracker) doTrackBlock() {
 
 		transactions = append(transactions, txToDB)
 
+		if !t.isCatching {
+			t.activityMonitor.ReportIfLarge(txToDB, txInfoList[idx].ID)
+		}
+
 		for _, log := range txInfoList[idx].Logs {
 			if len(log.Topics) == 3 && log.Topics[0] == TransferTopic {
 				fromAddr := common.EncodeToBase58(log.Topics[1][24:])
@@ -274,14 +284,11 @@ func (t *Tracker) doTrackBlock() {
 					transferTxToDB.EnergyOriginUsage = int64(float64(txToDB.EnergyOriginUsage) * percent)
 
 					transactions = append(transactions, transferTxToDB)
+					if !t.isCatching {
+						t.activityMonitor.ReportIfLarge(transferTxToDB, txInfoList[idx].ID)
+					}
 				}
 			}
-		}
-
-		// If there is concerned event, report to slack
-		if !t.isCatching && (txToDB.Type == 154 || txToDB.Type == 157) && len(txToDB.Amount.String()) >= 8+7 {
-			net.ReportWarningToSlack(fmt.Sprintf("[block - %d] - index %d: [%s] -> [%s], amount [%s]",
-				txToDB.Height, txToDB.Index, txToDB.OwnerAddr, txToDB.ToAddr, humanize.Comma(txToDB.Amount.Int64()/1e6)), true)
 		}
 	}
 	// Persist this block before advancing — never skip a block, or restart-resume

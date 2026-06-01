@@ -30,7 +30,7 @@ func main() {
 
 	updater := google.NewUpdater(db, &cfg.PPT)
 
-	tracker := tron.NewTracker(db)
+	tracker := tron.NewTracker(db, &cfg.OnChainMonitor)
 
 	apiSrv := api.New(db, updater, &cfg.Server, &cfg.DeFi)
 	apiSrv.Start()

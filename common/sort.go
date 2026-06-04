@@ -29,6 +29,9 @@ func quickSelect[T any](arr []T, low, high, k int, cmp func(a, b T) bool) {
 }
 
 func TopN[T any](items []T, n int, cmp func(a, b T) bool) []T {
+	if n < 0 {
+		n = 0
+	}
 	if len(items) <= n {
 		result := make([]T, len(items))
 		copy(result, items)

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"tron-tracker/common"
@@ -35,8 +36,8 @@ type Server struct {
 	serverCfg *config.ServerConfig
 	defiCfg   *config.DeFiConfig
 
-	isRepairing bool
-	isUpdating  bool
+	isRepairing atomic.Bool
+	isUpdating  atomic.Bool
 
 	logger *zap.SugaredLogger
 }
@@ -135,12 +136,11 @@ func (s *Server) repairExchangesStatistic(c *gin.Context) {
 		return
 	}
 
-	if s.isRepairing {
+	if !s.isRepairing.CompareAndSwap(false, true) {
 		c.JSON(200, "already repairing")
 		return
 	}
 
-	s.isRepairing = true
 	go func() {
 		for i := 0; i < days; i++ {
 			queryDate := startDate.AddDate(0, 0, i)
@@ -149,7 +149,7 @@ func (s *Server) repairExchangesStatistic(c *gin.Context) {
 			}
 		}
 
-		s.isRepairing = false
+		s.isRepairing.Store(false)
 	}()
 
 	c.JSON(200, "repairing started")
@@ -323,6 +323,10 @@ func (s *Server) exchangesTokenStatistic(c *gin.Context) {
 
 	weeks, ok := getIntParam(c, "weeks", 1)
 	if !ok {
+		return
+	}
+	if weeks <= 0 {
+		c.JSON(200, gin.H{"code": 400, "error": "weeks must be positive"})
 		return
 	}
 
@@ -633,6 +637,13 @@ func (s *Server) tronlinkUsersWeeklyStatistics(c *gin.Context) {
 
 		nums = append(nums, num)
 	}
+	if len(nums) < 8 {
+		c.JSON(200, gin.H{
+			"code":    500,
+			"message": "week stats file is incomplete",
+		})
+		return
+	}
 	c.JSON(200, gin.H{
 		"total_fee":       nums[0],
 		"total_energy":    nums[1],
@@ -921,7 +932,7 @@ func (s *Server) trxStatistics(c *gin.Context) {
 	}
 
 	curWeekStats := s.db.GetFromStatisticByDateDays(startDate, days)
-	lastWeekStats := s.db.GetFromStatisticByDateDays(startDate.AddDate(0, 0, -7), days)
+	lastWeekStats := s.db.GetFromStatisticByDateDays(startDate.AddDate(0, 0, -days), days)
 
 	changedStats := make([]*models.UserStatistic, 0)
 
@@ -1171,7 +1182,7 @@ func (s *Server) topUsers(c *gin.Context) {
 			}
 		})
 
-		c.JSON(200, resStatsSortedByFee[:n])
+		c.JSON(200, resStatsSortedByFee[:max(0, min(n, len(resStatsSortedByFee)))])
 	} else if orderBy == "delegate_total" {
 		type ResEntity struct {
 			Address       string `json:"address"`
@@ -1189,7 +1200,7 @@ func (s *Server) topUsers(c *gin.Context) {
 			}
 		})
 
-		c.JSON(200, resStatsSortedByDelegate[:n])
+		c.JSON(200, resStatsSortedByDelegate[:max(0, min(n, len(resStatsSortedByDelegate)))])
 	} else {
 		c.JSON(200, gin.H{
 			"code":  500,
@@ -1699,8 +1710,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		result := make([]ResEntity, 0)
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
-			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMergedMarketPairStatistics(queryDate, 1, token, false, true)
+			marketPairStats := s.db.GetMergedMarketPairStatistics(curDate, 1, token, false, true)
 
 			entity := ResEntity{
 				Date:    curDate.Format("2006-01-02"),
@@ -1728,8 +1738,7 @@ func (s *Server) volumePPTData(c *gin.Context) {
 		result := strings.Builder{}
 		for i := 0; i < days; i++ {
 			curDate := startDate.AddDate(0, 0, i)
-			queryDate := curDate.AddDate(0, 0, 1)
-			marketPairStats := s.db.GetMergedMarketPairStatistics(queryDate, 1, token, false, true)
+			marketPairStats := s.db.GetMergedMarketPairStatistics(curDate, 1, token, false, true)
 
 			result.WriteString(curDate.Format("2006-01-02") + " ")
 			for _, exchange := range exchanges {
@@ -1761,7 +1770,7 @@ func (s *Server) updatePPTData(c *gin.Context) {
 		return
 	}
 
-	if s.isUpdating {
+	if !s.isUpdating.CompareAndSwap(false, true) {
 		c.JSON(500, gin.H{
 			"code":  500,
 			"error": "updating in progress",
@@ -1769,10 +1778,9 @@ func (s *Server) updatePPTData(c *gin.Context) {
 		return
 	}
 
-	s.isUpdating = true
 	go func() {
 		s.updater.Update(date)
-		s.isUpdating = false
+		s.isUpdating.Store(false)
 	}()
 
 	c.String(200, "Updating started for date: "+date.Format("2006-01-02"))
@@ -1794,8 +1802,11 @@ func sizeToBytes(sizeStr string) uint64 {
 	default:
 		multiplier = 1
 	}
-	valueStr := strings.Fields(sizeStr)[0]
-	value, _ := strconv.ParseFloat(valueStr, 64)
+	parts := strings.Fields(sizeStr)
+	if len(parts) == 0 {
+		return 0
+	}
+	value, _ := strconv.ParseFloat(parts[0], 64)
 	return uint64(value * float64(multiplier))
 }
 
@@ -1825,6 +1836,9 @@ func getEthereumDailyStats(day string) ethStatistics {
 
 		if strings.Contains(line, "store") {
 			items := strings.Split(line, "|")
+			if len(items) < 5 {
+				continue
+			}
 			database := items[1]
 			category := items[2]
 			size := sizeToBytes(items[3])
@@ -2071,6 +2085,23 @@ func (s *Server) rawSQL(c *gin.Context) {
 	default:
 		c.JSON(200, gin.H{"code": 403, "error": "only SELECT/SHOW/DESC/EXPLAIN/WITH are allowed"})
 		return
+	}
+
+	// The first-keyword whitelist is not a real security boundary: a WITH-
+	// prefixed statement can carry a write (WITH ... DELETE/UPDATE) and
+	// SELECT ... INTO OUTFILE/DUMPFILE writes to disk. Reject those tokens.
+	// Proper isolation must come from a least-privilege read-only DB account —
+	// RawSQLQueryJSON currently runs on a full-privilege user.
+	writeTokens := map[string]bool{
+		"insert": true, "update": true, "delete": true, "replace": true,
+		"drop": true, "alter": true, "truncate": true, "grant": true,
+		"outfile": true, "dumpfile": true,
+	}
+	for _, f := range fields[1:] {
+		if writeTokens[strings.ToLower(strings.Trim(f, "(),"))] {
+			c.JSON(200, gin.H{"code": 403, "error": "only read-only statements are allowed"})
+			return
+		}
 	}
 
 	limit, ok := getIntParam(c, "limit", 10000)

@@ -659,6 +659,11 @@ func (o *USDTStorageStatistic) Diff(other *USDTStorageStatistic) string {
 		lastStats = other
 	)
 
+	if curStats.SetTxCount == 0 || curStats.ResetTxCount == 0 ||
+		lastStats.SetTxCount == 0 || lastStats.ResetTxCount == 0 {
+		return "insufficient USDT storage data for the selected range"
+	}
+
 	return fmt.Sprintf("SetStorage:\n"+
 		"\tAverage Fee Per Tx: %.2f TRX (%s)\n"+
 		"\tDaily transactions: %s (%s)\n"+

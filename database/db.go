@@ -672,7 +672,7 @@ func (db *RawDB) GetFromStatisticByDateDays(date time.Time, days int) map[string
 		db.logger.Infof("Start querying from_stats for date [%s]", queryDate)
 
 		dayStats := make([]*models.UserStatistic, 0)
-		result := db.db.Table("from_stats_"+queryDate).FindInBatches(&dayStats, 100, func(_ *gorm.DB, _ int) error {
+		result := db.db.Table("from_stats_"+queryDate).Where("address <> ?", "total").FindInBatches(&dayStats, 100, func(_ *gorm.DB, _ int) error {
 			for _, dayStat := range dayStats {
 				user := dayStat.Address
 
@@ -710,11 +710,19 @@ func (db *RawDB) GetFromStatisticByDateUserDays(date time.Time, user string, day
 func (db *RawDB) GetTopNFromStatisticByDateDays(date time.Time, days, n int, orderByField string) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 
+	// Whitelist the order column — orderByField is concatenated directly into
+	// ORDER BY, so an arbitrary query value would be a SQL injection vector.
+	switch orderByField {
+	case "fee", "delegate_total", "energy_total", "trx_total", "stake_total", "vote_total", "tx_total":
+	default:
+		orderByField = "fee"
+	}
+
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		dayStats := make([]*models.UserStatistic, 0)
-		db.db.Table("from_stats_" + queryDate).Order(orderByField + " DESC").Limit(n).Find(&dayStats)
+		db.db.Table("from_stats_"+queryDate).Where("address <> ?", "total").Order(orderByField + " DESC").Limit(n).Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			user := dayStat.Address
@@ -777,7 +785,7 @@ func (db *RawDB) GetTokenStatisticsByDateDays(date time.Time, days int) map[stri
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.TokenStatistic
-		db.db.Table("token_stats_" + queryDate).Find(&dayStats)
+		db.db.Table("token_stats_"+queryDate).Where("address <> ?", "total").Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.Address]; !ok {
@@ -804,7 +812,11 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int,
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		db.db.Table("user_token_stats_"+queryDate).Where("token = ? AND "+cond, tokenAddress).Find(&dayStats)
+		query := db.db.Table("user_token_stats_" + queryDate).Where("token = ?", tokenAddress)
+		if cond != "" {
+			query = query.Where(cond)
+		}
+		query.Find(&dayStats)
 
 		for _, dayStat := range dayStats {
 			if _, ok := resultMap[dayStat.User]; !ok {

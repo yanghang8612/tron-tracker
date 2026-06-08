@@ -122,6 +122,48 @@ func TestDelegateAmountIndexBuildsWithDirtyAmounts(t *testing.T) {
 	}
 }
 
+// reconcileTxIndexes must drop the retired method index from every tx table.
+func TestReconcileTxIndexes_DropsMethodIndex(t *testing.T) {
+	db := newFlushTestDB(t)
+	seedTxs(t, db, "250401", []*models.Transaction{itestStakeTx("a", 157, 100)})
+	// Simulate a legacy method index (gorm used to create one per table).
+	if err := db.db.Exec("CREATE INDEX idx_transactions_250401_method ON transactions_250401 (method)").Error; err != nil {
+		t.Fatalf("create method index: %v", err)
+	}
+	if !indexExists(t, db, "transactions_250401", "idx_transactions_250401_method") {
+		t.Fatalf("precondition: method index should exist")
+	}
+
+	db.reconcileTxIndexes(30)
+
+	if indexExists(t, db, "transactions_250401", "idx_transactions_250401_method") {
+		t.Fatalf("reconcile did not drop the retired method index")
+	}
+}
+
+// reconcileTxIndexes must keep idx_type_amount_num only on the recent retainDays:
+// drop it from older tables, create it on recent ones that lack it.
+func TestReconcileTxIndexes_RollsAmountIndexWindow(t *testing.T) {
+	db := newFlushTestDB(t)
+	old := time.Now().AddDate(0, 0, -40).Format("060102")   // outside 30d window
+	recent := time.Now().AddDate(0, 0, -5).Format("060102") // inside window
+	seedTxs(t, db, old, []*models.Transaction{itestStakeTx("a", 157, 100)})
+	seedTxs(t, db, recent, []*models.Transaction{itestStakeTx("b", 157, 200)})
+	db.ensureIndex("transactions_"+old, txAmountIndexName, txAmountIndexCols) // old has it -> drop
+	if !indexExists(t, db, "transactions_"+old, txAmountIndexName) {
+		t.Fatalf("precondition: old table should have the amount index")
+	}
+
+	db.reconcileTxIndexes(30)
+
+	if indexExists(t, db, "transactions_"+old, txAmountIndexName) {
+		t.Fatalf("reconcile kept the amount index on a >30d-old table")
+	}
+	if !indexExists(t, db, "transactions_"+recent, txAmountIndexName) {
+		t.Fatalf("reconcile did not create the amount index on a recent table")
+	}
+}
+
 // BackfillDelegateAmountIndexes must add the index to recent existing day tables
 // and skip days with no table (no error).
 func TestBackfillDelegateAmountIndexes(t *testing.T) {

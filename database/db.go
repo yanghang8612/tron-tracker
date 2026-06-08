@@ -666,21 +666,41 @@ func (db *RawDB) GetTopResourceRelatedTxsByDate(date time.Time) []*models.Transa
 // legacy FreezeBalance (11) are deliberately excluded. A missing per-day table
 // (gap in the window) contributes nothing rather than failing the whole query.
 func (db *RawDB) GetStakeRelatedTxsByDateDays(date time.Time, days int) []*models.Transaction {
-	var results []*models.Transaction
-
-	for i := 0; i < days; i++ {
-		var txs []*models.Transaction
-
-		queryDate := date.AddDate(0, 0, i).Format("060102")
-		db.db.Table("transactions_"+queryDate).
-			Where("type IN ?", []int{12, 112, 54, 154, 55, 155, 59, 159}).
-			Find(&txs)
-
-		if len(txs) != 0 {
-			results = append(results, txs...)
-		}
+	if days < 1 {
+		return nil
 	}
 
+	// Each day is an index range-scan plus a clustered-index lookup per matched
+	// row. Cold, those lookups are random disk I/O (~seconds for a day's worth),
+	// and doing the days one after another makes the latency add up. Run them
+	// concurrently so the I/O overlaps and wall-clock is ~one cold day, not their
+	// sum. Each goroutine writes only its own slot, so no locking is needed.
+	const concurrency = 16
+	perDay := make([][]*models.Transaction, days)
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+
+	for i := 0; i < days; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			queryDate := date.AddDate(0, 0, i).Format("060102")
+			var txs []*models.Transaction
+			db.db.Table("transactions_"+queryDate).
+				Where("type IN ?", []int{12, 112, 54, 154, 55, 155, 59, 159}).
+				Find(&txs)
+			perDay[i] = txs
+		}(i)
+	}
+	wg.Wait()
+
+	var results []*models.Transaction
+	for _, txs := range perDay {
+		results = append(results, txs...)
+	}
 	return results
 }
 

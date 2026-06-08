@@ -619,15 +619,31 @@ func (db *RawDB) GetNetIncByDateDays(date time.Time, days int) int {
 }
 
 func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnDelegate bool) []*models.Transaction {
-	var txs []*models.Transaction
-
-	queryDate := date.Format("060102")
-	if isUnDelegate {
-		db.db.Table("transactions_"+queryDate).Where("type = ? OR type = ?", 58, 158).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
-	} else {
-		db.db.Table("transactions_"+queryDate).Where("type = ? OR type = ?", 57, 157).Order("CAST(amount AS UNSIGNED) DESC").Limit(n).Find(&txs)
+	if n < 0 {
+		n = 0
 	}
 
+	table := "transactions_" + date.Format("060102")
+
+	bwType, energyType := 57, 157
+	if isUnDelegate {
+		bwType, energyType = 58, 158
+	}
+
+	// Rank each resource type separately so MySQL serves each "ORDER BY amount
+	// DESC LIMIT n" from idx_type_amount_num (type equality + amount order)
+	// instead of filesorting every delegate row, then merge the two and take the
+	// overall top-n. Same result as "type IN (a,b) ORDER BY amount DESC LIMIT n"
+	// but an index scan rather than a full-table scan + filesort.
+	sql := fmt.Sprintf(
+		"(SELECT * FROM `%s` WHERE type = %d ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d) "+
+			"UNION ALL "+
+			"(SELECT * FROM `%s` WHERE type = %d ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d) "+
+			"ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d",
+		table, bwType, n, table, energyType, n, n)
+
+	var txs []*models.Transaction
+	db.db.Raw(sql).Scan(&txs)
 	return txs
 }
 
@@ -640,6 +656,31 @@ func (db *RawDB) GetTopResourceRelatedTxsByDate(date time.Time) []*models.Transa
 		Find(&txs)
 
 	return txs
+}
+
+// GetStakeRelatedTxsByDateDays returns every freeze/unfreeze transaction in the
+// [date, date+days) window: FreezeBalanceV2 (54), UnfreezeBalanceV2 (55),
+// CancelAllUnfreezeV2 (59), legacy UnfreezeBalance (12), and their +100 ENERGY
+// variants. These are the staking ops behind /top_stake; delegate (57/58) and
+// legacy FreezeBalance (11) are deliberately excluded. A missing per-day table
+// (gap in the window) contributes nothing rather than failing the whole query.
+func (db *RawDB) GetStakeRelatedTxsByDateDays(date time.Time, days int) []*models.Transaction {
+	var results []*models.Transaction
+
+	for i := 0; i < days; i++ {
+		var txs []*models.Transaction
+
+		queryDate := date.AddDate(0, 0, i).Format("060102")
+		db.db.Table("transactions_"+queryDate).
+			Where("type IN ?", []int{12, 112, 54, 154, 55, 155, 59, 159}).
+			Find(&txs)
+
+		if len(txs) != 0 {
+			results = append(results, txs...)
+		}
+	}
+
+	return results
 }
 
 func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contract string, result int) []*models.Transaction {
@@ -812,7 +853,7 @@ func (db *RawDB) GetUserTokenStatisticsByDateDaysToken(date time.Time, days int,
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
 		var dayStats []*models.UserTokenStatistic
-		query := db.db.Table("user_token_stats_" + queryDate).Where("token = ?", tokenAddress)
+		query := db.db.Table("user_token_stats_"+queryDate).Where("token = ?", tokenAddress)
 		if cond != "" {
 			query = query.Where(cond)
 		}
@@ -1516,7 +1557,9 @@ func (db *RawDB) SaveTransactions(transactions []*models.Transaction) error {
 	}
 
 	dbName := "transactions_" + db.trackingDate
-	db.createTableIfNotExist(dbName, models.Transaction{})
+	if db.createTableIfNotExist(dbName, models.Transaction{}) {
+		db.ensureIndex(dbName, txAmountIndexName, txAmountIndexCols)
+	}
 	return db.db.Table(dbName).Create(transactions).Error
 }
 
@@ -2637,7 +2680,10 @@ func (db *RawDB) persistDailyStats(cache *dbCache) error {
 	return nil
 }
 
-func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
+// createTableIfNotExist migrates the table if not already done this process and
+// returns true when it ran the migration this call (i.e. first touch), so the
+// caller can attach extra indexes exactly once.
+func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) bool {
 	db.tableLock.Lock()
 	defer db.tableLock.Unlock()
 
@@ -2648,7 +2694,9 @@ func (db *RawDB) createTableIfNotExist(tableName string, model interface{}) {
 		}
 
 		db.isTableMigrated[tableName] = true
+		return true
 	}
+	return false
 }
 
 // ensureIndex creates indexName on (cols) for tableName if missing.
@@ -2672,6 +2720,33 @@ func (db *RawDB) ensureIndex(tableName, indexName, cols string) {
 		return
 	}
 	db.logger.Infof("Created index %s on %s", indexName, tableName)
+}
+
+// idx_type_amount_num is a composite (type, CAST(amount AS UNSIGNED)) functional
+// index. It lets per-type "ORDER BY amount DESC LIMIT n" queries (top_delegate)
+// run as an index scan instead of a full-table scan + filesort. gorm struct tags
+// can't express functional indexes, so it's created via ensureIndex.
+const (
+	txAmountIndexName = "idx_type_amount_num"
+	txAmountIndexCols = "type, (CAST(amount AS UNSIGNED))"
+)
+
+// EnsureDelegateAmountIndex adds idx_type_amount_num to one day's transactions
+// table when the table exists. Idempotent.
+func (db *RawDB) EnsureDelegateAmountIndex(date string) {
+	table := "transactions_" + date
+	if db.db.Migrator().HasTable(table) {
+		db.ensureIndex(table, txAmountIndexName, txAmountIndexCols)
+	}
+}
+
+// BackfillDelegateAmountIndexes ensures idx_type_amount_num on the most recent
+// `days` daily transactions tables (today back through days-1). Safe to re-run;
+// missing days are skipped.
+func (db *RawDB) BackfillDelegateAmountIndexes(days int) {
+	for i := 0; i < days; i++ {
+		db.EnsureDelegateAmountIndex(time.Now().AddDate(0, 0, -i).Format("060102"))
+	}
 }
 
 // DropStaleStatsTables drops daily-partitioned stats tables whose YYMMDD

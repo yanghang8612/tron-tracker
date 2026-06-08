@@ -102,6 +102,7 @@ func (s *Server) Start() {
 	s.router.GET("/update_ppt_data", s.updatePPTData)
 
 	s.router.GET("/top_delegate", s.topDelegate)
+	s.router.GET("/top_stake", s.topStake)
 	s.router.GET("/tx_analyse", s.txAnalyze)
 	s.router.GET("/count_for_date", s.countForDate)
 

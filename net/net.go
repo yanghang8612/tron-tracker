@@ -595,7 +595,10 @@ func GetUSDTSupply() ([]*models.USDTSupplyStatistic, error) {
 }
 
 type AlphaVantageResponse struct {
-	TimeSeries map[string]struct {
+	ErrorMessage string `json:"Error Message"`
+	Note         string `json:"Note"`
+	Information  string `json:"Information"`
+	TimeSeries   map[string]struct {
 		Open   string `json:"1. open"`
 		High   string `json:"2. high"`
 		Low    string `json:"3. low"`
@@ -604,22 +607,16 @@ type AlphaVantageResponse struct {
 	} `json:"Time Series (Daily)"`
 }
 
+const (
+	alphaVantageStockSymbol       = "TRON"
+	alphaVantageStockMaxAttempts  = 3
+	alphaVantageStockRetryBackoff = 2 * time.Second
+)
+
 func GetStockData(date time.Time, days int) [][]interface{} {
-	symbol := "TRON"
-	url := fmt.Sprintf(
-		"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=%s&outputsize=compact&apikey=%s",
-		symbol, configs.AlphaVantageApiKey,
-	)
-
-	resp, err := client.R().Get(url)
-	if err != nil {
-		zap.S().Errorf("Failed to fetch stock data for %s: %v", symbol, err)
-		return nil
-	}
-
-	var response AlphaVantageResponse
-	if err = json.Unmarshal(resp.Body(), &response); err != nil {
-		zap.S().Errorf("Failed to parse stock data for %s: %v", symbol, err)
+	symbol := alphaVantageStockSymbol
+	response, ok := getAlphaVantageStockData(symbol, date)
+	if !ok {
 		return nil
 	}
 
@@ -655,4 +652,66 @@ func GetStockData(date time.Time, days int) [][]interface{} {
 	}
 
 	return stockData
+}
+
+func getAlphaVantageStockData(symbol string, date time.Time) (*AlphaVantageResponse, bool) {
+	url := fmt.Sprintf(
+		"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=%s&outputsize=compact&apikey=%s",
+		symbol, configs.AlphaVantageApiKey,
+	)
+
+	for attempt := 1; attempt <= alphaVantageStockMaxAttempts; attempt++ {
+		resp, err := client.R().Get(url)
+		if err != nil {
+			zap.S().Warnf("Failed to fetch stock data for %s, attempt %d/%d: %v",
+				symbol, attempt, alphaVantageStockMaxAttempts, err)
+			sleepBeforeAlphaVantageRetry(symbol, attempt)
+			continue
+		}
+
+		var response AlphaVantageResponse
+		if err = json.Unmarshal(resp.Body(), &response); err != nil {
+			body := string(resp.Body())
+			if len(body) > 300 {
+				body = body[:300]
+			}
+			zap.S().Warnf("Failed to parse stock data for %s, attempt %d/%d: %v, body=%q",
+				symbol, attempt, alphaVantageStockMaxAttempts, err, body)
+			sleepBeforeAlphaVantageRetry(symbol, attempt)
+			continue
+		}
+		if response.ErrorMessage != "" {
+			zap.S().Errorf("Alpha Vantage returned error for %s: %s", symbol, response.ErrorMessage)
+			return nil, false
+		}
+		if response.Note != "" || response.Information != "" {
+			zap.S().Warnf("Alpha Vantage returned notice for %s, attempt %d/%d: note=%q information=%q",
+				symbol, attempt, alphaVantageStockMaxAttempts, response.Note, response.Information)
+			sleepBeforeAlphaVantageRetry(symbol, attempt)
+			continue
+		}
+		if len(response.TimeSeries) == 0 {
+			zap.S().Warnf("No stock time series returned for %s before %s, attempt %d/%d",
+				symbol, date.Format("2006-01-02"), attempt, alphaVantageStockMaxAttempts)
+			sleepBeforeAlphaVantageRetry(symbol, attempt)
+			continue
+		}
+
+		return &response, true
+	}
+
+	zap.S().Errorf("Failed to fetch valid stock data for %s after %d attempts",
+		symbol, alphaVantageStockMaxAttempts)
+	return nil, false
+}
+
+func sleepBeforeAlphaVantageRetry(symbol string, attempt int) {
+	if attempt >= alphaVantageStockMaxAttempts {
+		return
+	}
+
+	delay := time.Duration(attempt) * alphaVantageStockRetryBackoff
+	zap.S().Warnf("Retrying Alpha Vantage stock data for %s in %s, next attempt %d/%d",
+		symbol, delay, attempt+1, alphaVantageStockMaxAttempts)
+	time.Sleep(delay)
 }

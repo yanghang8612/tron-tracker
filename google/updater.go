@@ -1344,9 +1344,16 @@ func (u *Updater) getUSDTSupplyData(date time.Time) [][]interface{} {
 	return result
 }
 
+const stockCompareWindowDays = 5
+
 func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	// 0:date 1:open 2:high 3:low 4:close 5:volume
 	stockData := net.GetStockData(today.AddDate(0, 0, -1), 20)
+	if len(stockData) < stockCompareWindowDays*2 {
+		u.logger.Warnf("Skip stock data update: need at least %d rows, got %d for date %s",
+			stockCompareWindowDays*2, len(stockData), today.AddDate(0, 0, -1).Format("2006-01-02"))
+		return
+	}
 
 	// Update Stock sheet
 	// stockDataInSheet := make([][]interface{}, 0, len(stockData))
@@ -1383,14 +1390,14 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	thisLowPrice, thisHighPrice := 1e6, 0.0
 	lastLowPrice, lastHighPrice := 1e6, 0.0
 
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= stockCompareWindowDays; i++ {
 		avgPrice += stockData[len(stockData)-i][4].(float64)
 		thisLowPrice = math.Min(thisLowPrice, stockData[len(stockData)-i][3].(float64))
 		thisHighPrice = math.Max(thisHighPrice, stockData[len(stockData)-i][2].(float64))
-		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-5-i][3].(float64))
-		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-5-i][2].(float64))
+		lastLowPrice = math.Min(lastLowPrice, stockData[len(stockData)-stockCompareWindowDays-i][3].(float64))
+		lastHighPrice = math.Max(lastHighPrice, stockData[len(stockData)-stockCompareWindowDays-i][2].(float64))
 	}
-	avgPrice /= 5
+	avgPrice /= stockCompareWindowDays
 
 	// Update the stock avg price
 	price := fmt.Sprintf("%.2f", avgPrice)
@@ -1415,14 +1422,14 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 
 	// Update the avg daily volume
 	thisDailyAvgVolume, lastDailyAvgVolume := 0.0, 0.0
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= stockCompareWindowDays; i++ {
 		thisAvgPrice := (stockData[len(stockData)-i][3].(float64) + stockData[len(stockData)-i][2].(float64)) / 2
 		thisDailyAvgVolume += stockData[len(stockData)-i][5].(float64) * thisAvgPrice
-		lastAvgPrice := (stockData[len(stockData)-5-i][3].(float64) + stockData[len(stockData)-5-i][2].(float64)) / 2
-		lastDailyAvgVolume += stockData[len(stockData)-5-i][5].(float64) * lastAvgPrice
+		lastAvgPrice := (stockData[len(stockData)-stockCompareWindowDays-i][3].(float64) + stockData[len(stockData)-stockCompareWindowDays-i][2].(float64)) / 2
+		lastDailyAvgVolume += stockData[len(stockData)-stockCompareWindowDays-i][5].(float64) * lastAvgPrice
 	}
-	thisDailyAvgVolume /= 5.0
-	lastDailyAvgVolume /= 5.0
+	thisDailyAvgVolume /= stockCompareWindowDays
+	lastDailyAvgVolume /= stockCompareWindowDays
 
 	avgDailyVolume := "$" + common.FormatWithUnits(thisDailyAvgVolume)
 	avgDailyVolumeChange := common.FormatFloatChangePercent(lastDailyAvgVolume, thisDailyAvgVolume)

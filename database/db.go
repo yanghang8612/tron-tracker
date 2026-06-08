@@ -634,12 +634,13 @@ func (db *RawDB) GetTopDelegateRelatedTxsByDateAndN(date time.Time, n int, isUnD
 	// DESC LIMIT n" from idx_type_amount_num (type equality + amount order)
 	// instead of filesorting every delegate row, then merge the two and take the
 	// overall top-n. Same result as "type IN (a,b) ORDER BY amount DESC LIMIT n"
-	// but an index scan rather than a full-table scan + filesort.
+	// but an index scan rather than a full-table scan + filesort. The ORDER BY
+	// must match txAmountExpr verbatim for the index to serve the sort.
 	sql := fmt.Sprintf(
-		"(SELECT * FROM `%s` WHERE type = %d ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d) "+
+		"(SELECT * FROM `%s` WHERE type = %d ORDER BY "+txAmountExpr+" DESC LIMIT %d) "+
 			"UNION ALL "+
-			"(SELECT * FROM `%s` WHERE type = %d ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d) "+
-			"ORDER BY CAST(amount AS UNSIGNED) DESC LIMIT %d",
+			"(SELECT * FROM `%s` WHERE type = %d ORDER BY "+txAmountExpr+" DESC LIMIT %d) "+
+			"ORDER BY "+txAmountExpr+" DESC LIMIT %d",
 		table, bwType, n, table, energyType, n, n)
 
 	var txs []*models.Transaction
@@ -2722,13 +2723,23 @@ func (db *RawDB) ensureIndex(tableName, indexName, cols string) {
 	db.logger.Infof("Created index %s on %s", indexName, tableName)
 }
 
-// idx_type_amount_num is a composite (type, CAST(amount AS UNSIGNED)) functional
-// index. It lets per-type "ORDER BY amount DESC LIMIT n" queries (top_delegate)
-// run as an index scan instead of a full-table scan + filesort. gorm struct tags
-// can't express functional indexes, so it's created via ensureIndex.
+// txAmountExpr converts the varchar amount to a sortable unsigned value. Real tx
+// tables hold dirty amounts: "<nil>" (an unset BigInt serialized by big.Int) and
+// token amounts wider than uint64. The guard maps those (plus empty) to 0 so the
+// functional index never hits "Data truncated for functional index" (err 3751) on
+// build or on insert; delegate amounts are clean <=14-digit integers, so their
+// order stays exact. REGEXP can't be used here (charset error 3995 inside a
+// functional index), hence the length/equality guard. Used VERBATIM in both the
+// index and the ORDER BY so the optimizer serves the sort straight from the index.
+const txAmountExpr = "CAST(IF(amount='<nil>' OR amount='' OR LENGTH(amount)>19, '0', amount) AS UNSIGNED)"
+
+// idx_type_amount_num is a composite (type, txAmountExpr) functional index that
+// lets per-type "ORDER BY amount DESC LIMIT n" queries (top_delegate) run as an
+// index scan instead of a full-table scan + filesort. gorm struct tags can't
+// express functional indexes, so it's created via ensureIndex.
 const (
 	txAmountIndexName = "idx_type_amount_num"
-	txAmountIndexCols = "type, (CAST(amount AS UNSIGNED))"
+	txAmountIndexCols = "type, (" + txAmountExpr + ")"
 )
 
 // EnsureDelegateAmountIndex adds idx_type_amount_num to one day's transactions

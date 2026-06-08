@@ -3,10 +3,12 @@
 package database
 
 import (
+	"math/big"
 	"testing"
 	"time"
 
 	"tron-tracker/database/models"
+	"tron-tracker/database/models/types"
 )
 
 func indexExists(t *testing.T, db *RawDB, table, index string) bool {
@@ -76,8 +78,8 @@ func TestGetTopDelegateRelatedTxsByDateAndN_UndelegateMode(t *testing.T) {
 	}
 }
 
-// SaveTransactions must create the (type, CAST(amount AS UNSIGNED)) functional
-// index on the day's table so top_delegate's per-type ORDER BY is index-served.
+// SaveTransactions must create the idx_type_amount_num functional index on the
+// day's table so top_delegate's per-type ORDER BY is index-served.
 func TestSaveTransactionsCreatesDelegateAmountIndex(t *testing.T) {
 	db := newFlushTestDB(t)
 	db.trackingDate = "250203"
@@ -88,6 +90,35 @@ func TestSaveTransactionsCreatesDelegateAmountIndex(t *testing.T) {
 
 	if !indexExists(t, db, "transactions_250203", "idx_type_amount_num") {
 		t.Fatalf("idx_type_amount_num was not created by SaveTransactions")
+	}
+}
+
+// The functional index must build over REAL tx data, which contains "<nil>"
+// (unset BigInt amount) and >uint64 token amounts. Without the guard expression
+// CREATE INDEX fails with "Data truncated for functional index" (err 3751), which
+// is exactly what happened in production. Delegate ranking must still be correct.
+func TestDelegateAmountIndexBuildsWithDirtyAmounts(t *testing.T) {
+	db := newFlushTestDB(t)
+	start := time.Date(2025, 3, 1, 0, 0, 0, 0, time.Local)
+
+	huge, _ := new(big.Int).SetString("123456789012345678901234567890", 10) // 30 digits, > uint64
+	dirty := &models.Transaction{Type: 31}                                  // unset amount -> stored as "<nil>"
+	overflow := &models.Transaction{Type: 31, Amount: types.NewBigInt(huge)}
+	seedTxs(t, db, "250301", []*models.Transaction{
+		dirty, overflow,
+		itestStakeTx("a", 157, 5_000_000_000),
+		itestStakeTx("b", 57, 9_000_000_000),
+	})
+
+	db.EnsureDelegateAmountIndex("250301")
+
+	if !indexExists(t, db, "transactions_250301", "idx_type_amount_num") {
+		t.Fatalf("index failed to build over dirty amounts (<nil>/overflow) — guard expression broken")
+	}
+
+	got := db.GetTopDelegateRelatedTxsByDateAndN(start, 5, false)
+	if len(got) != 2 || got[0].Amount.String() != "9000000000" || got[1].Amount.String() != "5000000000" {
+		t.Fatalf("delegate ranking wrong with dirty rows present: %v", got)
 	}
 }
 

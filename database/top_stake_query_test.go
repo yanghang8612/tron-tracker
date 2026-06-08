@@ -3,6 +3,7 @@
 package database
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -52,6 +53,32 @@ func TestGetStakeRelatedTxsByDateDays(t *testing.T) {
 		if !seen[want] {
 			t.Fatalf("type %d missing from result (seen=%v)", want, seen)
 		}
+	}
+}
+
+// The per-day queries run concurrently; the result must still gather every day's
+// rows exactly once. Uses more days than the concurrency cap to exercise multiple
+// waves and to catch a dropped/duplicated day from a collection race.
+func TestGetStakeRelatedTxsByDateDays_CollectsAllDaysConcurrently(t *testing.T) {
+	db := newFlushTestDB(t)
+	start := time.Date(2025, 4, 1, 0, 0, 0, 0, time.Local)
+	const n = 18
+	for i := 0; i < n; i++ {
+		d := start.AddDate(0, 0, i).Format("060102")
+		seedTxs(t, db, d, []*models.Transaction{itestStakeTx(fmt.Sprintf("owner%02d", i), 54, int64(100+i))})
+	}
+
+	got := db.GetStakeRelatedTxsByDateDays(start, n)
+
+	if len(got) != n {
+		t.Fatalf("got %d stake txs over %d days, want %d (dropped/duplicated day)", len(got), n, n)
+	}
+	owners := map[string]bool{}
+	for _, tx := range got {
+		owners[tx.OwnerAddr] = true
+	}
+	if len(owners) != n {
+		t.Fatalf("got %d distinct owners, want %d (lost result = race)", len(owners), n)
 	}
 }
 

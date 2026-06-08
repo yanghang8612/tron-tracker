@@ -27,7 +27,7 @@ type Transaction struct {
 	NetFee            int64
 	Result            uint8
 	SigCount          uint8
-	Method            string `gorm:"size:8;index"`
+	Method            string `gorm:"size:8"`
 	WithMemo          bool
 }
 

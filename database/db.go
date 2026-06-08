@@ -2677,6 +2677,8 @@ func (db *RawDB) persistDailyStats(cache *dbCache) error {
 		db.logger.Errorf("drop stale stats tables: %v", err) // non-fatal cleanup
 	}
 
+	db.reconcileTxIndexes(txIndexRetainDays)
+
 	db.logger.Infof("Flushed daily stats for [%s]", date)
 	return nil
 }
@@ -2740,6 +2742,9 @@ const txAmountExpr = "CAST(IF(amount='<nil>' OR amount='' OR LENGTH(amount)>19, 
 const (
 	txAmountIndexName = "idx_type_amount_num"
 	txAmountIndexCols = "type, (" + txAmountExpr + ")"
+	// txIndexRetainDays is the rolling window kept indexed by reconcileTxIndexes;
+	// top_delegate is only ever queried for recent dates.
+	txIndexRetainDays = 30
 )
 
 // EnsureDelegateAmountIndex adds idx_type_amount_num to one day's transactions
@@ -2758,6 +2763,90 @@ func (db *RawDB) BackfillDelegateAmountIndexes(days int) {
 	for i := 0; i < days; i++ {
 		db.EnsureDelegateAmountIndex(time.Now().AddDate(0, 0, -i).Format("060102"))
 	}
+}
+
+// reconcileTxIndexes is the unified daily transactions-table index maintenance,
+// run from flushDailyStats. It (1) drops the retired per-table method index
+// everywhere, and (2) keeps idx_type_amount_num as a rolling window: present on
+// the most recent retainDays tables, dropped from older ones. Idempotent; every
+// DDL is guarded and non-fatal. The first run after deploy does the historical
+// cleanup; steady state only drops the single table that ages out each day.
+func (db *RawDB) reconcileTxIndexes(retainDays int) {
+	db.dropTxMethodIndexes()
+	db.rollDelegateAmountIndexes(time.Now().AddDate(0, 0, -retainDays).Format("060102"))
+}
+
+// dropTxMethodIndexes drops every index on the `method` column of any
+// transactions_* table. The column is no longer queried via SQL, so the index is
+// dead weight.
+func (db *RawDB) dropTxMethodIndexes() {
+	// CONCAT into one column so a plain []string scan is reliable (a multi-column
+	// scan into a struct trips on information_schema's upper-cased column names).
+	// '|' is safe: table/index identifiers are only [a-z0-9_].
+	var pairs []string
+	if err := db.db.Raw(
+		"SELECT DISTINCT CONCAT(table_name, '|', index_name) FROM information_schema.statistics " +
+			"WHERE table_schema = DATABASE() AND table_name LIKE 'transactions\\_%' AND column_name = 'method'",
+	).Scan(&pairs).Error; err != nil {
+		db.logger.Errorf("list method indexes: %v", err)
+		return
+	}
+	for _, p := range pairs {
+		if i := strings.IndexByte(p, '|'); i > 0 {
+			db.dropIndex(p[:i], p[i+1:])
+		}
+	}
+}
+
+// rollDelegateAmountIndexes keeps idx_type_amount_num only on transactions tables
+// whose YYMMDD suffix is >= cutoff: it drops the index from older tables and
+// creates it on in-window tables that lack it (self-heal; new tables already get
+// it at creation time via SaveTransactions).
+func (db *RawDB) rollDelegateAmountIndexes(cutoff string) {
+	have := make(map[string]bool)
+	var withIdx []string
+	if err := db.db.Raw(
+		"SELECT DISTINCT table_name FROM information_schema.statistics "+
+			"WHERE table_schema = DATABASE() AND table_name LIKE 'transactions\\_%' AND index_name = ?",
+		txAmountIndexName,
+	).Scan(&withIdx).Error; err != nil {
+		db.logger.Errorf("list amount-indexed tables: %v", err)
+		return
+	}
+	for _, t := range withIdx {
+		have[t] = true
+	}
+
+	var all []string
+	if err := db.db.Raw(
+		"SELECT table_name FROM information_schema.tables " +
+			"WHERE table_schema = DATABASE() AND table_name LIKE 'transactions\\_%'",
+	).Scan(&all).Error; err != nil {
+		db.logger.Errorf("list tx tables: %v", err)
+		return
+	}
+	for _, t := range all {
+		suffix := strings.TrimPrefix(t, "transactions_")
+		if _, err := time.Parse("060102", suffix); err != nil {
+			continue
+		}
+		if suffix < cutoff {
+			if have[t] {
+				db.dropIndex(t, txAmountIndexName)
+			}
+		} else if !have[t] {
+			db.ensureIndex(t, txAmountIndexName, txAmountIndexCols)
+		}
+	}
+}
+
+// dropIndex drops indexName from tableName, logging and continuing on error.
+func (db *RawDB) dropIndex(tableName, indexName string) {
+	if err := db.db.Exec("DROP INDEX `" + indexName + "` ON `" + tableName + "`").Error; err != nil {
+		db.logger.Errorf("drop index %s on %s: %v", indexName, tableName, err)
+		return
+	}
+	db.logger.Infof("Dropped index %s on %s", indexName, tableName)
 }
 
 // DropStaleStatsTables drops daily-partitioned stats tables whose YYMMDD

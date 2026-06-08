@@ -11,17 +11,17 @@ import (
 
 // Usage:
 //
-//	go run ./cmd/index-backfill -days 90
-//	go run ./cmd/index-backfill -days 90 -config /data/tracker/config.toml
+//	go run ./cmd/index-backfill -days 30
+//	go run ./cmd/index-backfill -days 30 -config /data/tracker/config.toml
 //
-// Adds the idx_type_amount_num functional index (type, CAST(amount AS UNSIGNED))
-// to the most recent N daily transactions_* tables. This makes /top_delegate's
-// per-type "ORDER BY amount DESC LIMIT n" run as an index scan instead of a
-// full-table scan + filesort. Idempotent and safe to re-run; brand-new daily
-// tables get the index automatically at creation time, so this is only needed
-// once to cover existing history.
+// Ensures idx_type_amount_num on the most recent N daily transactions_* tables so
+// /top_delegate's per-type "ORDER BY amount DESC LIMIT n" runs as an index scan
+// instead of a full-table scan + filesort. Idempotent. Normally unnecessary: new
+// tables get the index at creation time, and the daily flush (reconcileTxIndexes)
+// keeps a rolling 30-day window and drops older ones. Use this only to apply the
+// index immediately instead of waiting for the next flush.
 func main() {
-	daysFlag := flag.Int("days", 90, "number of most-recent days to backfill")
+	daysFlag := flag.Int("days", 30, "number of most-recent days to backfill")
 	configFlag := flag.String("config", "./config.toml", "path to config.toml")
 	flag.Parse()
 

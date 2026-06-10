@@ -46,16 +46,19 @@ const (
 )
 
 var (
-	client  = resty.New()
-	configs *config.NetConfig
+	client     = resty.New()
+	gridClient = resty.New()
+	configs    *config.NetConfig
 )
 
 func Init(cfg *config.NetConfig) {
 	configs = cfg
-	client.
-		SetRetryCount(3).
-		SetRetryWaitTime(500 * time.Millisecond).
-		SetRetryMaxWaitTime(3 * time.Second)
+	for _, c := range []*resty.Client{client, gridClient} {
+		c.SetRetryCount(3).
+			SetRetryWaitTime(500 * time.Millisecond).
+			SetRetryMaxWaitTime(3 * time.Second)
+	}
+	gridClient.SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey)
 }
 
 func ReportTronlinkStatsToSlack(msg string) {
@@ -129,21 +132,21 @@ func ReportNotificationToSlack(msg string, isWarning bool) {
 func GetNowBlock() (*types.Block, error) {
 	url := configs.FullNode + GetNowBlockPath
 	var block types.Block
-	_, err := client.R().SetResult(&block).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
+	_, err := gridClient.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := configs.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
-	_, err := client.R().SetResult(&block).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
+	_, err := gridClient.R().SetResult(&block).Get(url)
 	return &block, err
 }
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := configs.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
-	_, err := client.R().SetResult(&txInfoList).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
+	_, err := gridClient.R().SetResult(&txInfoList).Get(url)
 	return txInfoList, err
 }
 
@@ -176,7 +179,7 @@ type triggerResponse struct {
 }
 
 func Trigger(addr, selector, param string) (string, error) {
-	resData, err := client.R().SetBody(&triggerRequest{
+	resData, err := gridClient.R().SetBody(&triggerRequest{
 		OwnerAddress:     "T9yD14Nj9j7xAB4dbGeiX9h8unkKHxuWwb",
 		ContractAddress:  addr,
 		FunctionSelector: selector,
@@ -203,7 +206,7 @@ func Trigger(addr, selector, param string) (string, error) {
 }
 
 func GetAccountBalance(address string) (*big.Int, error) {
-	resData, err := client.R().SetBody(map[string]interface{}{
+	resData, err := gridClient.R().SetBody(map[string]interface{}{
 		"address": address,
 		"visible": true,
 	}).Post(configs.FullNode + GetAccountPath)
@@ -238,7 +241,7 @@ type FrozenResources struct {
 // GetAccountFrozenResources returns the 6 frozen-TRX components (in sun)
 // for the given address, derived from /wallet/getaccount.
 func GetAccountFrozenResources(address string) (FrozenResources, error) {
-	resData, err := client.R().SetBody(map[string]interface{}{
+	resData, err := gridClient.R().SetBody(map[string]interface{}{
 		"address": address,
 		"visible": true,
 	}).Post(configs.FullNode + GetAccountPath)
@@ -302,7 +305,7 @@ func GetAccountFrozenResources(address string) (FrozenResources, error) {
 // /wallet/getdelegatedresourceaccountindexv2). Returns nil (not error) when
 // the account has no outgoing delegations.
 func GetAccountDelegatedTo(address string) ([]string, error) {
-	resData, err := client.R().SetBody(map[string]interface{}{
+	resData, err := gridClient.R().SetBody(map[string]interface{}{
 		"value":   address,
 		"visible": true,
 	}).Post(configs.FullNode + GetDelegatedResourceAccountIndexV2Path)
@@ -326,7 +329,7 @@ func GetAccountDelegatedTo(address string) ([]string, error) {
 // `frozen_balance_for_energy` here actually carry the *delegated* amount,
 // not the source's own frozen balance.
 func GetDelegatedV2Amount(from, to string) (int64, int64, error) {
-	resData, err := client.R().SetBody(map[string]interface{}{
+	resData, err := gridClient.R().SetBody(map[string]interface{}{
 		"fromAddress": from,
 		"toAddress":   to,
 		"visible":     true,

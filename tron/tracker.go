@@ -151,6 +151,17 @@ func (t *Tracker) doTrackBlock() {
 		return
 	}
 
+	// FullNode/TronGrid can transiently return fewer entries than the block's
+	// transactions (tx-info indexer lag, an out-of-sync replica behind the LB,
+	// a reorg between the two calls). Bail and let loop() refetch both sides
+	// consistently rather than indexing into the shorter txInfoList.
+	if len(txInfoList) != len(block.Transactions) {
+		t.logger.Warnf("txInfoList len [%d] != block [%d] tx count [%d], retrying",
+			len(txInfoList), block.BlockHeader.RawData.Number, len(block.Transactions))
+		time.Sleep(1 * time.Second)
+		return
+	}
+
 	transactions := make([]*models.Transaction, 0)
 	t.db.SetLastTrackedBlock(block)
 	for idx, tx := range block.Transactions {

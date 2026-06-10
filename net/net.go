@@ -129,21 +129,21 @@ func ReportNotificationToSlack(msg string, isWarning bool) {
 func GetNowBlock() (*types.Block, error) {
 	url := configs.FullNode + GetNowBlockPath
 	var block types.Block
-	_, err := client.R().SetResult(&block).Get(url)
+	_, err := client.R().SetResult(&block).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
 	return &block, err
 }
 
 func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := configs.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
-	_, err := client.R().SetResult(&block).Get(url)
+	_, err := client.R().SetResult(&block).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
 	return &block, err
 }
 
 func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := configs.FullNode + GetTransactionInfoListPath + strconv.FormatInt(int64(height), 10)
 	var txInfoList = make([]*types.TransactionInfo, 0)
-	_, err := client.R().SetResult(&txInfoList).Get(url)
+	_, err := client.R().SetResult(&txInfoList).SetHeader("TRON-PRO-API-KEY", configs.TronGridApiKey).Get(url)
 	return txInfoList, err
 }
 

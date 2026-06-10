@@ -31,6 +31,7 @@ type NetConfig struct {
 	WarningWebhook     string `toml:"warning_webhook"`
 	NotifierWebhook    string `toml:"notifier_webhook"`
 	CMCApiKey          string `toml:"cmc_api_key"`
+	TronGridApiKey     string `toml:"tron_grid_api_key"`
 	AlphaVantageApiKey string `toml:"alpha_vantage_api_key"`
 }
 

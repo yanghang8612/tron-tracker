@@ -114,5 +114,4 @@ fabric.properties
 # Go workspace file
 go.work
 
-/.idea/copilot.*
-/.idea/go.imports.xml
+/.idea/

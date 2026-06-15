@@ -23,3 +23,24 @@ func TestUSDTStorageStatistic_Diff_ZeroCounts(t *testing.T) {
 		t.Fatalf("Diff(data) = %q, want a SetStorage report", out)
 	}
 }
+
+func TestUserStatisticMetric(t *testing.T) {
+	s := &UserStatistic{Fee: 1, EnergyTotal: 2, TxTotal: 3, TRXTotal: 4, SmallTRXTotal: 5, TRC10Total: 6, USDTTotal: 7}
+
+	want := map[string]int64{
+		"fee": 1, "energy_total": 2, "tx_total": 3,
+		"trx_total": 4, "small_trx_total": 5, "trc10_total": 6, "usdt_total": 7,
+	}
+	for name, exp := range want {
+		got, ok := s.Metric(name)
+		if !ok || got != exp {
+			t.Fatalf("Metric(%q) = (%d, %v), want (%d, true)", name, got, ok, exp)
+		}
+	}
+
+	// Unknown metric must report not-ok so the handler can reject it (400),
+	// rather than silently ranking everything by a zero column.
+	if got, ok := s.Metric("delegate_total_typo"); ok || got != 0 {
+		t.Fatalf("Metric(unknown) = (%d, %v), want (0, false)", got, ok)
+	}
+}

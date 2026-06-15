@@ -132,6 +132,31 @@ func (o *UserStatistic) Add(tx *Transaction) {
 	}
 }
 
+// Metric returns the value of the named counter and whether name is a
+// recognized metric. Names match the gorm column names so they align with the
+// ORDER BY whitelist in GetTopNFromStatisticByDateDays. Callers use the bool to
+// reject unknown metrics instead of silently ranking by a zero column.
+func (o *UserStatistic) Metric(name string) (int64, bool) {
+	switch name {
+	case "fee":
+		return o.Fee, true
+	case "energy_total":
+		return o.EnergyTotal, true
+	case "tx_total":
+		return o.TxTotal, true
+	case "trx_total":
+		return o.TRXTotal, true
+	case "small_trx_total":
+		return o.SmallTRXTotal, true
+	case "trc10_total":
+		return o.TRC10Total, true
+	case "usdt_total":
+		return o.USDTTotal, true
+	default:
+		return 0, false
+	}
+}
+
 type UserTokenStatistic struct {
 	ID                    uint         `gorm:"primaryKey" json:"-"`
 	User                  string       `gorm:"size:34;index" json:"address"`

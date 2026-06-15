@@ -726,15 +726,33 @@ func (db *RawDB) GetTxsByDateDaysContractResult(date time.Time, days int, contra
 }
 
 func (db *RawDB) GetFromStatisticByDateDays(date time.Time, days int) map[string]*models.UserStatistic {
+	return db.aggregateUserStatistic(date, days, "from_stats_")
+}
+
+// GetTransferStatisticByDateDays aggregates per-address UserStatistic rows over
+// [date, date+days) from the daily from_stats_/to_stats_ tables. direction "to"
+// reads to_stats_ (keyed by ToAddr); anything else reads from_stats_ (keyed by
+// OwnerAddr). The "total" summary row is excluded.
+func (db *RawDB) GetTransferStatisticByDateDays(date time.Time, days int, direction string) map[string]*models.UserStatistic {
+	prefix := "from_stats_"
+	if direction == "to" {
+		prefix = "to_stats_"
+	}
+	return db.aggregateUserStatistic(date, days, prefix)
+}
+
+// aggregateUserStatistic sums per-address UserStatistic rows from the daily
+// <prefix><date> tables across the window, excluding the "total" summary row.
+func (db *RawDB) aggregateUserStatistic(date time.Time, days int, prefix string) map[string]*models.UserStatistic {
 	resultMap := make(map[string]*models.UserStatistic)
 
 	for i := 0; i < days; i++ {
 		queryDate := date.AddDate(0, 0, i).Format("060102")
 
-		db.logger.Infof("Start querying from_stats for date [%s]", queryDate)
+		db.logger.Infof("Start querying %s for date [%s]", prefix, queryDate)
 
 		dayStats := make([]*models.UserStatistic, 0)
-		result := db.db.Table("from_stats_"+queryDate).Where("address <> ?", "total").FindInBatches(&dayStats, 100, func(_ *gorm.DB, _ int) error {
+		result := db.db.Table(prefix+queryDate).Where("address <> ?", "total").FindInBatches(&dayStats, 100, func(_ *gorm.DB, _ int) error {
 			for _, dayStat := range dayStats {
 				user := dayStat.Address
 
@@ -748,7 +766,7 @@ func (db *RawDB) GetFromStatisticByDateDays(date time.Time, days int) map[string
 			return nil
 		})
 
-		db.logger.Infof("Finish querying from_stats for date [%s], query rows: %d, error: %v", queryDate, result.RowsAffected, result.Error)
+		db.logger.Infof("Finish querying %s for date [%s], query rows: %d, error: %v", prefix, queryDate, result.RowsAffected, result.Error)
 	}
 
 	return resultMap

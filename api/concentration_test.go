@@ -12,20 +12,18 @@ import (
 )
 
 func TestBuildConcentration(t *testing.T) {
+	// stats are the per-day top-n candidates already fetched from the DB; total
+	// is the network-wide denominator passed in separately (read from the total
+	// row / SUM), NOT derived from these rows — they're only the head.
 	stats := []*models.UserStatistic{
 		{Address: "B", TRXTotal: 30},
 		{Address: "A", TRXTotal: 50},
 		{Address: "C", TRXTotal: 20},
 	}
+	const total = 200 // network-wide, larger than the visible head rows
 
-	total, topNSum, list := buildConcentration(stats, "trx_total", 2)
+	topNSum, list := buildConcentration(stats, "trx_total", total, 2)
 
-	// total is the network-wide denominator: summed over ALL stats, BEFORE the
-	// top-n truncation. Summing the post-truncation slice would overstate every
-	// address's share and make concentration look higher than it is.
-	if total != 100 {
-		t.Fatalf("total = %d, want 100 (sum over all, pre-truncation)", total)
-	}
 	if len(list) != 2 {
 		t.Fatalf("list len = %d, want 2 (top n)", len(list))
 	}
@@ -38,9 +36,9 @@ func TestBuildConcentration(t *testing.T) {
 	if list[0].Value != 50 {
 		t.Fatalf("top value = %d, want 50", list[0].Value)
 	}
-	// percent is value over the network total, in that argument order.
-	if want := common.FormatOfPercent(100, 50); list[0].Percent != want {
-		t.Fatalf("top percent = %q, want %q", list[0].Percent, want)
+	// percent uses the passed-in network total (200), not the sum of these rows.
+	if want := common.FormatOfPercent(total, 50); list[0].Percent != want {
+		t.Fatalf("top percent = %q, want %q (over network total, not head)", list[0].Percent, want)
 	}
 }
 
@@ -51,21 +49,18 @@ func TestBuildConcentrationClampsN(t *testing.T) {
 	}
 
 	// n larger than len: return all, no panic.
-	if _, _, list := buildConcentration(stats, "trx_total", 100); len(list) != 2 {
+	if _, list := buildConcentration(stats, "trx_total", 8, 100); len(list) != 2 {
 		t.Fatalf("n>len: list len = %d, want 2", len(list))
 	}
 
-	// n <= 0: empty list, but total stays network-wide.
-	total, topNSum, list := buildConcentration(stats, "trx_total", 0)
+	// n <= 0: empty list, zero head sum.
+	topNSum, list := buildConcentration(stats, "trx_total", 8, 0)
 	if len(list) != 0 || topNSum != 0 {
 		t.Fatalf("n=0: list=%d topNSum=%d, want 0,0", len(list), topNSum)
 	}
-	if total != 8 {
-		t.Fatalf("n=0: total = %d, want 8 (still full network)", total)
-	}
 
 	// negative n must clamp to 0, not panic on list[:negative].
-	if _, _, list := buildConcentration(stats, "trx_total", -1); len(list) != 0 {
+	if _, list := buildConcentration(stats, "trx_total", 8, -1); len(list) != 0 {
 		t.Fatalf("n<0: list len = %d, want 0", len(list))
 	}
 }

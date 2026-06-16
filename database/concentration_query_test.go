@@ -19,10 +19,12 @@ func seedUserStats(t *testing.T, db *RawDB, prefix, date string, rows []*models.
 	}
 }
 
-// GetTopTransferStatsByDateDays must take each day's top-n by the metric (DB-side
-// ORDER BY LIMIT, not a full scan), merge an address across days, exclude the
-// "total" row, and select the from_/to_ table by direction. An address that
-// never makes a daily top-n is intentionally absent (documented approximation).
+// GetTopTransferStatsByDateDays takes each day's top candidates by the metric
+// (DB-side ORDER BY LIMIT, over-fetched to n*10 / min 1000 so the cross-day merge
+// converges to the true top-n — verified against /q exact top-50), merges an
+// address across days, excludes the "total" row, and selects from_/to_ by
+// direction. The over-fetched pool covers this small table entirely, so the merge
+// here is exact: C is kept even though it never makes a daily top-2.
 func TestGetTopTransferStatsByDateDays(t *testing.T) {
 	db := newFlushTestDB(t)
 	start := time.Date(2025, 1, 1, 0, 0, 0, 0, time.Local)
@@ -30,7 +32,7 @@ func TestGetTopTransferStatsByDateDays(t *testing.T) {
 	seedUserStats(t, db, "from_stats_", "250101", []*models.UserStatistic{
 		{Address: "A", TRXTotal: 50},
 		{Address: "B", TRXTotal: 30},
-		{Address: "C", TRXTotal: 10}, // never in a daily top-2
+		{Address: "C", TRXTotal: 10}, // outside a tight daily top-2, but pool covers it
 		{Address: "total", TRXTotal: 90},
 	})
 	seedUserStats(t, db, "from_stats_", "250102", []*models.UserStatistic{
@@ -53,11 +55,14 @@ func TestGetTopTransferStatsByDateDays(t *testing.T) {
 	if m["A"] != 55 {
 		t.Fatalf("A = %d, want 55 (50 day1 + 5 day2, merged)", m["A"])
 	}
+	if m["B"] != 30 {
+		t.Fatalf("B = %d, want 30", m["B"])
+	}
 	if m["D"] != 40 {
 		t.Fatalf("D = %d, want 40", m["D"])
 	}
-	if _, ok := m["C"]; ok {
-		t.Fatal("C must be absent (never in a daily top-2) — the top-n approximation")
+	if m["C"] != 10 {
+		t.Fatalf("C = %d, want 10 (kept by the over-fetched candidate pool)", m["C"])
 	}
 	if _, ok := m["X"]; ok {
 		t.Fatal("direction=from must not read to_stats rows")

@@ -729,16 +729,119 @@ func (db *RawDB) GetFromStatisticByDateDays(date time.Time, days int) map[string
 	return db.aggregateUserStatistic(date, days, "from_stats_")
 }
 
-// GetTransferStatisticByDateDays aggregates per-address UserStatistic rows over
-// [date, date+days) from the daily from_stats_/to_stats_ tables. direction "to"
-// reads to_stats_ (keyed by ToAddr); anything else reads from_stats_ (keyed by
-// OwnerAddr). The "total" summary row is excluded.
-func (db *RawDB) GetTransferStatisticByDateDays(date time.Time, days int, direction string) map[string]*models.UserStatistic {
-	prefix := "from_stats_"
+// transferTablePrefix maps a direction to its daily stat-table prefix.
+func transferTablePrefix(direction string) string {
 	if direction == "to" {
-		prefix = "to_stats_"
+		return "to_stats_"
 	}
-	return db.aggregateUserStatistic(date, days, prefix)
+	return "from_stats_"
+}
+
+// whitelistTransferMetric guards a metric name that gets concatenated into SQL
+// (ORDER BY / SUM). Unknown names fall back to trx_total so an arbitrary query
+// value can never be injected. Mirrors models.UserStatistic.Metric.
+func whitelistTransferMetric(metric string) string {
+	switch metric {
+	case "fee", "energy_total", "tx_total", "trx_total", "small_trx_total", "trc10_total", "usdt_total":
+		return metric
+	default:
+		return "trx_total"
+	}
+}
+
+// GetTopTransferStatsByDateDays returns the addresses that rank top-n by metric
+// in the from_stats_/to_stats_ tables over [date, date+days), merged across the
+// window. Each day is a DB-side ORDER BY ... LIMIT n (not a full-table scan), run
+// concurrently so wall-clock is ~one day not their sum. An address that never
+// reaches a daily top-n is omitted — the documented top-n approximation, the
+// same one GetTopNFromStatisticByDateDays makes.
+func (db *RawDB) GetTopTransferStatsByDateDays(date time.Time, days int, direction, metric string, n int) []*models.UserStatistic {
+	if days < 1 || n < 1 {
+		return nil
+	}
+	metric = whitelistTransferMetric(metric)
+	prefix := transferTablePrefix(direction)
+
+	const concurrency = 16
+	perDay := make([][]*models.UserStatistic, days)
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < days; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			queryDate := date.AddDate(0, 0, i).Format("060102")
+			var dayStats []*models.UserStatistic
+			db.db.Table(prefix+queryDate).Where("address <> ?", "total").Order(metric + " DESC").Limit(n).Find(&dayStats)
+			perDay[i] = dayStats
+		}(i)
+	}
+	wg.Wait()
+
+	resultMap := make(map[string]*models.UserStatistic)
+	for _, dayStats := range perDay {
+		for _, s := range dayStats {
+			if existing, ok := resultMap[s.Address]; ok {
+				existing.Merge(s)
+			} else {
+				resultMap[s.Address] = s
+			}
+		}
+	}
+
+	result := make([]*models.UserStatistic, 0, len(resultMap))
+	for _, s := range resultMap {
+		result = append(result, s)
+	}
+	return result
+}
+
+// GetTransferTotalByDateDays returns the exact network-wide metric total over the
+// window — the concentration denominator. from_stats_ carries a 'total' summary
+// row read in O(1); to_stats_ has none, so its address rows are SUMmed. Days run
+// concurrently.
+func (db *RawDB) GetTransferTotalByDateDays(date time.Time, days int, direction, metric string) int64 {
+	if days < 1 {
+		return 0
+	}
+	metric = whitelistTransferMetric(metric)
+	isTo := direction == "to"
+
+	const concurrency = 16
+	perDay := make([]int64, days)
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < days; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			queryDate := date.AddDate(0, 0, i).Format("060102")
+			if isTo {
+				var v int64
+				db.db.Table("to_stats_"+queryDate).Where("address <> ?", "total").
+					Select("COALESCE(SUM(" + metric + "), 0)").Scan(&v)
+				perDay[i] = v
+			} else {
+				var row models.UserStatistic
+				db.db.Table("from_stats_"+queryDate).Where("address = ?", "total").Limit(1).Find(&row)
+				v, _ := row.Metric(metric)
+				perDay[i] = v
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	var total int64
+	for _, v := range perDay {
+		total += v
+	}
+	return total
 }
 
 // aggregateUserStatistic sums per-address UserStatistic rows from the daily

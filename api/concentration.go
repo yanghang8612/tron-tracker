@@ -17,17 +17,15 @@ type ConcentrationEntry struct {
 	Tag     string `json:"tag,omitempty"`
 }
 
-// buildConcentration ranks addresses by the given metric and reports each
-// entry's share of the network-wide total.
-//
-// total is summed over ALL stats BEFORE truncation, so it stays the true
-// denominator; list is the top n by metric (n clamped to [0, len]); topNSum is
-// the combined value of the returned entries — the head's aggregate share.
-func buildConcentration(stats []*models.UserStatistic, metric string, n int) (total, topNSum int64, list []*ConcentrationEntry) {
+// buildConcentration ranks the given head rows by metric and reports each entry's
+// share of total — the network-wide denominator passed in by the caller (from the
+// total row / SUM), since stats here are only the per-day top-n candidates, not
+// the whole network. list is the top n (n clamped to [0, len]); topNSum is the
+// combined value of the returned entries.
+func buildConcentration(stats []*models.UserStatistic, metric string, total int64, n int) (topNSum int64, list []*ConcentrationEntry) {
 	list = make([]*ConcentrationEntry, 0, len(stats))
 	for _, s := range stats {
 		v, _ := s.Metric(metric)
-		total += v
 		list = append(list, &ConcentrationEntry{Address: s.Address, Value: v})
 	}
 
@@ -44,7 +42,7 @@ func buildConcentration(stats []*models.UserStatistic, metric string, n int) (to
 		e.Percent = common.FormatOfPercent(total, e.Value)
 		topNSum += e.Value
 	}
-	return total, topNSum, list
+	return topNSum, list
 }
 
 // topTransferConcentration ranks the most concentrated from/to addresses by a
@@ -77,13 +75,12 @@ func (s *Server) topTransferConcentration(c *gin.Context) {
 		return
 	}
 
-	statsMap := s.db.GetTransferStatisticByDateDays(startDate, days, direction)
-	stats := make([]*models.UserStatistic, 0, len(statsMap))
-	for _, st := range statsMap {
-		stats = append(stats, st)
-	}
-
-	total, topNSum, list := buildConcentration(stats, metric, n)
+	// Denominator and head are fetched separately: the total is exact (total row /
+	// SUM), while the list is each day's DB-side top-n merged — so we never pull
+	// the full multi-million-row table into memory.
+	total := s.db.GetTransferTotalByDateDays(startDate, days, direction, metric)
+	topStats := s.db.GetTopTransferStatsByDateDays(startDate, days, direction, metric, n)
+	topNSum, list := buildConcentration(topStats, metric, total, n)
 
 	for _, e := range list {
 		if s.db.IsExchange(e.Address) {

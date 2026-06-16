@@ -67,15 +67,15 @@ func TestBuildConcentrationClampsN(t *testing.T) {
 
 // The handler must reject a bad metric or direction with a 400 BEFORE touching
 // the DB, so these run with a nil-db Server without panicking.
-func TestTopTransferConcentrationValidation(t *testing.T) {
+func TestTopAddrsValidation(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	s := &Server{}
 	router := gin.New()
-	router.GET("/top_transfer_concentration", s.topTransferConcentration)
+	router.GET("/top_addrs", s.topAddrs)
 
 	serve := func(query string) string {
 		w := httptest.NewRecorder()
-		req := httptest.NewRequest("GET", "/top_transfer_concentration"+query, nil)
+		req := httptest.NewRequest("GET", "/top_addrs"+query, nil)
 		router.ServeHTTP(w, req)
 		return w.Body.String()
 	}

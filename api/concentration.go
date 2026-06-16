@@ -45,12 +45,12 @@ func buildConcentration(stats []*models.UserStatistic, metric string, total int6
 	return topNSum, list
 }
 
-// topTransferConcentration ranks the most concentrated from/to addresses by a
+// topAddrs ranks the most concentrated from/to addresses by a
 // chosen UserStatistic metric (default trx_total) over [start_date, +days),
 // returning each address's share plus the top-N combined share. It reads the
 // pre-aggregated from_stats_/to_stats_ tables, so callers don't need the raw
 // /q SQL endpoint.
-func (s *Server) topTransferConcentration(c *gin.Context) {
+func (s *Server) topAddrs(c *gin.Context) {
 	startDate, days, ok := prepareStartDateAndDays(c, lastWeek(), 7)
 	if !ok {
 		return

@@ -394,6 +394,21 @@ func GetExchanges() *models.Exchanges {
 			exchanges.Val[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
 		}
 	}
+
+	// Diagnostic: upstream has been returning entries with a valid address but
+	// an empty origin_name. Dump the raw body when that happens so we can see
+	// whether the field is actually missing/renamed server-side.
+	emptyOrigin := 0
+	for _, e := range exchanges.Val {
+		if e.Address != "" && e.OriginName == "" {
+			emptyOrigin++
+		}
+	}
+	if emptyOrigin > 0 && resp != nil {
+		zap.S().Warnf("GetExchanges: %d/%d entries have empty origin_name, raw body: %s",
+			emptyOrigin, len(exchanges.Val), resp.Body())
+	}
+
 	return &exchanges
 }
 

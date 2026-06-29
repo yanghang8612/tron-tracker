@@ -1599,8 +1599,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 		"[Low/High]分别为上周内的最低价与最高价\n"+
 		"[Daily Avg Vol]为股票过去五个交易日内日均交易量（按美元计价）\n"+
 		"[Market Cap]为股票以昨日的收盘价计算的总市值\n"+
-		"  - 本PPT中Cap以253.47M的总股本计算，其中包含 普通流通股 (54.38M股) + PIPE Warrants (220M股)\n"+
-		"  - 注意不同网站在计算Cap时在计不计入PIPE Warrants上有差异，导致其显示市值不同\n"+
+		"  - 本PPT中Cap以4.74亿的总股本计算，SUN Weike先生于2026/4/8日增持了2亿股，故总股本来到了4.74亿\n"+
 		"[Value of digital assets held]为SRM的关联TRON地址持有的代币的总价值\n\n"+
 		"%s\n"+
 		"sunewikeSRM: TFZZx3HXBEGqA1hJnYmRvscjS48gihWXY6\n"+

@@ -1437,7 +1437,7 @@ func (u *Updater) updateStockData(page *slides.Page, today time.Time) {
 	reqs = append(reqs, buildTextAndChangeRequests(volumeObjectId, -1, -1, avgDailyVolume, avgDailyVolumeChange, 11, 7, true)...)
 
 	// Update the market cap
-	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*274382064)
+	marketCap := "$" + common.FormatWithUnits(todayData[4].(float64)*474382064)
 	marketCapChange := common.FormatFloatChangePercent(oneWeekAgoData[4].(float64), todayData[4].(float64))
 	marketCapObjectId := page.PageElements[15].ObjectId
 	reqs = append(reqs, buildTextAndChangeRequests(marketCapObjectId, -1, -1, marketCap, marketCapChange, 11, 7, true)...)

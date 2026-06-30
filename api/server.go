@@ -1203,6 +1203,24 @@ func (s *Server) topUsers(c *gin.Context) {
 		})
 
 		c.JSON(200, resStatsSortedByDelegate[:max(0, min(n, len(resStatsSortedByDelegate)))])
+	} else if orderBy == "energy_total" {
+		type ResEntity struct {
+			Address     string `json:"address"`
+			TotalEnergy int64  `json:"total_energy"`
+		}
+
+		sort.Slice(fromStats, func(i, j int) bool {
+			return fromStats[i].EnergyTotal > fromStats[j].EnergyTotal
+		})
+
+		resStatsSortedByEnergy := pickTopNAndLastN(fromStats, n, func(t *models.UserStatistic) *ResEntity {
+			return &ResEntity{
+				Address:     t.Address,
+				TotalEnergy: t.EnergyTotal,
+			}
+		})
+
+		c.JSON(200, resStatsSortedByEnergy[:max(0, min(n, len(resStatsSortedByEnergy)))])
 	} else {
 		c.JSON(200, gin.H{
 			"code":  500,

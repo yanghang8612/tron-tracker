@@ -2802,6 +2802,7 @@ func (db *RawDB) persistDailyStats(cache *dbCache) error {
 		return fmt.Errorf("flush from_stats %s: %w", date, err)
 	}
 	db.ensureIndex(fromTable, "idx_fee_addr", "fee, address")
+	db.ensureIndex(fromTable, "idx_energy_total", "energy_total")
 
 	toTable := "to_stats_" + date
 	db.createTableIfNotExist(toTable, models.UserStatistic{})

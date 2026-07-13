@@ -418,7 +418,7 @@ func (u *Updater) Update(date time.Time) {
 		[]string{"Binance-STEEM/USDT", "Upbit-STEEM/KRW"})
 
 	u.updateCexData(ppt.Slides[5], date, "JST", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
-		[]string{"Binance-JST/USDT", "Binance-JST/BTC", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
+		[]string{"Binance-JST/USDT", "Bybit-JST/USDT", "Upbit-JST/KRW", "Bitget-JST/USDT"})
 
 	u.updateCexData(ppt.Slides[6], date, "WIN", map[string]bool{"Binance": true, "HTX": true, "Poloniex": true},
 		[]string{"Binance-WIN/USDT", "OKX-WIN/USDT", "Bitget-WIN/USDT"})

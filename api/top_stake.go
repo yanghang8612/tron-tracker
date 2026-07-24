@@ -56,6 +56,17 @@ type StakeEntry struct {
 	Unstake  string `json:"unstake"`
 	Unstake2 string `json:"unstake2"`
 	Score    string `json:"score"`
+	// Per-resource splits of the components above. ENERGY variants carry
+	// type = base + 100 in the transaction tables, so the split is exact and
+	// needs no schema change; bandwidth = total - energy by construction.
+	// Cancel (59) has no resource dimension (it cancels all pending
+	// unfreezes at once) and is deliberately not split.
+	Stake2Energy      string `json:"stake2_energy"`
+	Stake2Bandwidth   string `json:"stake2_bandwidth"`
+	UnstakeEnergy     string `json:"unstake_energy"`
+	UnstakeBandwidth  string `json:"unstake_bandwidth"`
+	Unstake2Energy    string `json:"unstake2_energy"`
+	Unstake2Bandwidth string `json:"unstake2_bandwidth"`
 }
 
 type stakeAgg struct {
@@ -64,6 +75,12 @@ type stakeAgg struct {
 	cancel   *big.Int
 	unstake  *big.Int
 	unstake2 *big.Int
+	// ENERGY-resource portions of stake2/unstake/unstake2. The BANDWIDTH
+	// portion is derived as total - energy when rendering, so only one extra
+	// accumulator per component is needed.
+	stake2E   *big.Int
+	unstakeE  *big.Int
+	unstake2E *big.Int
 }
 
 // buildTopStake aggregates freeze/unfreeze transactions by owner and returns the
@@ -74,7 +91,12 @@ func buildTopStake(txs []*models.Transaction, n int) (topStake, topUnstake []Sta
 	get := func(addr string) *stakeAgg {
 		a := aggs[addr]
 		if a == nil {
-			a = &stakeAgg{addr: addr, stake2: new(big.Int), cancel: new(big.Int), unstake: new(big.Int), unstake2: new(big.Int)}
+			a = &stakeAgg{
+				addr:   addr,
+				stake2: new(big.Int), cancel: new(big.Int),
+				unstake: new(big.Int), unstake2: new(big.Int),
+				stake2E: new(big.Int), unstakeE: new(big.Int), unstake2E: new(big.Int),
+			}
 			aggs[addr] = a
 		}
 		return a
@@ -85,15 +107,25 @@ func buildTopStake(txs []*models.Transaction, n int) (topStake, topUnstake []Sta
 		a := get(tx.OwnerAddr)
 		// ENERGY-resource variants carry type = base + 100; fold by type%100 so
 		// they accumulate into the same component as their BANDWIDTH counterpart.
+		isEnergy := tx.Type >= 100
 		switch tx.Type % 100 {
 		case 54:
 			a.stake2.Add(a.stake2, amt)
+			if isEnergy {
+				a.stake2E.Add(a.stake2E, amt)
+			}
 		case 59:
 			a.cancel.Add(a.cancel, amt)
 		case 55:
 			a.unstake2.Add(a.unstake2, amt)
+			if isEnergy {
+				a.unstake2E.Add(a.unstake2E, amt)
+			}
 		case 12:
 			a.unstake.Add(a.unstake, amt)
+			if isEnergy {
+				a.unstakeE.Add(a.unstakeE, amt)
+			}
 		}
 	}
 
@@ -120,6 +152,13 @@ func buildTopStake(txs []*models.Transaction, n int) (topStake, topUnstake []Sta
 				Unstake:  a.unstake.String(),
 				Unstake2: a.unstake2.String(),
 				Score:    score(a).String(),
+
+				Stake2Energy:      a.stake2E.String(),
+				Stake2Bandwidth:   new(big.Int).Sub(a.stake2, a.stake2E).String(),
+				UnstakeEnergy:     a.unstakeE.String(),
+				UnstakeBandwidth:  new(big.Int).Sub(a.unstake, a.unstakeE).String(),
+				Unstake2Energy:    a.unstake2E.String(),
+				Unstake2Bandwidth: new(big.Int).Sub(a.unstake2, a.unstake2E).String(),
 			})
 		}
 		return out

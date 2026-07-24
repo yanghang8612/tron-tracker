@@ -167,3 +167,41 @@ func TestBuildTopStake_TiesAreOrderedDeterministicallyByAddress(t *testing.T) {
 		}
 	}
 }
+
+// Each of stake2/unstake/unstake2 is additionally split by resource:
+// the ENERGY portion comes from the +100 type variants, and the BANDWIDTH
+// portion is total - energy by construction, so energy + bandwidth always
+// reconciles with the unsplit component. Cancel (59) has no resource
+// dimension on-chain and is not split.
+func TestBuildTopStake_SplitsComponentsByResource(t *testing.T) {
+	txs := []*models.Transaction{
+		mkStakeTx("addr", 54, 100), mkStakeTx("addr", 154, 50), //  stake2: B=100 E=50
+		mkStakeTx("addr", 55, 200), mkStakeTx("addr", 155, 40), // unstake2: B=200 E=40
+		mkStakeTx("addr", 12, 7), mkStakeTx("addr", 112, 3), //    unstake: B=7   E=3
+	}
+
+	topStake, _ := buildTopStake(txs, 20)
+
+	if len(topStake) != 1 {
+		t.Fatalf("got %d entries, want 1", len(topStake))
+	}
+	e := topStake[0]
+	checks := []struct{ name, got, want string }{
+		{"stake2_energy", e.Stake2Energy, "50"},
+		{"stake2_bandwidth", e.Stake2Bandwidth, "100"},
+		{"unstake2_energy", e.Unstake2Energy, "40"},
+		{"unstake2_bandwidth", e.Unstake2Bandwidth, "200"},
+		{"unstake_energy", e.UnstakeEnergy, "3"},
+		{"unstake_bandwidth", e.UnstakeBandwidth, "7"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s = %s, want %s", c.name, c.got, c.want)
+		}
+	}
+	// Reconciliation: energy + bandwidth must equal the unsplit component.
+	if e.Stake2 != "150" || e.Unstake2 != "240" || e.Unstake != "10" {
+		t.Fatalf("unsplit components changed: stake2=%s unstake2=%s unstake=%s",
+			e.Stake2, e.Unstake2, e.Unstake)
+	}
+}

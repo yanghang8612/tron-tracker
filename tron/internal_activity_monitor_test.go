@@ -11,13 +11,13 @@ import (
 	"tron-tracker/tron/types"
 )
 
-func TestNewActivityMonitorEnablesInternalCombinationWithoutThresholds(t *testing.T) {
+func TestNewActivityMonitorEnablesHighRiskMonitoringWithoutThresholds(t *testing.T) {
 	monitor := NewActivityMonitor(&config.OnChainMonitorConfig{
 		Enabled:      true,
 		AIOpsAppKeys: "app-one, app-two, app-one, ,",
 	})
 	if monitor == nil {
-		t.Fatal("monitor = nil, want suicide + Stake 2.0 monitoring with zero amount thresholds")
+		t.Fatal("monitor = nil, want high-risk monitoring with zero amount thresholds")
 	}
 	if len(monitor.detectors) != 0 {
 		t.Fatalf("detector count = %d, want 0", len(monitor.detectors))

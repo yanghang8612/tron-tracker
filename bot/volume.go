@@ -28,7 +28,18 @@ type VolumeBot struct {
 	tokens []string
 	slugs  []string
 
-	isAddingRules bool // Flag to indicate if the bot is currently adding rules
+	pendingRuleInput *ruleInputSession
+}
+
+type ruleInputSession struct {
+	chatID int64
+	userID int64
+}
+
+func (vb *VolumeBot) isRuleInput(message *tgbotapi.Message) bool {
+	return vb.pendingRuleInput != nil && message != nil && message.From != nil && message.Chat != nil &&
+		!message.IsCommand() && strings.TrimSpace(message.Text) != "" &&
+		message.Chat.ID == vb.pendingRuleInput.chatID && message.From.ID == vb.pendingRuleInput.userID
 }
 
 func NewVolumeBot(cfg *config.BotConfig, db *database.RawDB) *VolumeBot {
@@ -52,12 +63,7 @@ func (vb *VolumeBot) Start() {
 
 		updates := vb.botApi.GetUpdatesChan(u)
 		for update := range updates {
-			if update.Message == nil {
-				continue
-			}
-
-			// Check if the user is valid
-			if !vb.isAuthorizedUser(update.Message.From.UserName, update.Message.Chat.ID) {
+			if !vb.authorizeMessage(update.Message, vb.isRuleInput(update.Message)) {
 				continue
 			}
 
@@ -79,7 +85,10 @@ func (vb *VolumeBot) Start() {
 				case "addrule":
 					data := strings.Fields(update.Message.Text)
 					if len(data) == 1 {
-						vb.isAddingRules = true
+						vb.pendingRuleInput = &ruleInputSession{
+							chatID: update.Message.Chat.ID,
+							userID: update.Message.From.ID,
+						}
 						textMsg = "OK. Send me a list of rules. Please use this format:\n\n[exchange_name pair volume +/-2%depth]\n"
 						break
 					}
@@ -148,27 +157,21 @@ func (vb *VolumeBot) Start() {
 					textMsg = "Unknown command. Available commands: /start, /listrules, /addrule, /editrule, /report"
 				}
 			} else if update.Message.Text != "" {
-				if !vb.isAddingRules {
-					continue
-				}
-
 				// Handle rules list to add
-				vb.isAddingRules = false
+				vb.pendingRuleInput = nil
 				lines := strings.Split(update.Message.Text, "\n")
 				addedCount := 0
-				if len(lines) > 1 {
-					for _, line := range lines {
-						data := strings.Fields(line)
-						if ok, _ := vb.addRule(data); ok {
-							addedCount++
-						}
+				for _, line := range lines {
+					data := strings.Fields(line)
+					if ok, _ := vb.addRule(data); ok {
+						addedCount++
 					}
 				}
 				textMsg = fmt.Sprintf("Input rules: %d, total added: %d, invalid or duplicate: %d", len(lines), addedCount, len(lines)-addedCount)
 			}
 
 			if textMsg != "" {
-				vb.sendMessage(vb.chatID, update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
+				vb.sendMessage(update.Message.Chat.ID, update.Message.MessageID, tgbotapi.ModeMarkdownV2, common.EscapeMarkdownV2(textMsg), nil)
 			}
 		}
 	}()
@@ -228,6 +231,10 @@ func (vb *VolumeBot) reportRules(allRules []*models.Rule, byExchange bool) {
 }
 
 func (vb *VolumeBot) addRule(data []string) (bool, string) {
+	if len(data) != 4 {
+		return false, "Please use: exchange_name pair volume +/-2%depth"
+	}
+
 	exchangeName := strings.ReplaceAll(data[0], "#", " ")
 	pair := data[1]
 

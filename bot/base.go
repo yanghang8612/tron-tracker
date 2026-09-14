@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"strings"
 
 	"tron-tracker/database"
 
@@ -44,6 +45,25 @@ func NewBot(name string, botToken string, chatID int64, db *database.RawDB, vali
 	bot.logger.Infof("Telegram volume bot authorized on account [%s]", botApi.Self.UserName)
 
 	return bot
+}
+
+// authorizeMessage filters unrelated chat traffic before authorization can reply.
+// allowText is reserved for a pending interaction owned by this sender and chat.
+func (b *Bot) authorizeMessage(message *tgbotapi.Message, allowText bool) bool {
+	if message == nil || message.From == nil || message.Chat == nil {
+		return false
+	}
+
+	if message.IsCommand() {
+		if _, target, addressed := strings.Cut(message.CommandWithAt(), "@"); addressed &&
+			!strings.EqualFold(target, b.botApi.Self.UserName) {
+			return false
+		}
+	} else if !allowText || strings.TrimSpace(message.Text) == "" {
+		return false
+	}
+
+	return b.isAuthorizedUser(message.From.UserName, message.Chat.ID)
 }
 
 func (b *Bot) isAuthorizedUser(username string, chatID int64) bool {

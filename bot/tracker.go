@@ -40,12 +40,7 @@ func (tb *TrackerBot) Start() {
 
 		updates := tb.botApi.GetUpdatesChan(u)
 		for update := range updates {
-			if update.Message == nil {
-				continue
-			}
-
-			// Check if the user is valid
-			if !tb.isAuthorizedUser(update.Message.From.UserName, update.Message.Chat.ID) {
+			if !tb.authorizeMessage(update.Message, false) {
 				continue
 			}
 
@@ -94,7 +89,7 @@ func (tb *TrackerBot) Start() {
 						tb.sendPlainMessage(chatID, textMsg)
 					}()
 				case "q":
-					sql := strings.TrimSpace(strings.TrimPrefix(update.Message.Text, "/q"))
+					sql := strings.TrimSpace(update.Message.CommandArguments())
 					if len(sql) == 0 {
 						textMsg = "Please provide a SQL query to execute."
 						break

@@ -250,6 +250,7 @@ func (t *Tracker) doTrackBlock() {
 		transactions = append(transactions, txToDB)
 
 		if !t.isCatching {
+			t.activityMonitor.ReportProposalCreate(tx, block.BlockHeader.RawData.Number, uint16(idx), txInfoList[idx].ID)
 			t.activityMonitor.ReportCreateSmartContractHashFields(
 				tx,
 				block.BlockHeader.RawData.Number,

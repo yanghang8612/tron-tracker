@@ -69,3 +69,26 @@ func TestReportWarningMessageToSlackDoesNotAddChannelMention(t *testing.T) {
 		t.Fatalf("simple warning unexpectedly notifies channel: %#v", msg)
 	}
 }
+
+func TestReportWarningToSlackMentionsMeAtWarningWebhook(t *testing.T) {
+	messages := make(chan SlackMessage, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var msg SlackMessage
+		if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
+			t.Errorf("decode Slack message: %v", err)
+		}
+		messages <- msg
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	previousConfigs := configs
+	configs = &config.NetConfig{WarningWebhook: server.URL}
+	t.Cleanup(func() { configs = previousConfigs })
+
+	ReportWarningToSlack("TRON transaction OUT_OF_TIME", true)
+	msg := <-messages
+	if msg.Text != "TRON transaction OUT_OF_TIME <@U01DFGWQ2JK>" {
+		t.Fatalf("unexpected personal warning: %#v", msg)
+	}
+}

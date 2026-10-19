@@ -50,6 +50,8 @@ type RawDB struct {
 	db                 *gorm.DB
 	exchanges          map[string]*models.Exchange
 	exchangesUpdatedAt time.Time
+	exchangesRetryAt   time.Time
+	exchangesFailures  uint
 	validTokens        map[string]string // address -> token name
 
 	lastTrackedBlockNum  uint
@@ -284,8 +286,15 @@ func (db *RawDB) loadExchanges() {
 		panic(dbErr)
 	}
 
-	exchanges := net.GetExchanges()
+	exchanges, err := net.GetExchanges()
+	if err != nil {
+		db.logger.Panicf("Unable to initialize exchange metadata without a cached copy: %v", err)
+	}
+
 	for _, exchange := range exchanges.Val {
+		if exchange.OriginName == "" {
+			exchange.OriginName = exchange.Name
+		}
 		exchange.Name = db.resolveExchangeName(common.TrimExchangeName(exchange.OriginName))
 		db.db.Create(&exchange)
 		db.exchanges[exchange.Address] = exchange
@@ -322,54 +331,6 @@ func countUpper(s string) int {
 		}
 	}
 	return n
-}
-
-func (db *RawDB) updateExchanges() {
-	if time.Now().Sub(db.exchangesUpdatedAt) < 1*time.Hour {
-		return
-	}
-
-	exchanges := net.GetExchanges()
-	if len(exchanges.Val) == 0 {
-		return
-	}
-
-	for _, newExchange := range exchanges.Val {
-		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
-			if oldExchange.OriginName != newExchange.OriginName {
-				if !common.IsSameExchange(oldExchange.OriginName, newExchange.OriginName) {
-					db.logger.Warnf("Exchange origin name mismatch: [%s] - [%s & %s]",
-						oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
-					continue
-				}
-				db.logger.Infof("Exchange origin name updated: [%s] - [%s -> %s]",
-					oldExchange.Address, oldExchange.OriginName, newExchange.OriginName)
-				db.db.Model(&oldExchange).Update("origin_name", newExchange.OriginName)
-			}
-		} else {
-			newExchange.Name = db.resolveExchangeName(common.TrimExchangeName(newExchange.OriginName))
-			db.db.Create(&newExchange)
-			db.exchanges[newExchange.Address] = newExchange
-			db.logger.Infof("New exchange added: [%s - %s] - [%s]",
-				newExchange.Address, newExchange.OriginName, newExchange.Name)
-		}
-	}
-
-	for addr, oldExchange := range db.exchanges {
-		found := false
-		for _, newExchange := range exchanges.Val {
-			if addr == newExchange.Address {
-				found = true
-				break
-			}
-		}
-
-		if !found && !oldExchange.FromAsuka {
-			db.logger.Warnf("Exchange removed: [%s - %s]", oldExchange.Address, oldExchange.OriginName)
-		}
-	}
-
-	db.exchangesUpdatedAt = time.Now()
 }
 
 func (db *RawDB) Start() {

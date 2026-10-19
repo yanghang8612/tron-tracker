@@ -155,7 +155,7 @@ func GetNowBlock() (*types.Block, error) {
 func GetBlockByHeight(height uint) (*types.Block, error) {
 	url := configs.FullNode + GetBlockPath + strconv.FormatInt(int64(height), 10)
 	var block types.Block
-	_, err := gridClient.R().SetResult(&block).Get(url)
+	err := getTrackerJSON(url, &block)
 	return &block, err
 }
 
@@ -167,7 +167,7 @@ func GetTransactionInfoList(height uint) ([]*types.TransactionInfo, error) {
 	url := configs.FullNode + GetTransactionInfoListPath +
 		strconv.FormatInt(int64(height), 10) + "&visible=false"
 	var txInfoList = make([]*types.TransactionInfo, 0)
-	_, err := gridClient.R().SetResult(&txInfoList).Get(url)
+	err := getTrackerJSON(url, &txInfoList)
 	return txInfoList, err
 }
 
@@ -394,43 +394,6 @@ func GetTRC20Balance(contractAddr, ownerAddr string) (*big.Int, error) {
 		return big.NewInt(0), nil
 	}
 	return balance, nil
-}
-
-func GetExchanges() *models.Exchanges {
-	var exchanges = models.Exchanges{}
-	resp, err := client.R().Get("https://apilist.tronscanapi.com/api/hot/exchanges")
-	if err != nil {
-		zap.S().Error(err)
-	} else {
-		err = json.Unmarshal(resp.Body(), &exchanges)
-		if err != nil {
-			zap.S().Error(err)
-		}
-	}
-
-	for i := range exchanges.Val {
-		// exchangeList.Exchanges[i].Name = common.TrimExchangeName(exchangeList.Exchanges[i].Name)
-
-		if exchanges.Val[i].Name == "BtcTurk" {
-			exchanges.Val[i].Address = "TCTYyc1w6rzqnqRBcAhuAJUyNWZ9Bw9hrW"
-		}
-	}
-
-	// Diagnostic: upstream has been returning entries with a valid address but
-	// an empty origin_name. Dump the raw body when that happens so we can see
-	// whether the field is actually missing/renamed server-side.
-	emptyOrigin := 0
-	for _, e := range exchanges.Val {
-		if e.Address != "" && e.OriginName == "" {
-			emptyOrigin++
-		}
-	}
-	if emptyOrigin > 0 && resp != nil {
-		zap.S().Warnf("GetExchanges: %d/%d entries have empty origin_name, raw body: %s",
-			emptyOrigin, len(exchanges.Val), resp.Body())
-	}
-
-	return &exchanges
 }
 
 type MarketPairsResponse struct {

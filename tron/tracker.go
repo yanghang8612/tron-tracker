@@ -33,6 +33,7 @@ type Tracker struct {
 	activityMonitor *ActivityMonitor
 
 	blockNumAtLastCheck uint
+	fetchRetry          blockFetchRetry
 
 	logger *zap.SugaredLogger
 }
@@ -122,7 +123,13 @@ func (t *Tracker) loop() {
 }
 
 func (t *Tracker) doTrackBlock() {
-	block, _ := net.GetBlockByHeight(t.db.GetLastTrackedBlockNum() + 1)
+	height := t.db.GetLastTrackedBlockNum() + 1
+	block, err := net.GetBlockByHeight(height)
+	if err != nil {
+		t.fetchRetry.failure(t.logger, time.Now(), height, "get block: "+err.Error())
+		time.Sleep(time.Second)
+		return
+	}
 	block.BlockHeader.RawData.Timestamp /= 1000
 
 	if block.BlockHeader.RawData.Number == 0 {
@@ -147,7 +154,8 @@ func (t *Tracker) doTrackBlock() {
 	// This happens when fetching the block from FullNode succeeds,
 	// but fetching the info of the transactions in the block fails.
 	if err != nil {
-		t.logger.Error(err)
+		t.fetchRetry.failure(t.logger, time.Now(), height, "get transaction info: "+err.Error())
+		time.Sleep(time.Second)
 		return
 	}
 
@@ -156,11 +164,12 @@ func (t *Tracker) doTrackBlock() {
 	// a reorg between the two calls). Bail and let loop() refetch both sides
 	// consistently rather than indexing into the shorter txInfoList.
 	if len(txInfoList) != len(block.Transactions) {
-		t.logger.Warnf("txInfoList len [%d] != block [%d] tx count [%d], retrying",
-			len(txInfoList), block.BlockHeader.RawData.Number, len(block.Transactions))
+		t.fetchRetry.failure(t.logger, time.Now(), height,
+			fmt.Sprintf("transaction info count=%d, block transaction count=%d", len(txInfoList), len(block.Transactions)))
 		time.Sleep(1 * time.Second)
 		return
 	}
+	t.fetchRetry.recovered(t.logger, time.Now(), height)
 
 	transactions := make([]*models.Transaction, 0)
 	t.db.SetLastTrackedBlock(block)

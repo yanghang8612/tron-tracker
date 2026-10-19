@@ -116,3 +116,20 @@ func TestExchangeRefreshRepairsEmptyNamesFromCurrentSchema(t *testing.T) {
 		t.Fatalf("metadata not repaired: %+v %+v", db.exchanges["a"], db.exchanges["b"])
 	}
 }
+
+func TestExchangeRefreshPartialUnnamedRowsPreserveCacheAndDoNotCreateUnnamedExchanges(t *testing.T) {
+	core, logs := observer.New(zapcore.DebugLevel)
+	db := &RawDB{exchanges: map[string]*models.Exchange{
+		"a": {Address: "a", Name: "Binance", OriginName: "Binance Hot Wallet"},
+		"b": {Address: "b", Name: "Kraken", OriginName: "Kraken Hot Wallet"},
+	}, logger: zap.New(core).Sugar()}
+	db.updateExchangesAt(time.Now(), func() (*models.Exchanges, error) {
+		return &models.Exchanges{Val: []*models.Exchange{{Address: "a", Name: "Binance"}, {Address: "b"}, {Address: "unknown"}}}, nil
+	})
+	if len(db.exchanges) != 2 || db.exchanges["b"].OriginName != "Kraken Hot Wallet" || db.exchangesFailures != 0 || db.exchangesUpdatedAt.IsZero() {
+		t.Fatal("partial missing names blocked valid refresh or changed cached metadata")
+	}
+	if logs.FilterLevelExact(zapcore.WarnLevel).Len() != 1 || logs.FilterMessageSnippet("unnamed entries").Len() != 1 || logs.FilterMessageSnippet("omitted").Len() != 0 {
+		t.Fatalf("expected one bounded unnamed-row warning; got %+v", logs.All())
+	}
+}

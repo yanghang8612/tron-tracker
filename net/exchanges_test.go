@@ -43,3 +43,14 @@ func TestGetExchangesSchemasAndFailures(t *testing.T) {
 		})
 	}
 }
+
+func TestGetExchangesKeepsUnnamedAddressMembershipInPartialResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"exchanges":[{"address":"a","name":"Binance"},{"address":"b"}]}`))
+	}))
+	defer server.Close()
+	got, err := getExchanges(server.URL)
+	if err != nil || len(got.Val) != 2 || got.Val[1].Address != "b" || got.Val[1].Name != "" {
+		t.Fatalf("partial metadata response lost membership: %+v, %v", got, err)
+	}
+}

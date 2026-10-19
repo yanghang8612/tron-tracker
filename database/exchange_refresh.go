@@ -40,8 +40,9 @@ func (db *RawDB) updateExchangesAt(now time.Time, fetch func() (*models.Exchange
 		return
 	}
 
-	missingOrigin, conflicts, removed := 0, 0, 0
+	missingOrigin, unnamed, conflicts, removed := 0, 0, 0, 0
 	conflictSamples, removedSamples := make([]string, 0, 3), make([]string, 0, 3)
+	unnamedSamples := make([]string, 0, 3)
 	seen := make(map[string]bool, len(exchanges.Val))
 	for _, incoming := range exchanges.Val {
 		// Work on a copy so the fetched snapshot retains its missing-field data.
@@ -49,6 +50,15 @@ func (db *RawDB) updateExchangesAt(now time.Time, fetch func() (*models.Exchange
 		seen[newExchange.Address] = true
 		if newExchange.OriginName == "" {
 			missingOrigin++
+		}
+		// Some upstream rows contain only an address. They still establish
+		// membership, but cannot rename cached rows or create unnamed ones.
+		if newExchange.OriginName == "" && newExchange.Name == "" {
+			unnamed++
+			if len(unnamedSamples) < 3 {
+				unnamedSamples = append(unnamedSamples, newExchange.Address)
+			}
+			continue
 		}
 		if oldExchange, ok := db.exchanges[newExchange.Address]; ok {
 			if newExchange.OriginName == "" {
@@ -95,10 +105,13 @@ func (db *RawDB) updateExchangesAt(now time.Time, fetch func() (*models.Exchange
 	if conflicts > 0 {
 		db.logger.Warnf("Exchange metadata has %d conflicting origin names; keeping cached names, sample_addresses=%v", conflicts, conflictSamples)
 	}
+	if unnamed > 0 {
+		db.logger.Warnf("Exchange metadata has %d unnamed entries; keeping cached metadata, sample_addresses=%v", unnamed, unnamedSamples)
+	}
 	if removed > 0 {
 		db.logger.Warnf("Exchange metadata omitted %d cached addresses; keeping them, sample_addresses=%v", removed, removedSamples)
 	}
-	db.logger.Infof("Exchange metadata refreshed: entries=%d missing_origin_name=%d previous_failures=%d", len(exchanges.Val), missingOrigin, db.exchangesFailures)
+	db.logger.Infof("Exchange metadata refreshed: entries=%d missing_origin_name=%d unnamed=%d previous_failures=%d", len(exchanges.Val), missingOrigin, unnamed, db.exchangesFailures)
 	db.exchangesUpdatedAt = now
 	db.exchangesRetryAt = time.Time{}
 	db.exchangesFailures = 0

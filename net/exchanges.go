@@ -42,6 +42,7 @@ func getExchanges(url string) (*models.Exchanges, error) {
 		return nil, fmt.Errorf("fetch exchanges: empty exchange list")
 	}
 	exchanges := &models.Exchanges{Val: make([]*models.Exchange, 0, len(response.Exchanges))}
+	named := 0
 	for i, item := range response.Exchanges {
 		if item == nil || strings.TrimSpace(item.Address) == "" {
 			return nil, fmt.Errorf("fetch exchanges: invalid entry at index %d", i)
@@ -57,8 +58,8 @@ func getExchanges(url string) (*models.Exchanges, error) {
 		if name == "" {
 			name = origin
 		}
-		if name == "" {
-			return nil, fmt.Errorf("fetch exchanges: entry %d has no name", i)
+		if name != "" {
+			named++
 		}
 		address := item.Address
 		if name == "BtcTurk" {
@@ -67,6 +68,9 @@ func getExchanges(url string) (*models.Exchanges, error) {
 		exchanges.Val = append(exchanges.Val, &models.Exchange{
 			Address: address, Name: name, OriginName: origin, FromAsuka: item.FromAsuka,
 		})
+	}
+	if named == 0 {
+		return nil, fmt.Errorf("fetch exchanges: no named entries in exchange list")
 	}
 	return exchanges, nil
 }

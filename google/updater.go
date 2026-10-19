@@ -445,10 +445,31 @@ const (
 )
 
 func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
+	current, err := sumExchangeStake(u.db.GetExchangeResourceStatisticsByDate(today))
+	if err != nil {
+		u.logger.Errorf("Skip exchange stake slide for %s: %v", today.Format("2006-01-02"), err)
+		return
+	}
+	previous, previousErr := sumExchangeStake(u.db.GetExchangeResourceStatisticsByDate(today.AddDate(0, 0, -7)))
+	if previousErr != nil {
+		u.logger.Warnf("Exchange stake week-over-week comparison unavailable: %v", previousErr)
+	}
+	network, err := net.GetNetworkStakeTotals()
+	if err != nil {
+		u.logger.Errorf("Skip exchange stake slide: %v", err)
+		return
+	}
+	networkQueriedAt := time.Now().UTC()
+	reqs, err := buildExchangeStakeSummaryRequests(page, current, previous, previousErr == nil, network)
+	if err != nil {
+		u.logger.Errorf("Skip exchange stake slide: %v", err)
+		return
+	}
+
 	bandwidthData, bandwidthNames, bandwidthSeries := u.getExchangeStakeData(today, exchangeStakeBandwidth)
 	energyData, energyNames, energySeries := u.getExchangeStakeData(today, exchangeStakeEnergy)
 
-	_, err := u.sheetsService.Spreadsheets.Values.Clear(u.revenueId, "Bandwidth!A1:K20", &sheets.ClearValuesRequest{}).Do()
+	_, err = u.sheetsService.Spreadsheets.Values.Clear(u.revenueId, "Bandwidth!A1:K20", &sheets.ClearValuesRequest{}).Do()
 	if err != nil {
 		u.logger.Errorf("Unable to clear exchange bandwidth sheet: %v", err)
 	}
@@ -468,7 +489,6 @@ func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
 		u.logger.Errorf("Unable to update exchange energy sheet: %v", err)
 	}
 
-	reqs := make([]*slides.Request, 0)
 	reqs = append(reqs, buildUpdateTitleRequests(page.PageElements[0], today)...)
 
 	for _, chartId := range []int64{1485277571, 1597183595} {
@@ -485,6 +505,8 @@ func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
 	}
 
 	note := u.buildExchangeStakeNote(today, bandwidthNames, energyNames, bandwidthSeries, energySeries)
+	note += fmt.Sprintf("\nSummary cards: all CEX (including HTX); snapshot %s; compared with %s.\nNetwork denominators: current TotalNetWeight / TotalEnergyWeight (TRX), queried at %s.\n",
+		today.Format("2006-01-02"), today.AddDate(0, 0, -7).Format("2006-01-02"), networkQueriedAt.Format(time.RFC3339))
 	if len(page.SlideProperties.NotesPage.PageElements) > 0 {
 		noteObjectId := page.SlideProperties.NotesPage.PageElements[0].ObjectId
 		reqs = append(reqs, buildUpdateTextRequests(noteObjectId, -1, -1, 0, 0, note)...)
@@ -499,7 +521,10 @@ func (u *Updater) updateExchangeStakeData(page *slides.Page, today time.Time) {
 		}).Do()
 	if updateErr != nil {
 		u.logger.Error("Failed to update exchange stake slide", zap.Error(updateErr))
+		return
 	}
+	u.logger.Infof("Updated exchange stake summary for %s: bandwidth_sun=%d energy_sun=%d previous_bandwidth_sun=%d previous_energy_sun=%d comparison_available=%t network_bandwidth_trx=%d network_energy_trx=%d network_queried_at=%s",
+		today.Format("2006-01-02"), current.bandwidth, current.energy, previous.bandwidth, previous.energy, previousErr == nil, network.BandwidthTRX, network.EnergyTRX, networkQueriedAt.Format(time.RFC3339))
 }
 
 func (u *Updater) getExchangeStakeData(today time.Time, metric exchangeStakeMetric) ([][]interface{}, []string, map[string][]int64) {

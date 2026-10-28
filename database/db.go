@@ -3006,8 +3006,8 @@ func (db *RawDB) persistDailyStats(cache *dbCache) error {
 		return fmt.Errorf("exchange stats %s: %w", date, err)
 	}
 
-	if err := db.DropStaleStatsTables(time.Now().AddDate(-1, 0, 0)); err != nil {
-		db.logger.Errorf("drop stale stats tables: %v", err) // non-fatal cleanup
+	if err := db.DropStaleStatsTables(dailyTableRetentionCutoff(time.Now())); err != nil {
+		db.logger.Errorf("drop stale daily tables: %v", err) // non-fatal cleanup
 	}
 
 	db.reconcileTxIndexes(txIndexRetainDays)
@@ -3180,49 +3180,6 @@ func (db *RawDB) dropIndex(tableName, indexName string) {
 		return
 	}
 	db.logger.Infof("Dropped index %s on %s", indexName, tableName)
-}
-
-// DropStaleStatsTables drops daily-partitioned stats tables whose YYMMDD
-// suffix is strictly older than cutoff. Targets from_stats_*, to_stats_*,
-// user_token_stats_*. Suffixes that don't parse as YYMMDD are skipped.
-func (db *RawDB) DropStaleStatsTables(cutoff time.Time) error {
-	if cutoff.After(time.Now()) {
-		return fmt.Errorf("cutoff %s is in the future, refusing to drop", cutoff.Format("060102"))
-	}
-	cutoffStr := cutoff.Format("060102")
-
-	prefixes := []string{"from_stats_", "to_stats_", "user_token_stats_"}
-	for _, prefix := range prefixes {
-		var tables []string
-		// Escape `_` so LIKE doesn't treat it as a single-char wildcard.
-		like := strings.ReplaceAll(prefix, "_", `\_`) + "%"
-		if err := db.db.Raw(
-			"SELECT table_name FROM information_schema.tables "+
-				"WHERE table_schema = DATABASE() AND table_name LIKE ?",
-			like,
-		).Scan(&tables).Error; err != nil {
-			return fmt.Errorf("list %s tables: %w", prefix, err)
-		}
-
-		for _, t := range tables {
-			suffix := strings.TrimPrefix(t, prefix)
-			if _, err := time.Parse("060102", suffix); err != nil {
-				continue
-			}
-			if suffix >= cutoffStr {
-				continue
-			}
-			db.logger.Infof("Dropping stale table %s (cutoff=%s)", t, cutoffStr)
-			if err := db.db.Exec("DROP TABLE `" + t + "`").Error; err != nil {
-				db.logger.Errorf("drop %s: %v", t, err)
-				continue
-			}
-			db.tableLock.Lock()
-			delete(db.isTableMigrated, t)
-			db.tableLock.Unlock()
-		}
-	}
-	return nil
 }
 
 func generateDate(ts int64) string {

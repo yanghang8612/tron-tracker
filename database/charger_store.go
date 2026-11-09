@@ -2,6 +2,7 @@ package database
 
 import (
 	"bufio"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -277,22 +278,46 @@ func (s *ChargerStore) Load() {
 
 func (s *ChargerStore) loadFromDBLocked() {
 	s.logger.Info("Start loading chargers from db")
-	var batch []*models.Charger
-	loaded := 0
-	result := s.db.FindInBatches(&batch, 10000, func(tx *gorm.DB, _ int) error {
-		for _, m := range batch {
-			s.applyModel(m)
-			loaded++
-			if loaded%1_000_000 == 0 {
-				s.logger.Infof("Loaded [%d] chargers", loaded)
-			}
-		}
-		return nil
-	})
-	if result.Error != nil {
-		s.logger.Fatalf("Load chargers from db failed after [%d]: %v", loaded, result.Error)
+	if err := s.streamChargersLocked(); err != nil {
+		s.logger.Fatalf("Load chargers from db failed: %v", err)
 	}
 	s.logger.Infof("Complete loading chargers: [%d] in memory, [%d] skipped", len(s.chargers), s.skipped)
+}
+
+func (s *ChargerStore) streamChargersLocked() error {
+	// InnoDB's estimate avoids a second full scan. The map can still grow
+	// when the estimate is low or unavailable.
+	var estimate int
+	if len(s.chargers) == 0 &&
+		s.db.Raw("SELECT COALESCE(MAX(table_rows), 0) FROM information_schema.tables "+
+			"WHERE table_schema = DATABASE() AND table_name = 'chargers'").Scan(&estimate).Error == nil && estimate > 0 {
+		s.chargers = make(map[[20]byte]compactCharger, estimate)
+	}
+
+	// NULL fields in older rows were read as zero values by GORM.
+	rows, err := s.db.Raw("SELECT id, COALESCE(address, ''), COALESCE(exchange_name, ''), " +
+		"COALESCE(backup_address, ''), COALESCE(is_fake, 0) FROM chargers ORDER BY id").Rows()
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	var charger models.Charger
+	loaded := 0
+	for rows.Next() {
+		if err := rows.Scan(&charger.ID, &charger.Address, &charger.ExchangeName, &charger.BackupAddress, &charger.IsFake); err != nil {
+			return fmt.Errorf("scan charger after %d rows: %w", loaded, err)
+		}
+		s.applyModel(&charger)
+		loaded++
+		if loaded%1_000_000 == 0 {
+			s.logger.Infof("Loaded [%d] chargers", loaded)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("stream chargers after %d rows: %w", loaded, err)
+	}
+	return nil
 }
 
 func (s *ChargerStore) bootstrapFromFileLocked() {
@@ -335,68 +360,93 @@ func (s *ChargerStore) bootstrapFromFileLocked() {
 	s.logger.Infof("Complete loading chargers from file: [%d]", count)
 }
 
-// doFlushLocked writes all dirty chargers back and back-fills inserted IDs.
-// Caller holds the write lock (RWMutex is non-reentrant, so Refresh calls this
-// directly rather than FlushDirty).
-func (s *ChargerStore) doFlushLocked() {
+const chargerWriteBatch = 500
+
+// doFlushLocked writes bounded batches. Only a successful batch can back-fill
+// IDs and remove dirty keys, so a later failure leaves the rest retryable.
+func (s *ChargerStore) doFlushLocked() error {
 	if len(s.dirty) == 0 {
-		return
+		return nil
 	}
-	batch := make([]*models.Charger, 0, len(s.dirty))
-	keys := make([][20]byte, 0, len(s.dirty))
+	capacity := min(len(s.dirty), chargerWriteBatch)
+	batch := make([]models.Charger, 0, capacity)
+	keys := make([][20]byte, 0, capacity)
+	flush := func() error {
+		if err := s.db.Save(&batch).Error; err != nil {
+			return fmt.Errorf("flush %d chargers: %w", len(batch), err)
+		}
+		for i, key := range keys {
+			if cc, id := s.chargers[key], uint32(batch[i].ID); id != 0 && id != cc.id {
+				cc.id = id
+				s.chargers[key] = cc
+			}
+			delete(s.dirty, key)
+		}
+		batch, keys = batch[:0], keys[:0]
+		return nil
+	}
 	for key := range s.dirty {
-		batch = append(batch, s.toModel(key, s.chargers[key]))
+		batch = append(batch, *s.toModel(key, s.chargers[key]))
 		keys = append(keys, key)
-	}
-	if err := s.db.Save(batch).Error; err != nil {
-		// Keep dirty for retry on the next flush; do not back-fill or clear,
-		// otherwise id==0 rows would be lost and re-inserted later.
-		s.logger.Errorf("Flush %d chargers failed, keeping dirty for retry: %v", len(batch), err)
-		return
-	}
-	// back-fill auto-incremented IDs for freshly inserted rows
-	for i, m := range batch {
-		id := uint32(m.ID)
-		if id == 0 {
-			continue
-		}
-		if cc := s.chargers[keys[i]]; cc.id != id {
-			cc.id = id
-			s.chargers[keys[i]] = cc
+		if len(batch) == capacity {
+			if err := flush(); err != nil {
+				return err
+			}
 		}
 	}
-	s.dirty = make(map[[20]byte]struct{})
+	if len(batch) > 0 {
+		return flush()
+	}
+	return nil
 }
 
-// FlushDirty persists pending chargers (spec §10).
 func (s *ChargerStore) FlushDirty() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.doFlushLocked()
+	if err := s.doFlushLocked(); err != nil {
+		s.logger.Errorf("Keeping dirty chargers for retry: %v", err)
+	}
 }
 
-// Refresh re-normalizes exchange names and reconciles address backups that have
-// since become exchanges (mirrors db.go:266-289). Holds the write lock
-// throughout and persists via doFlushLocked directly (RWMutex is non-reentrant,
-// so it must not call FlushDirty).
-func (s *ChargerStore) Refresh(resolve func(string) string, isExchange func(b58 string) (string, bool)) {
+func (s *ChargerStore) Refresh(resolve func(string) string, isExchange func([20]byte) (string, bool)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.refreshLocked(resolve, isExchange)
-	s.doFlushLocked()
+	return s.refreshLocked(resolve, isExchange, s.doFlushLocked)
 }
 
 // refreshLocked performs the in-memory part of Refresh. Caller holds the write lock.
-func (s *ChargerStore) refreshLocked(resolve func(string) string, isExchange func(b58 string) (string, bool)) {
+func (s *ChargerStore) refreshLocked(resolve func(string) string, isExchange func([20]byte) (string, bool), flush func() error) error {
+	if err := flush(); err != nil {
+		return err
+	}
+	// Resolve only names used by chargers, not historical dictionary entries
+	// or conflict backups. The resolver can promote a spelling in the exchange
+	// registry, so settle those promotions before using the cached results.
+	active := make([]bool, len(s.names))
+	for _, cc := range s.chargers {
+		active[cc.exchangeIdx] = true
+	}
+	trimmed := make([]string, len(active))
+	for idx, used := range active {
+		if used {
+			trimmed[idx] = common.TrimExchangeName(s.names[idx])
+			resolve(trimmed[idx])
+		}
+	}
+	normalized := make([]uint16, len(active))
+	for idx, used := range active {
+		if used {
+			normalized[idx] = s.internName(resolve(trimmed[idx]))
+		}
+	}
+
 	for key, cc := range s.chargers {
 		changed := false
 
-		// step 1: normalize the exchange name; cancel fake only when the name
-		// actually changes AND there is no backup (db.go:267-275).
-		current := s.names[cc.exchangeIdx]
-		newName := resolve(common.TrimExchangeName(current))
-		if newName != current {
-			cc.exchangeIdx = s.internName(newName)
+		// Cancel fake only on a name change and when there is no backup.
+		normalizedIdx := normalized[cc.exchangeIdx]
+		if normalizedIdx != cc.exchangeIdx {
+			cc.exchangeIdx = normalizedIdx
 			if cc.isFake {
 				_, hasAddr := s.addrBackups[key]
 				_, hasConf := s.confBackups[key]
@@ -409,7 +459,7 @@ func (s *ChargerStore) refreshLocked(resolve func(string) string, isExchange fun
 
 		// step 2: an address backup that has since become an exchange (db.go:278-288).
 		if bk, ok := s.addrBackups[key]; ok {
-			if exName, isEx := isExchange(encodeAddr(bk)); isEx {
+			if exName, isEx := isExchange(bk); isEx {
 				if exName != s.names[cc.exchangeIdx] {
 					if !cc.isFake {
 						cc.isFake = true
@@ -425,6 +475,12 @@ func (s *ChargerStore) refreshLocked(resolve func(string) string, isExchange fun
 		if changed {
 			s.chargers[key] = cc
 			s.dirty[key] = struct{}{}
+			if len(s.dirty) == chargerWriteBatch {
+				if err := flush(); err != nil {
+					return err
+				}
+			}
 		}
 	}
+	return flush()
 }

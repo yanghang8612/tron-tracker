@@ -1,6 +1,7 @@
 package types
 
 import (
+	"math/bits"
 	"math/rand"
 	"testing"
 )
@@ -44,5 +45,17 @@ func TestTransferStats_Add(t *testing.T) {
 		if ts3.Get(length) != preCount+uint(count) {
 			t.Errorf("Add failed: %d", ts3.Get(length))
 		}
+	}
+}
+
+func TestTransferStatsDoesNotGrowForUnrepresentableLength(t *testing.T) {
+	stats := NewTransferStats()
+	stats.Add(6, 3)
+	for range 100 {
+		stats.Add(bits.UintSize, 1)
+		stats.Add(78, 1)
+	}
+	if len(stats.vals) != 2 || stats.Get(6) != 3 {
+		t.Fatalf("unexpected counters: %v", stats.vals)
 	}
 }

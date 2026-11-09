@@ -28,6 +28,8 @@ func (db *RawDB) updateExchangesAt(now time.Time, fetch func() (*models.Exchange
 		return
 	}
 	exchanges, err := fetch()
+	db.exchangeMu.Lock()
+	defer db.exchangeMu.Unlock()
 	if err == nil && (exchanges == nil || len(exchanges.Val) == 0) {
 		err = errors.New("empty exchange list")
 	}

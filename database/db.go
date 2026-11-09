@@ -27,27 +27,9 @@ import (
 
 const USDT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
 
-type dbCache struct {
-	date           string
-	feeStats       *models.FeeStatistic
-	fromStats      map[string]*models.UserStatistic
-	toStats        map[string]*models.UserStatistic
-	tokenStats     map[string]*models.TokenStatistic
-	userTokenStats map[string]*models.UserTokenStatistic
-}
-
-func newCache(date string) *dbCache {
-	return &dbCache{
-		feeStats:       models.NewFeeStatistic(date),
-		fromStats:      make(map[string]*models.UserStatistic),
-		toStats:        make(map[string]*models.UserStatistic),
-		tokenStats:     make(map[string]*models.TokenStatistic),
-		userTokenStats: make(map[string]*models.UserTokenStatistic),
-	}
-}
-
 type RawDB struct {
 	db                 *gorm.DB
+	exchangeMu         sync.Mutex
 	exchanges          map[string]*models.Exchange
 	exchangesUpdatedAt time.Time
 	exchangesRetryAt   time.Time
@@ -229,15 +211,29 @@ func New(cfg *config.DBConfig) *RawDB {
 	return rawDB
 }
 
-func (db *RawDB) refreshChargers() {
+func (db *RawDB) refreshChargers() error {
 	db.logger.Info("Start refreshing chargers")
-	db.chargerStore.Refresh(db.resolveExchangeName, func(b58 string) (string, bool) {
-		if db.IsExchange(b58) {
-			return db.GetExchange(b58).Name, true
+	db.exchangeMu.Lock()
+	defer db.exchangeMu.Unlock()
+
+	exchanges := make(map[[20]byte]*models.Exchange, len(db.exchanges))
+	for addr, exchange := range db.exchanges {
+		if key, ok := decodeAddr(addr); ok {
+			exchanges[key] = exchange
+		}
+	}
+	// Use exchange pointers under the metadata lock so a canonical case
+	// change also updates the name seen by the backup-address check.
+	err := db.chargerStore.Refresh(db.resolveExchangeName, func(key [20]byte) (string, bool) {
+		if exchange := exchanges[key]; exchange != nil {
+			return exchange.Name, true
 		}
 		return "", false
 	})
-	db.logger.Info("Complete refreshing chargers")
+	if err == nil {
+		db.logger.Info("Complete refreshing chargers")
+	}
+	return err
 }
 
 func (db *RawDB) loadExchanges() {
@@ -368,6 +364,8 @@ func (db *RawDB) GetExchanges() map[string]*models.Exchange {
 }
 
 func (db *RawDB) AddOrOverrideExchange(addr, name string) {
+	db.exchangeMu.Lock()
+	defer db.exchangeMu.Unlock()
 	resolved := db.resolveExchangeName(common.TrimExchangeName(name))
 	if exchange, ok := db.exchanges[addr]; ok {
 		db.logger.Infof("Updated exchange name: [%s] - [%s -> %s]", addr, exchange.Name, resolved)
@@ -1999,59 +1997,6 @@ func (db *RawDB) persistRolloverMeta(trackingDate string, blockNum int64) bool {
 	}
 }
 
-// accumulate folds one transaction into cache's stat maps. Single source of
-// truth for daily-stat attribution, shared by the scan-based flush.
-// cache.date is owned by the caller (NOT set here). Attribution:
-// fromStats by OwnerAddr, toStats by ToAddr.
-func (db *RawDB) accumulate(cache *dbCache, tx *models.Transaction) {
-	db.updateUserStatistic(tx.OwnerAddr, tx, cache.fromStats)
-	db.updateUserStatistic("total", tx, cache.fromStats)
-
-	if len(tx.ToAddr) > 0 {
-		db.updateUserStatistic(tx.ToAddr, tx, cache.toStats)
-	}
-
-	if len(tx.Name) > 0 {
-		db.updateTokenStatistic(tx.Name, tx, cache.tokenStats)
-		db.updateTokenStatistic("total", tx, cache.tokenStats)
-		if len(tx.FromAddr) > 0 && len(tx.ToAddr) > 0 {
-			db.updateUserTokenStatistic(tx, cache.userTokenStats)
-		}
-	}
-
-	if tx.Fee > 0 {
-		cache.feeStats.Add(tx)
-	}
-}
-
-func (db *RawDB) updateUserStatistic(user string, tx *models.Transaction, stats map[string]*models.UserStatistic) {
-	if _, ok := stats[user]; !ok {
-		stats[user] = models.NewUserStatistic(user)
-	}
-	stats[user].Add(tx)
-}
-
-func (db *RawDB) updateTokenStatistic(name string, tx *models.Transaction, stats map[string]*models.TokenStatistic) {
-	if _, ok := stats[name]; !ok {
-		stats[name] = &models.TokenStatistic{
-			Address: name,
-		}
-	}
-	stats[name].Add(tx)
-}
-
-func (db *RawDB) updateUserTokenStatistic(tx *models.Transaction, stats map[string]*models.UserTokenStatistic) {
-	if _, ok := stats[tx.FromAddr+tx.Name]; !ok {
-		stats[tx.FromAddr+tx.Name] = models.NewUserTokenStatistic(tx.FromAddr, tx.Name)
-	}
-	stats[tx.FromAddr+tx.Name].AddFrom(tx)
-
-	if _, ok := stats[tx.ToAddr+tx.Name]; !ok {
-		stats[tx.ToAddr+tx.Name] = models.NewUserTokenStatistic(tx.ToAddr, tx.Name)
-	}
-	stats[tx.ToAddr+tx.Name].AddTo(tx)
-}
-
 func (db *RawDB) DoExchangeResourceStatistics(date string) error {
 	db.logger.Infof("Start doing exchange resource statistics for %s", date)
 
@@ -2268,7 +2213,24 @@ func (db *RawDB) DoTronLinkWeeklyStatistics(date time.Time, override bool) {
 }
 
 func (db *RawDB) DoExchangeStatistics(date string) error {
+	stats, err := db.calculateExchangeStatistics(date)
+	if err != nil {
+		return err
+	}
+	return db.db.Transaction(func(tx *gorm.DB) error {
+		return replaceExchangeStatistics(tx, date, stats)
+	})
+}
+
+func (db *RawDB) calculateExchangeStatistics(date string) (map[string]map[string]*models.ExchangeStatistic, error) {
 	db.logger.Infof("Start doing exchange statistics for date [%s]", date)
+
+	db.exchangeMu.Lock()
+	exchanges := make(map[string]string, len(db.exchanges))
+	for addr, exchange := range db.exchanges {
+		exchanges[addr] = exchange.Name
+	}
+	db.exchangeMu.Unlock()
 
 	exchangeStats := make(map[string]map[string]*models.ExchangeStatistic)
 	if err := db.TraverseTransactions(date, 500, func(tx *models.Transaction) {
@@ -2282,9 +2244,7 @@ func (db *RawDB) DoExchangeStatistics(date string) error {
 		token := db.validTokens[tx.Name]
 
 		chargerExchange, toIsCharger := db.isCharger(to)
-		if db.IsExchange(from) {
-			exchange := db.GetExchange(from).Name
-
+		if exchange, ok := exchanges[from]; ok {
 			if !toIsCharger || chargerExchange != exchange {
 				setExchangeStatsMap(exchangeStats, date, exchange, token)
 				exchangeStats[exchange]["_"].AddWithdraw(tx)
@@ -2293,12 +2253,13 @@ func (db *RawDB) DoExchangeStatistics(date string) error {
 			}
 		}
 
-		if _, fromIsCharger := db.isCharger(from); fromIsCharger && db.IsExchange(to) {
-			exchange := db.GetExchange(to).Name
-			setExchangeStatsMap(exchangeStats, date, exchange, token)
-			exchangeStats[exchange]["_"].AddCollect(tx)
-			exchangeStats[exchange][token].AddCollect(tx)
-			return
+		if exchange, toIsExchange := exchanges[to]; toIsExchange {
+			if _, fromIsCharger := db.isCharger(from); fromIsCharger {
+				setExchangeStatsMap(exchangeStats, date, exchange, token)
+				exchangeStats[exchange]["_"].AddCollect(tx)
+				exchangeStats[exchange][token].AddCollect(tx)
+				return
+			}
 		}
 
 		if toIsCharger {
@@ -2317,15 +2278,19 @@ func (db *RawDB) DoExchangeStatistics(date string) error {
 			exchangeStats[chargerExchange][token].AddCharge(tx)
 		}
 	}); err != nil {
-		return fmt.Errorf("traverse transactions %s: %w", date, err)
+		return nil, fmt.Errorf("traverse transactions %s: %w", date, err)
 	}
 
-	if err := db.db.Delete(&models.ExchangeStatistic{}, "date = ?", date).Error; err != nil {
+	return exchangeStats, nil
+}
+
+func replaceExchangeStatistics(gdb *gorm.DB, date string, exchangeStats map[string]map[string]*models.ExchangeStatistic) error {
+	if err := gdb.Delete(&models.ExchangeStatistic{}, "date = ?", date).Error; err != nil {
 		return fmt.Errorf("delete exchange stats %s: %w", date, err)
 	}
 	for _, stats := range exchangeStats {
 		for _, stat := range stats {
-			if err := db.db.Create(stat).Error; err != nil {
+			if err := gdb.Create(stat).Error; err != nil {
 				return fmt.Errorf("create exchange stat %s: %w", date, err)
 			}
 		}
@@ -2884,136 +2849,6 @@ func (db *RawDB) countForWeek(startDate string) string {
 	db.logger.Infof("Finish counting Transactions for week [%s], total counted txs [%d]", week, txCount)
 
 	return countingDate
-}
-
-// createInBatches inserts all map values into table in fixed-size batches,
-// stopping at the first error.
-func createInBatches[T any](gdb *gorm.DB, table string, items map[string]*T) error {
-	const batch = 200
-	buf := make([]*T, 0, batch)
-	flush := func() error {
-		if len(buf) == 0 {
-			return nil
-		}
-		if err := gdb.Table(table).Create(buf).Error; err != nil {
-			return err
-		}
-		buf = buf[:0]
-		return nil
-	}
-	for _, it := range items {
-		buf = append(buf, it)
-		if len(buf) == batch {
-			if err := flush(); err != nil {
-				return err
-			}
-		}
-	}
-	return flush()
-}
-
-// flushDailyStats computes the five daily statistics for date by scanning the
-// persisted transactions_<date> table (excluding synthesized transfers,
-// type=255) and writes them idempotently. Missing table => empty day, still
-// writes empty stat tables and returns nil so the cursor can advance.
-func (db *RawDB) flushDailyStats(date string) error {
-	table := "transactions_" + date
-	if !db.db.Migrator().HasTable(table) {
-		// No data tracked for this day — nothing to flush. Return nil so the cursor
-		// advances instead of stalling forever: persistDailyStats -> DoExchangeStatistics
-		// would scan the missing table and error on every retry.
-		db.logger.Infof("No transactions table for [%s], nothing to flush", date)
-		return nil
-	}
-
-	cache := newCache(date)
-	cache.date = date
-
-	results := make([]*models.Transaction, 0)
-	scan := db.db.Table(table).
-		Where("type <> ?", models.TransferType).
-		FindInBatches(&results, 500, func(_ *gorm.DB, _ int) error {
-			for _, tx := range results {
-				db.accumulate(cache, tx)
-			}
-			return nil
-		})
-	if scan.Error != nil {
-		return fmt.Errorf("scan %s: %w", table, scan.Error)
-	}
-	// Finalize the narrow resource read model from the canonical daily table.
-	// This also fills rows from before a mid-day deployment, then records the
-	// completion marker that allows ranking reads to switch safely.
-	if err := db.backfillResourceTransactionsForDate(date); err != nil {
-		return fmt.Errorf("finalize resource transactions %s: %w", date, err)
-	}
-
-	return db.persistDailyStats(cache)
-}
-
-// persistDailyStats writes cache to DB idempotently: the four per-date stat
-// tables are dropped+recreated (they carry a unique index on address), fee is
-// delete-before-write (Date is not unique), exchange stats are delete-then-create.
-// All write errors propagate so the caller can gate cursor advance on success.
-func (db *RawDB) persistDailyStats(cache *dbCache) error {
-	date := cache.date
-
-	for _, prefix := range []string{"from_stats_", "to_stats_", "token_stats_", "user_token_stats_"} {
-		t := prefix + date
-		if err := db.db.Migrator().DropTable(t); err != nil {
-			return fmt.Errorf("drop %s: %w", t, err)
-		}
-		db.tableLock.Lock()
-		delete(db.isTableMigrated, t)
-		db.tableLock.Unlock()
-	}
-
-	if err := db.db.Delete(&models.FeeStatistic{}, "date = ?", date).Error; err != nil {
-		return fmt.Errorf("delete fee %s: %w", date, err)
-	}
-	if err := db.db.Create(cache.feeStats).Error; err != nil {
-		return fmt.Errorf("create fee %s: %w", date, err)
-	}
-
-	fromTable := "from_stats_" + date
-	db.createTableIfNotExist(fromTable, models.UserStatistic{})
-	if err := createInBatches(db.db, fromTable, cache.fromStats); err != nil {
-		return fmt.Errorf("flush from_stats %s: %w", date, err)
-	}
-	db.ensureIndex(fromTable, "idx_fee_addr", "fee, address")
-	db.ensureIndex(fromTable, "idx_energy_total", "energy_total")
-
-	toTable := "to_stats_" + date
-	db.createTableIfNotExist(toTable, models.UserStatistic{})
-	if err := createInBatches(db.db, toTable, cache.toStats); err != nil {
-		return fmt.Errorf("flush to_stats %s: %w", date, err)
-	}
-
-	tokenTable := "token_stats_" + date
-	db.createTableIfNotExist(tokenTable, models.TokenStatistic{})
-	if err := createInBatches(db.db, tokenTable, cache.tokenStats); err != nil {
-		return fmt.Errorf("flush token_stats %s: %w", date, err)
-	}
-
-	utTable := "user_token_stats_" + date
-	db.createTableIfNotExist(utTable, models.UserTokenStatistic{})
-	if err := createInBatches(db.db, utTable, cache.userTokenStats); err != nil {
-		return fmt.Errorf("flush user_token_stats %s: %w", date, err)
-	}
-
-	db.refreshChargers()
-	if err := db.DoExchangeStatistics(date); err != nil {
-		return fmt.Errorf("exchange stats %s: %w", date, err)
-	}
-
-	if err := db.DropStaleStatsTables(dailyTableRetentionCutoff(time.Now())); err != nil {
-		db.logger.Errorf("drop stale daily tables: %v", err) // non-fatal cleanup
-	}
-
-	db.reconcileTxIndexes(txIndexRetainDays)
-
-	db.logger.Infof("Flushed daily stats for [%s]", date)
-	return nil
 }
 
 // createTableIfNotExist migrates the table if not already done this process and

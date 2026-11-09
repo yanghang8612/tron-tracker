@@ -3,6 +3,7 @@ package types
 import (
 	"database/sql/driver"
 	"encoding/json"
+	"math/bits"
 	"slices"
 	"strconv"
 	"strings"
@@ -63,6 +64,11 @@ func (ts TransferStats) Value() (driver.Value, error) {
 }
 
 func (ts *TransferStats) Add(length int, count uint) {
+	// The on-disk bitmap cannot represent these lengths. Inserting a counter
+	// would leave it unmarked and grow the slice on every such transfer.
+	if length < 0 || length >= bits.UintSize {
+		return
+	}
 	if !ts.isMarked(length) {
 		ts.mark(length)
 	}

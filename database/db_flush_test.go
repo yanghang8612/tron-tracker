@@ -3,6 +3,7 @@
 package database
 
 import (
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -134,6 +135,51 @@ func TestFlushDailyStatsEquivalenceAndIdempotency(t *testing.T) {
 	}
 	if got := countTable(t, db, "fee_statistics"); got != 1 {
 		t.Fatalf("fee_statistics rows = %d, want 1 (delete-before-write)", got)
+	}
+}
+
+func TestFlushDailyStatsFailedStagingKeepsPublishedTables(t *testing.T) {
+	db := newFlushTestDB(t)
+	const date = "260102"
+	seedTxs(t, db, date, []*models.Transaction{mkTx(1, "A", "A", "B", "TRX", 2_000_000, 100)})
+	if err := db.flushDailyStats(date); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.db.Table("transactions_" + date).Create(mkTx(1, "C", "C", "D", "TRX", 3_000_000, 200)).Error; err != nil {
+		t.Fatal(err)
+	}
+	injected := errors.New("simulated staging write failure")
+	callback := db.db.Callback().Create()
+	const hook = "test:staging"
+	if err := callback.Before("gorm:create").Register(hook, func(tx *gorm.DB) {
+		if tx.Statement.Table == statsStagePrefix+userTokenStatsPrefix+date {
+			tx.AddError(injected)
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err := db.flushDailyStats(date)
+	callback.Remove(hook)
+	if !errors.Is(err, injected) {
+		t.Fatalf("expected staging failure, got %v", err)
+	}
+	if got := countTable(t, db, "from_stats_"+date); got != 2 {
+		t.Fatalf("failed flush changed live from_stats rows: %d", got)
+	}
+	if got := countTable(t, db, "user_token_stats_"+date); got != 2 {
+		t.Fatalf("failed flush changed live user_token_stats rows: %d", got)
+	}
+	if db.db.Migrator().HasTable(statsStagePrefix + fromStatsPrefix + date) {
+		t.Fatal("failed flush left a staging table")
+	}
+	if err := db.flushDailyStats(date); err != nil {
+		t.Fatal(err)
+	}
+	if got := countTable(t, db, "from_stats_"+date); got != 3 {
+		t.Fatalf("retry from_stats rows = %d, want 3", got)
+	}
+	if got := countTable(t, db, "user_token_stats_"+date); got != 4 {
+		t.Fatalf("retry user_token_stats rows = %d, want 4", got)
 	}
 }
 

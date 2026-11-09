@@ -264,8 +264,10 @@ func TestRefreshCancelsFakeWhenNoBackup(t *testing.T) {
 		}
 		return n
 	}
-	isExchange := func(string) (string, bool) { return "", false }
-	s.refreshLocked(resolve, isExchange)
+	isExchange := func([20]byte) (string, bool) { return "", false }
+	if err := s.refreshLocked(resolve, isExchange, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if v, _ := s.Get(c); v.IsFake || v.ExchangeName != "Binance" {
 		t.Fatalf("expect name normalized & fake cancelled, got name=%s fake=%v", v.ExchangeName, v.IsFake)
 	}
@@ -277,8 +279,10 @@ func TestRefreshDoesNotCancelFakeWhenNameUnchanged(t *testing.T) {
 	key, _ := decodeAddr(c)
 	s.chargers[key] = compactCharger{exchangeIdx: s.internName("Binance"), isFake: true} // fake, no backup, name stable
 	resolve := func(n string) string { return n }                                        // no change
-	isExchange := func(string) (string, bool) { return "", false }
-	s.refreshLocked(resolve, isExchange)
+	isExchange := func([20]byte) (string, bool) { return "", false }
+	if err := s.refreshLocked(resolve, isExchange, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if v, _ := s.Get(c); !v.IsFake {
 		t.Fatalf("fake must NOT be cancelled when name unchanged (mirrors db.go nesting)")
 	}
@@ -293,13 +297,15 @@ func TestRefreshBackupBecameConflictingExchange(t *testing.T) {
 	s.chargers[key] = compactCharger{exchangeIdx: s.internName("Binance"), isFake: false}
 	s.addrBackups[key] = bkKey
 	resolve := func(n string) string { return n }
-	isExchange := func(b58 string) (string, bool) {
-		if b58 == bk {
+	isExchange := func(key [20]byte) (string, bool) {
+		if key == bkKey {
 			return "Okex", true // backup address is now a different exchange
 		}
 		return "", false
 	}
-	s.refreshLocked(resolve, isExchange)
+	if err := s.refreshLocked(resolve, isExchange, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if v, _ := s.Get(c); !v.IsFake {
 		t.Fatalf("backup became conflicting exchange -> expect fake")
 	}
@@ -314,18 +320,45 @@ func TestRefreshBackupBecameSameExchangeClears(t *testing.T) {
 	s.chargers[key] = compactCharger{exchangeIdx: s.internName("Okex"), isFake: false}
 	s.addrBackups[key] = bkKey
 	resolve := func(n string) string { return n }
-	isExchange := func(b58 string) (string, bool) {
-		if b58 == bk {
+	isExchange := func(key [20]byte) (string, bool) {
+		if key == bkKey {
 			return "Okex", true // same exchange as the charger
 		}
 		return "", false
 	}
-	s.refreshLocked(resolve, isExchange)
+	if err := s.refreshLocked(resolve, isExchange, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
 	if _, has := s.addrBackups[key]; has {
 		t.Fatalf("backup became same exchange -> should be cleared")
 	}
 	if v, _ := s.Get(c); v.IsFake {
 		t.Fatalf("same-exchange clear must not fake")
+	}
+}
+
+func TestRefreshSettlesCanonicalNamesBeforeComparingBackups(t *testing.T) {
+	s := newTestStore()
+	first, _ := decodeAddr(addrN(1))
+	second, _ := decodeAddr(addrN(2))
+	backup, _ := decodeAddr(addrN(3))
+	s.chargers[first] = compactCharger{exchangeIdx: s.internName("Binance")}
+	s.chargers[second] = compactCharger{exchangeIdx: s.internName("BINANCE")}
+	s.addrBackups[first] = backup
+
+	canonical := "Binance"
+	resolve := func(name string) string {
+		if name == "BINANCE" {
+			canonical = name
+		}
+		return canonical
+	}
+	isExchange := func(key [20]byte) (string, bool) { return canonical, key == backup }
+	if err := s.refreshLocked(resolve, isExchange, func() error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	if view, _ := s.Get(addrN(1)); view.ExchangeName != "BINANCE" || view.IsFake || view.BackupAddress != "" {
+		t.Fatalf("same exchange after normalization: %+v", view)
 	}
 }
 

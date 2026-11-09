@@ -12,6 +12,8 @@
 package database
 
 import (
+	"encoding/binary"
+	"errors"
 	"testing"
 
 	"go.uber.org/zap"
@@ -80,5 +82,52 @@ func TestChargerStoreFlushIDBackfill(t *testing.T) {
 	}
 	if s.chargers[key].id != id {
 		t.Fatalf("id changed on update: %d -> %d", id, s.chargers[key].id)
+	}
+
+	// A failed second batch leaves just its rows pending, and a retry does
+	// not re-insert the successful first batch.
+	for i := range chargerWriteBatch + 7 {
+		var payload [20]byte
+		binary.BigEndian.PutUint32(payload[:], uint32(i))
+		s.ApplyCharge(encodeAddr(payload), ex, true, "Binance")
+	}
+	injected := errors.New("simulated charger write failure")
+	calls := 0
+	const hook = "test:charger-write"
+	callback := db.Callback().Create()
+	if err := callback.Before("gorm:create").Register(hook, func(tx *gorm.DB) {
+		if tx.Statement.Table == "chargers" {
+			calls++
+			if calls == 2 {
+				tx.AddError(injected)
+			}
+		}
+	}); err != nil {
+		t.Fatal(err)
+	}
+	err = s.doFlushLocked()
+	callback.Remove(hook)
+	if !errors.Is(err, injected) || count() != chargerWriteBatch+1 || s.DirtyLen() != 7 {
+		t.Fatalf("failed batch: error=%v rows=%d pending=%d", err, count(), s.DirtyLen())
+	}
+	s.FlushDirty()
+	if count() != chargerWriteBatch+8 || s.DirtyLen() != 0 {
+		t.Fatalf("retry: rows=%d pending=%d", count(), s.DirtyLen())
+	}
+
+	// The streaming loader reads nullable legacy fields as zero values and
+	// keeps the last ID for duplicate addresses, as the old loader did.
+	if err := db.Exec("INSERT INTO chargers(address, exchange_name, backup_address, is_fake) VALUES (?, 'Legacy', NULL, NULL), (NULL, NULL, NULL, NULL)", c).Error; err != nil {
+		t.Fatal(err)
+	}
+	reloaded := NewChargerStore(db, zap.NewNop().Sugar())
+	if err := reloaded.streamChargersLocked(); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Len() != chargerWriteBatch+8 || reloaded.skipped != 1 {
+		t.Fatalf("streamed chargers=%d skipped=%d", reloaded.Len(), reloaded.skipped)
+	}
+	if view, ok := reloaded.Get(c); !ok || view.ExchangeName != "Legacy" || view.BackupAddress != "" || view.IsFake {
+		t.Fatalf("duplicate row did not replace earlier state: %+v, %t", view, ok)
 	}
 }

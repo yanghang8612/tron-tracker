@@ -176,8 +176,12 @@ func (c *controller) sample() {
 			}
 		}
 	}
+	softPause := false
 	if e != nil {
 		h.Reason = e.Error()
+	} else if h.LagSeconds > 15 {
+		h.Reason = "waiting for tracker lag below 15 seconds"
+		softPause = true
 	}
 	urgent := false
 	if !ignoreWindow && window(time.Now()) {
@@ -195,6 +199,9 @@ func (c *controller) sample() {
 	c.mu.Lock()
 	if h.Reason == "" {
 		c.good++
+		c.bad = 0
+	} else if softPause && !urgent {
+		c.good = 0
 		c.bad = 0
 	} else {
 		c.good = 0

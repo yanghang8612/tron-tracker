@@ -79,6 +79,7 @@ type controller struct {
 
 var sum summary
 var publishReady bool
+var jobInitialized bool
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -1068,6 +1069,21 @@ func makePlan() ([]string, error) {
 	}
 	return out, writeJSON(path, out)
 }
+func recordFailure(e error) {
+	if jobInitialized {
+		if er := saveSummary(); er != nil {
+			log.Printf("save failure report: %v", er)
+		}
+		return
+	}
+	// A failed duplicate launch, unavailable DB or wrong config must never
+	// replace the durable owner summary from an existing job.
+	er := writeJSON(filepath.Join(workDir, "startup-error.json"), map[string]string{"TimeUTC": stamp(), "Error": e.Error()})
+	if er != nil {
+		log.Printf("save startup error: %v", er)
+	}
+}
+
 func main() {
 	flag.StringVar(&cfgPath, "config", "/data/tracker/config.toml", "existing tracker configuration")
 	flag.StringVar(&workDir, "work-dir", "/data/tracker/cold-compress-20261111", "durable job reports")
@@ -1086,7 +1102,7 @@ func main() {
 			sum.Status = "stopped"
 		}
 		sum.Error = e.Error()
-		saveSummary()
+		recordFailure(e)
 		log.Print(e)
 		if db != nil {
 			db.Close()
@@ -1139,6 +1155,7 @@ func run() error {
 			sum.CutoffUTC = old.CutoffUTC
 		}
 	}
+	jobInitialized = true
 	if e = saveSummary(); e != nil {
 		return e
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -105,5 +106,25 @@ func TestAutoIncrementUsesCreateOption(t *testing.T) {
 	v, e = nextAutoIncrement("CREATE TABLE `t` (\n `id` int\n) ENGINE=InnoDB")
 	if e != nil || v != 0 {
 		t.Fatalf("%d %v", v, e)
+	}
+}
+
+func TestFailedStartupPreservesExistingJob(t *testing.T) {
+	oldDir, oldInitialized := workDir, jobInitialized
+	defer func() { workDir = oldDir; jobInitialized = oldInitialized }()
+	workDir = t.TempDir()
+	jobInitialized = false
+	original := []byte(`{"SourceDatabase":"tron","Planned":1340,"Completed":12}`)
+	path := filepath.Join(workDir, "summary.json")
+	if e := os.WriteFile(path, original, 0600); e != nil {
+		t.Fatal(e)
+	}
+	recordFailure(errors.New("another worker holds the lock"))
+	got, e := os.ReadFile(path)
+	if e != nil || string(got) != string(original) {
+		t.Fatalf("overwrote the active job: %s %v", got, e)
+	}
+	if _, e = os.Stat(filepath.Join(workDir, "startup-error.json")); e != nil {
+		t.Fatal(e)
 	}
 }

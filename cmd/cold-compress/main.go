@@ -161,6 +161,21 @@ func (c *controller) sample() {
 			}
 		}
 	}
+	if e == nil && !selfTest {
+		ctx, cancel := context.WithTimeout(root, 4*time.Second)
+		var flushed string
+		e = db.QueryRowContext(ctx, "SELECT val FROM "+qt(sourceDB, "meta")+" WHERE "+qi("key")+"='flushed_date'").Scan(&flushed)
+		cancel()
+		if e == nil {
+			d, er := time.Parse("060102", flushed)
+			yesterday := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -1)
+			if er != nil || len(flushed) != 6 {
+				e = errors.New("invalid flushed_date")
+			} else if d.Before(yesterday) {
+				e = errors.New("daily statistics flush has not finished")
+			}
+		}
+	}
 	if e != nil {
 		h.Reason = e.Error()
 	}
@@ -973,8 +988,17 @@ func run() error {
 	sum = summary{Status: "planned", StartedUTC: stamp(), CutoffUTC: time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -30).Format("2006-01-02"), SourceDatabase: sourceDB, JobDatabase: jobDB, Planned: len(p)}
 	if b, er := os.ReadFile(filepath.Join(workDir, "summary.json")); er == nil {
 		var old summary
-		if json.Unmarshal(b, &old) == nil && old.StartedUTC != "" {
+		if json.Unmarshal(b, &old) != nil {
+			return errors.New("invalid saved job summary")
+		}
+		if old.SourceDatabase != sourceDB || old.JobDatabase != jobDB {
+			return errors.New("saved job belongs to another database")
+		}
+		if old.StartedUTC != "" {
 			sum.StartedUTC = old.StartedUTC
+		}
+		if old.CutoffUTC != "" {
+			sum.CutoffUTC = old.CutoffUTC
 		}
 	}
 	if e = saveSummary(); e != nil {

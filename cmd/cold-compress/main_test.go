@@ -95,3 +95,15 @@ func TestReportIdentityAndAtomicCheckpoint(t *testing.T) {
 		t.Fatal("accepted foreign shadow database")
 	}
 }
+
+func TestAutoIncrementUsesCreateOption(t *testing.T) {
+	s := "CREATE TABLE `t` (\n `id` bigint NOT NULL AUTO_INCREMENT,\n `v` varchar(10) COMMENT 'AUTO_INCREMENT=9'\n) ENGINE=InnoDB AUTO_INCREMENT=12345 DEFAULT CHARSET=utf8mb4"
+	v, e := nextAutoIncrement(s)
+	if e != nil || v != 12345 {
+		t.Fatalf("%d %v", v, e)
+	}
+	v, e = nextAutoIncrement("CREATE TABLE `t` (\n `id` int\n) ENGINE=InnoDB")
+	if e != nil || v != 0 {
+		t.Fatalf("%d %v", v, e)
+	}
+}

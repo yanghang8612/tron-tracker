@@ -16,7 +16,8 @@ of that table can briefly wait. Current-day ingestion is not locked. A new full
 hash and schema check must pass on the promoted table before the original backup
 is dropped. Any mismatch stops the job and retains the relevant copies.
 
-Only one worker can hold the MySQL advisory lock. Health is sampled every ten
+Only one worker can hold the MySQL advisory lock. Its dedicated connection is
+checked and kept alive every ten seconds; losing ownership stops the job. Health is sampled every ten
 seconds. New work requires three samples with tracker lag at most 15 seconds;
 two samples above 30 seconds or HTTP failures cancel the current operation.
 Owned server-side DDL is explicitly interrupted with KILL QUERY; no other

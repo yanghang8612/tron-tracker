@@ -76,6 +76,9 @@ func runSelfTest() error {
 	if e := seed(first); e != nil {
 		return e
 	}
+	if _, e := db.ExecContext(root, "ALTER TABLE "+qt(sourceDB, first)+" AUTO_INCREMENT=12345"); e != nil {
+		return e
+	}
 	r, e := load(first)
 	if e != nil {
 		return e
@@ -85,6 +88,14 @@ func runSelfTest() error {
 	}
 	if r.Status != "complete" || !same(r.Source, r.Promoted) {
 		return fmt.Errorf("self-test promotion incomplete")
+	}
+	finalDDL, e := ddl(root, db, sourceDB, first)
+	if e != nil {
+		return e
+	}
+	next, e := nextAutoIncrement(finalDDL)
+	if e != nil || next != 12345 {
+		return fmt.Errorf("auto-increment gap not preserved: %d %v", next, e)
 	}
 	// Simulate a crash after DROP succeeded but before the completed checkpoint.
 	r.Status = "running"

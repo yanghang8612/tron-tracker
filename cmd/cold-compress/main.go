@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -72,6 +73,8 @@ type controller struct {
 	good, bad int
 	cancel    context.CancelFunc
 	killID    uint64
+	owner     *sql.Conn
+	fatal     error
 }
 
 var sum summary
@@ -210,7 +213,20 @@ func (c *controller) sample() {
 		h.Reason = "waiting for tracker lag below 15 seconds"
 		softPause = true
 	}
-	urgent := false
+	lockLost := false
+	if c.owner != nil && root.Err() == nil {
+		ctx, cancel := context.WithTimeout(root, 4*time.Second)
+		var owner sql.NullInt64
+		var self uint64
+		er := c.owner.QueryRowContext(ctx, "SELECT IS_USED_LOCK(?),CONNECTION_ID()", "tracker_serial_cold_compress_v1").Scan(&owner, &self)
+		cancel()
+		if er != nil || !owner.Valid || uint64(owner.Int64) != self {
+			h.Reason = "migration advisory lock lost"
+			softPause = false
+			lockLost = true
+		}
+	}
+	urgent := lockLost
 	if !ignoreWindow && window(time.Now()) {
 		h.Reason = "UTC 23:00-03:00 maintenance blackout"
 		urgent = true
@@ -224,6 +240,9 @@ func (c *controller) sample() {
 		urgent = true
 	}
 	c.mu.Lock()
+	if lockLost {
+		c.fatal = errors.New("migration advisory lock lost; refusing further changes")
+	}
 	if h.Reason == "" {
 		c.good++
 		c.bad = 0
@@ -240,6 +259,9 @@ func (c *controller) sample() {
 	if urgent || c.bad >= 2 {
 		interrupt = c.cancel
 		killID = c.killID
+		if lockLost {
+			killID = 0
+		} // Connection IDs may have been reused after a server restart.
 	}
 	c.h = h
 	c.mu.Unlock()
@@ -262,6 +284,12 @@ func (c *controller) ready() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.h
 func (c *controller) gate() error {
 	noted := ""
 	for !c.ready() {
+		c.mu.Lock()
+		fatal := c.fatal
+		c.mu.Unlock()
+		if fatal != nil {
+			return fatal
+		}
 		if e := root.Err(); e != nil {
 			return e
 		}
@@ -300,6 +328,15 @@ func operation(d time.Duration, fn func(context.Context) error) error {
 	ctx, cancel := context.WithTimeout(root, d)
 	defer cancel()
 	ctl.mu.Lock()
+	if ctl.fatal != nil {
+		fatal := ctl.fatal
+		ctl.mu.Unlock()
+		return fatal
+	}
+	if !ctl.h.Ready {
+		ctl.mu.Unlock()
+		return errPause
+	}
 	ctl.cancel = cancel
 	ctl.mu.Unlock()
 	e := fn(ctx)
@@ -441,6 +478,17 @@ func splitDefinitions(s string) ([]string, error) {
 	}
 	return nil, errors.New("unterminated CREATE body")
 }
+
+var autoIncrementOption = regexp.MustCompile(`(?m)^\) ENGINE=.*?\bAUTO_INCREMENT=([0-9]+)\b`)
+
+func nextAutoIncrement(create string) (uint64, error) {
+	v := autoIncrementOption.FindStringSubmatch(create)
+	if len(v) == 0 {
+		return 0, nil
+	}
+	return strconv.ParseUint(v[1], 10, 64)
+}
+
 func secondary(s string) ([]string, []string, error) {
 	defs, e := splitDefinitions(s)
 	if e != nil {
@@ -658,6 +706,12 @@ func migrate(r *tableReport) error {
 		r.BeforeBytes = bytes
 		r.AutoIncrement = ai
 		r.OriginalDDL, e = ddl(root, db, sourceDB, r.Table)
+		if e != nil {
+			return e
+		}
+		// SHOW CREATE preserves the real next counter, including reserved gaps;
+		// information_schema's cached AUTO_INCREMENT can lag behind it.
+		r.AutoIncrement, e = nextAutoIncrement(r.OriginalDDL)
 		if e != nil {
 			return e
 		}
@@ -1100,7 +1154,7 @@ func run() error {
 	}
 	publishReady = true
 	publish("summary", &sum)
-	ctl = &controller{}
+	ctl = &controller{owner: lock}
 	ctl.sample()
 	go func() {
 		tick := time.NewTicker(10 * time.Second)

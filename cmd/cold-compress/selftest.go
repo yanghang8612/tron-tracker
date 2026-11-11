@@ -141,6 +141,26 @@ func runSelfTest() error {
 	if e != nil || old {
 		return fmt.Errorf("mismatch unexpectedly promoted a table: %v", e)
 	}
+	// Prove the job account can promptly interrupt its own server-side query.
+	conn, e := db.Conn(root)
+	if e != nil {
+		return e
+	}
+	var id uint64
+	if e = conn.QueryRowContext(root, "SELECT CONNECTION_ID()").Scan(&id); e != nil {
+		conn.Close()
+		return e
+	}
+	killed := make(chan error, 1)
+	go func() { time.Sleep(150 * time.Millisecond); killed <- killOwnQuery(id) }()
+	started := time.Now()
+	var sleeping, one int
+	interrupted := conn.QueryRowContext(root, "SELECT SLEEP(30),1").Scan(&sleeping, &one)
+	killError := <-killed
+	conn.Close()
+	if killError != nil || interrupted == nil || time.Since(started) > 5*time.Second {
+		return fmt.Errorf("own-query cancellation self-test: kill=%v query=%v", killError, interrupted)
+	}
 	for _, name := range []string{sourceDB, jobDB} {
 		if _, e = db.ExecContext(context.Background(), "DROP DATABASE "+qi(name)); e != nil {
 			return e

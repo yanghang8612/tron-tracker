@@ -71,6 +71,7 @@ type controller struct {
 	h         health
 	good, bad int
 	cancel    context.CancelFunc
+	killID    uint64
 }
 
 var sum summary
@@ -208,11 +209,24 @@ func (c *controller) sample() {
 		c.bad++
 	}
 	h.Ready = c.good >= 3
-	if (urgent || c.bad >= 2) && c.cancel != nil {
-		c.cancel()
+	var interrupt context.CancelFunc
+	var killID uint64
+	if urgent || c.bad >= 2 {
+		interrupt = c.cancel
+		killID = c.killID
 	}
 	c.h = h
 	c.mu.Unlock()
+	// Closing the client alone does not promptly stop every server-side DDL.
+	// Interrupt only the dedicated connection owned by this worker.
+	if killID != 0 {
+		if er := killOwnQuery(killID); er != nil {
+			log.Printf("interrupt own SQL connection %d: %v", killID, er)
+		}
+	}
+	if interrupt != nil {
+		interrupt()
+	}
 	if e := writeJSON(filepath.Join(workDir, "health.json"), h); e != nil {
 		log.Printf("health report: %v", e)
 	}
@@ -438,6 +452,17 @@ func secondary(s string) ([]string, []string, error) {
 	}
 	return names, clauses, nil
 }
+func killOwnQuery(id uint64) error {
+	ctx, cancel := context.WithTimeout(root, 4*time.Second)
+	defer cancel()
+	_, e := db.ExecContext(ctx, fmt.Sprintf("KILL QUERY %d", id))
+	var me *mysql.MySQLError
+	if errors.As(e, &me) && me.Number == 1094 {
+		return nil
+	}
+	return e
+}
+
 func runDDL(statement string) error {
 	return operation(30*time.Minute, func(ctx context.Context) error {
 		conn, e := db.Conn(ctx)
@@ -445,6 +470,14 @@ func runDDL(statement string) error {
 			return e
 		}
 		defer conn.Close()
+		var connectionID uint64
+		if e = conn.QueryRowContext(ctx, "SELECT CONNECTION_ID()").Scan(&connectionID); e != nil {
+			return e
+		}
+		ctl.mu.Lock()
+		ctl.killID = connectionID
+		ctl.mu.Unlock()
+		defer func() { ctl.mu.Lock(); ctl.killID = 0; ctl.mu.Unlock() }()
 		if _, e = conn.ExecContext(ctx, "SET SESSION innodb_tmpdir=?", tmpDir); e != nil {
 			return e
 		}
@@ -724,7 +757,19 @@ func migrate(r *tableReport) error {
 		for _, v := range r.Secondary {
 			clauses = append(clauses, "ADD "+v)
 		}
-		if e = runDDL("ALTER TABLE " + qt(r.ShadowDB, r.Table) + " " + strings.Join(clauses, ", ") + ", ALGORITHM=INPLACE, LOCK=NONE"); e != nil {
+		statement := "ALTER TABLE " + qt(r.ShadowDB, r.Table) + " " + strings.Join(clauses, ", ")
+		e = runDDL(statement + ", ALGORITHM=INPLACE, LOCK=NONE")
+		var algorithmError *mysql.MySQLError
+		if errors.As(e, &algorithmError) && algorithmError.Number == 1846 {
+			// Functional indexes add hidden virtual columns. MySQL cannot combine
+			// that action with row-format conversion using INPLACE. COPY locks
+			// only the private shadow, leaving the business source available.
+			if er := save(r, "compress_and_build_indexes_copy"); er != nil {
+				return er
+			}
+			e = runDDL(statement + ", ALGORITHM=COPY, LOCK=SHARED")
+		}
+		if e != nil {
 			return e
 		}
 	}

@@ -158,7 +158,7 @@ func runSelfTest() error {
 	interrupted := conn.QueryRowContext(root, "SELECT SLEEP(30),1").Scan(&sleeping, &one)
 	killError := <-killed
 	conn.Close()
-	if killError != nil || interrupted == nil || time.Since(started) > 5*time.Second {
+	if killError != nil || (interrupted == nil && sleeping != 1) || time.Since(started) > 5*time.Second {
 		return fmt.Errorf("own-query cancellation self-test: kill=%v query=%v", killError, interrupted)
 	}
 	for _, name := range []string{sourceDB, jobDB} {

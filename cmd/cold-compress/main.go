@@ -75,6 +75,7 @@ type controller struct {
 }
 
 var sum summary
+var publishReady bool
 
 type queryer interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
@@ -114,9 +115,33 @@ func writeJSON(path string, v any) error {
 	}
 	return e
 }
+
+// The private two-row/three-row status table exposes no credentials and lets
+// operators inspect the job through the existing read-only SQL endpoint.
+func publish(name string, v any) {
+	if !publishReady {
+		return
+	}
+	raw, e := json.Marshal(v)
+	if e != nil {
+		log.Printf("publish report: %v", e)
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_, e = db.ExecContext(ctx, "INSERT INTO "+qt(jobDB, "_job_state")+" (name,payload) VALUES (?,?) ON DUPLICATE KEY UPDATE payload=VALUES(payload)", name, string(raw))
+	if e != nil {
+		log.Printf("publish %s: %v", name, e)
+	}
+}
+
 func saveSummary() error {
 	sum.UpdatedUTC = stamp()
-	return writeJSON(filepath.Join(workDir, "summary.json"), &sum)
+	if e := writeJSON(filepath.Join(workDir, "summary.json"), &sum); e != nil {
+		return e
+	}
+	publish("summary", &sum)
+	return nil
 }
 func save(r *tableReport, phase string) error {
 	if r.Phase != phase {
@@ -130,6 +155,7 @@ func save(r *tableReport, phase string) error {
 	if e := writeJSON(filepath.Join(workDir, "tables", r.Table+".json"), r); e != nil {
 		return e
 	}
+	publish("current", r)
 	return saveSummary()
 }
 func window(t time.Time) bool { h := t.UTC().Hour(); return h >= 23 || h < 3 }
@@ -230,6 +256,7 @@ func (c *controller) sample() {
 	if e := writeJSON(filepath.Join(workDir, "health.json"), h); e != nil {
 		log.Printf("health report: %v", e)
 	}
+	publish("health", h)
 }
 func (c *controller) ready() bool { c.mu.Lock(); defer c.mu.Unlock(); return c.h.Ready }
 func (c *controller) gate() error {
@@ -1007,7 +1034,13 @@ func main() {
 		sum.Error = e.Error()
 		saveSummary()
 		log.Print(e)
+		if db != nil {
+			db.Close()
+		}
 		os.Exit(1)
+	}
+	if db != nil {
+		db.Close()
 	}
 }
 func run() error {
@@ -1017,7 +1050,6 @@ func run() error {
 	if e := openDB(); e != nil {
 		return e
 	}
-	defer db.Close()
 	if selfTest {
 		return runSelfTest()
 	}
@@ -1063,6 +1095,11 @@ func run() error {
 	if _, e = db.ExecContext(root, "CREATE DATABASE IF NOT EXISTS "+qi(jobDB)+" CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"); e != nil {
 		return e
 	}
+	if _, e = db.ExecContext(root, "CREATE TABLE IF NOT EXISTS "+qt(jobDB, "_job_state")+" (name varchar(16) NOT NULL PRIMARY KEY,payload longtext NOT NULL) ENGINE=InnoDB"); e != nil {
+		return e
+	}
+	publishReady = true
+	publish("summary", &sum)
 	ctl = &controller{}
 	ctl.sample()
 	go func() {

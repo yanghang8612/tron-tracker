@@ -78,9 +78,12 @@ type TypeFeeStat struct {
 func (db *RawDB) GetTypeFeeStatsByDate(date time.Time) ([]TypeFeeStat, error) {
 	table := "transactions_" + date.Format("060102")
 	var stats []TypeFeeStat
+	// Grouping all types needs fee from each matching transaction row.
+	// Scanning the non-covering type index repeatedly fetches clustered pages;
+	// a primary-key scan reads them once, including on compressed cold tables.
 	err := db.db.Raw(fmt.Sprintf(`
 		SELECT type, COUNT(*) AS tx_count, COALESCE(SUM(fee), 0) AS fee
-		FROM %s
+		FROM %s FORCE INDEX (PRIMARY)
 		WHERE type <> %d
 		GROUP BY type
 		ORDER BY type`, table, models.TransferType)).Scan(&stats).Error
